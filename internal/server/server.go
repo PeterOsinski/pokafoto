@@ -107,6 +107,7 @@ func (s *Server) registerRoutes(r *chi.Mux) {
 			r.Get("/auth/me", s.handleMe)
 
 			r.Post("/upload", s.handleUpload)
+			r.Post("/upload/check", s.handleUploadCheck)
 			r.Get("/upload/{batchID}/status", s.handleUploadStatus)
 
 			r.Get("/files", s.handleListFiles)

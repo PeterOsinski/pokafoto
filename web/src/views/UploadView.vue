@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 
@@ -60,7 +60,8 @@ const auth = useAuthStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 const jobs = ref<Job[]>([])
-const currentBatchID = ref('')
+
+let globalWs: WebSocket | null = null
 
 const sortedJobs = computed(() => {
   const order: Record<string, number> = { uploading: 0, processing: 1, queued: 2, completed: 3, skipped: 4, failed: 5 }
@@ -84,14 +85,14 @@ function statusLabel(job: Job) {
   return job.status
 }
 
-function connectWS(batchID: string) {
+function connectGlobalWS() {
   const token = auth.accessToken
   if (!token) return
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/upload/ws?token=${token}&batch=${batchID}`)
+  globalWs = new WebSocket(`${protocol}//${window.location.host}/api/v1/upload/ws?token=${token}`)
 
-  ws.onmessage = (event) => {
+  globalWs.onmessage = (event) => {
     const update = JSON.parse(event.data) as Job
     const idx = jobs.value.findIndex(j => j.job_id === update.job_id)
     if (idx >= 0) {
@@ -99,93 +100,121 @@ function connectWS(batchID: string) {
     }
   }
 
-  ws.onerror = () => {
+  globalWs.onerror = () => {
     console.error('WebSocket error')
   }
+
+  globalWs.onclose = () => {
+    globalWs = null
+  }
 }
 
-async function pollStatus(batchID: string) {
-  const interval = setInterval(async () => {
-    try {
-      const res = await api.get(`/upload/${batchID}/status`)
-      for (const j of res.data.jobs) {
-        const idx = jobs.value.findIndex(existing => existing.job_id === j.job_id)
-        if (idx >= 0) {
-          jobs.value[idx] = { ...jobs.value[idx], ...j }
-        }
-      }
-      if (res.data.completed + res.data.failed >= res.data.total) {
-        clearInterval(interval)
-      }
-    } catch {
-      clearInterval(interval)
-    }
-  }, 2000)
-}
+onMounted(() => {
+  connectGlobalWS()
+})
+
+onUnmounted(() => {
+  if (globalWs) {
+    globalWs.close()
+    globalWs = null
+  }
+})
 
 async function uploadFiles(fileList: FileList | File[]) {
-  const uploadJobs: Job[] = Array.from(fileList).map((file, i) => ({
-    job_id: `upload-${i}`,
-    filename: file.name,
-    status: 'uploading',
-    progress: 0,
-    stage: 'uploading',
-    size: file.size,
-    uploaded: 0,
-  }))
+  const allFiles = Array.from(fileList)
+  const fileMap = new Map<string, File>()
+  const uploadJobs: Job[] = []
+
+  for (let i = 0; i < allFiles.length; i++) {
+    const file = allFiles[i]
+    const jobId = `upload-${i}`
+    fileMap.set(jobId, file)
+    uploadJobs.push({
+      job_id: jobId,
+      filename: file.name,
+      status: 'uploading',
+      progress: 0,
+      stage: 'uploading',
+      size: file.size,
+      uploaded: 0,
+    })
+  }
   jobs.value = [...uploadJobs, ...jobs.value]
 
-  const form = new FormData()
-  for (let i = 0; i < fileList.length; i++) {
-    form.append('files', fileList[i])
-  }
+  const checkPayload = allFiles.map(f => ({ filename: f.name, size: f.size }))
   try {
-    const res = await api.post('/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (!progressEvent.total) return
-        const overallProgress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
-        for (const job of uploadJobs) {
-          const jobIdx = jobs.value.findIndex(j => j.job_id === job.job_id)
-          if (jobIdx >= 0) {
-            const jobProgress = Math.min(overallProgress, 0.99)
-            jobs.value[jobIdx] = {
-              ...jobs.value[jobIdx],
-              progress: Math.round(jobProgress * 100) / 100,
-              uploaded: Math.round(overallProgress * (job.size! || 1)),
-            }
+    const checkRes = await api.post('/upload/check', checkPayload)
+    const duplicates: Set<string> = new Set(
+      (checkRes.data.duplicates || []).map((d: { filename: string; file_id: string }) => d.filename)
+    )
+
+    for (const job of uploadJobs) {
+      if (duplicates.has(job.filename)) {
+        const dupInfo = checkRes.data.duplicates.find((d: { filename: string; file_id: string }) => d.filename === job.filename)
+        const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+        if (idx >= 0) {
+          jobs.value[idx] = {
+            ...jobs.value[idx],
+            status: 'skipped',
+            progress: 1,
+            file_id: dupInfo?.file_id,
+            stage: undefined,
           }
         }
-      },
-    })
-
-    const realJobs: Job[] = res.data.jobs.map((j: any) => ({ ...j, progress: 0 }))
-    for (const uploadJob of uploadJobs) {
-      const idx = jobs.value.findIndex(j => j.job_id === uploadJob.job_id)
-      if (idx >= 0) {
-        jobs.value = jobs.value.filter(j => j.job_id !== uploadJob.job_id)
       }
     }
-    jobs.value = [...realJobs, ...jobs.value]
+  } catch {
+  }
 
-    if (res.data.batch_id) {
-      currentBatchID.value = res.data.batch_id
-      connectWS(res.data.batch_id)
-      pollStatus(res.data.batch_id)
-    }
-  } catch (e: any) {
-    for (const uploadJob of uploadJobs) {
-      const idx = jobs.value.findIndex(j => j.job_id === uploadJob.job_id)
-      if (idx >= 0) {
-        jobs.value[idx] = {
-          ...jobs.value[idx],
-          status: 'failed',
-          stage: undefined,
+  const uploadPromises = uploadJobs
+    .filter(job => {
+      const current = jobs.value.find(j => j.job_id === job.job_id)
+      return current?.status === 'uploading'
+    })
+    .map(async (job) => {
+      const file = fileMap.get(job.job_id)
+      if (!file) return
+
+      const form = new FormData()
+      form.append('files', file)
+
+      try {
+        const res = await api.post('/upload', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            if (!progressEvent.total) return
+            const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
+            const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+            if (idx >= 0) {
+              jobs.value[idx] = {
+                ...jobs.value[idx],
+                progress: Math.round(progress * 100) / 100,
+                uploaded: Math.round(progress * (job.size || 1)),
+              }
+            }
+          },
+        })
+
+        const realJobs: Job[] = res.data.jobs.map((j: any) => ({ ...j, progress: 0 }))
+        for (const realJob of realJobs) {
+          const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+          if (idx >= 0) {
+            jobs.value[idx] = { ...jobs.value[idx], ...realJob, progress: 0 }
+          }
+        }
+      } catch {
+        const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+        if (idx >= 0) {
+          jobs.value[idx] = {
+            ...jobs.value[idx],
+            status: 'failed',
+            stage: undefined,
+          }
         }
       }
-    }
-    console.error('Upload failed', e)
-  }
+    })
+
+  await Promise.allSettled(uploadPromises)
 }
 
 function handleDrop(e: DragEvent) {

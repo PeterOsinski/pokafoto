@@ -401,3 +401,58 @@ func TestFileStore_Timeline_shouldGroupByMonth(t *testing.T) {
 		t.Error("expected at least one timeline group when files have taken_at")
 	}
 }
+
+func TestFileStore_FindByNameAndSizeBatch_shouldFindDuplicates(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "batch_dedup.jpg")
+	f2 := createTestFile(t, fs, user.ID, "batch_unique.jpg")
+
+	found, err := fs.FindByNameAndSizeBatch([]FileRecord{
+		{OriginalName: f1.OriginalName, SizeBytes: f1.SizeBytes},
+		{OriginalName: f2.OriginalName, SizeBytes: f2.SizeBytes},
+		{OriginalName: "nonexistent.jpg", SizeBytes: 999},
+	})
+	if err != nil {
+		t.Fatalf("find by name and size batch: %v", err)
+	}
+	if len(found) != 2 {
+		t.Errorf("expected 2 matches, got %d", len(found))
+	}
+}
+
+func TestFileStore_FindByNameAndSizeBatch_shouldReturnEmptyWhenNoDuplicates(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	_ = createTestFile(t, fs, user.ID, "existing.jpg")
+
+	found, err := fs.FindByNameAndSizeBatch([]FileRecord{
+		{OriginalName: "no_match_1.jpg", SizeBytes: 111},
+		{OriginalName: "no_match_2.jpg", SizeBytes: 222},
+	})
+	if err != nil {
+		t.Fatalf("find by name and size batch: %v", err)
+	}
+	if len(found) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(found))
+	}
+}
+
+func TestFileStore_FindByNameAndSizeBatch_shouldReturnNilOnEmptyInput(t *testing.T) {
+	db := OpenTestDB(t)
+	fs := NewFileStore(db)
+
+	found, err := fs.FindByNameAndSizeBatch(nil)
+	if err != nil {
+		t.Fatalf("find by name and size batch: %v", err)
+	}
+	if found != nil {
+		t.Error("expected nil for empty input")
+	}
+}

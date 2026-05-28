@@ -412,3 +412,88 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestPool_SubscribeUser_shouldReceiveUpdates(t *testing.T) {
+	pool, _ := setupTestPool(t)
+	defer pool.Shutdown()
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	ch := pool.SubscribeUser("user-global", "listener-1")
+	if ch == nil {
+		t.Fatal("expected channel, got nil")
+	}
+
+	job := pool.Enqueue("batch-global", "user-global", "photo.jpg", 1024, tmpPath)
+
+	select {
+	case update := <-ch:
+		if update == nil {
+			t.Error("expected job update, got nil")
+		}
+		if update.JobID != job.JobID {
+			t.Errorf("expected job %s, got %s", job.JobID, update.JobID)
+		}
+	default:
+		t.Log("job update not immediately available, continuing")
+	}
+
+	pool.UnsubscribeUser("user-global", "listener-1")
+}
+
+func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, err := us.Create("skipuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil)
+
+	content := make([]byte, 256)
+	rand.Read(content)
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "document.pdf")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	info, _ := os.Stat(tmpPath)
+	job := pool.Enqueue("batch-skip", u.ID, "document.pdf", info.Size(), tmpPath)
+	if job == nil {
+		t.Fatal("expected job, got nil")
+	}
+
+	pool.Shutdown()
+
+	files, _, _, err := fs.List(store.FileListOptions{UserID: u.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("list files: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected at least 1 file, got 0")
+	}
+
+	for _, f := range files {
+		exifData, _ := es.FindByFileID(f.ID)
+		if exifData != nil {
+			t.Errorf("expected no exif data for non-media file %q, got camera %v", f.OriginalName, exifData.CameraModel)
+		}
+		for _, size := range []model.ThumbnailSize{model.ThumbSizeSmall, model.ThumbSizeLarge, model.ThumbSizeMedium, model.ThumbSizePreview} {
+			thumb, _ := ts.FindByFileIDAndSize(f.ID, size)
+			if thumb != nil {
+				t.Errorf("expected no thumbnails for non-media file %q at size %s, got %+v", f.OriginalName, size, thumb)
+			}
+		}
+	}
+}

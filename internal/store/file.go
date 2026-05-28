@@ -429,6 +429,47 @@ func (s *FileStore) scanFileFromRows(row scannable) (*model.File, error) {
 	return f, nil
 }
 
+type FileRecord struct {
+	ID           string  `json:"id"`
+	OriginalName string  `json:"original_name"`
+	SizeBytes    int64   `json:"size_bytes"`
+}
+
+func (s *FileStore) FindByNameAndSizeBatch(nameSizes []FileRecord) ([]*model.File, error) {
+	if len(nameSizes) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, 0, len(nameSizes))
+	args := make([]interface{}, 0, len(nameSizes)*2)
+	for _, ns := range nameSizes {
+		placeholders = append(placeholders, "(?, ?)")
+		args = append(args, ns.OriginalName, ns.SizeBytes)
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, created_at, updated_at, is_deleted FROM files WHERE (original_name, size_bytes) IN (%s) AND is_deleted = 0`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find by name and size batch: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*model.File
+	for rows.Next() {
+		f, err := s.scanFileFromRows(rows)
+		if err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+
+	return files, rows.Err()
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

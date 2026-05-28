@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/drive/drive/internal/store"
 	"github.com/drive/drive/internal/worker"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -135,6 +136,49 @@ func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
+	var input []struct {
+		Filename string `json:"filename"`
+		Size     int64  `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid request body")
+		return
+	}
+
+	if len(input) == 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"duplicates": []interface{}{}})
+		return
+	}
+
+	records := make([]store.FileRecord, 0, len(input))
+	for _, item := range input {
+		records = append(records, store.FileRecord{
+			OriginalName: item.Filename,
+			SizeBytes:    item.Size,
+		})
+	}
+
+	existing, err := s.fileStore.FindByNameAndSizeBatch(records)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DEDUP_ERROR", "Failed to check duplicates")
+		return
+	}
+
+	duplicates := make([]map[string]interface{}, 0, len(existing))
+	for _, f := range existing {
+		duplicates = append(duplicates, map[string]interface{}{
+			"filename": f.OriginalName,
+			"file_id":  f.ID,
+			"size":     f.SizeBytes,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"duplicates": duplicates,
+	})
+}
+
 func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -144,15 +188,18 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 
 	userID := getUserID(r)
 	batchID := r.URL.Query().Get("batch")
-	if batchID == "" {
-		return
-	}
-
 	wsID := uuid.New().String()
-	ch := s.workerPool.Subscribe(batchID, wsID)
-	defer s.workerPool.Unsubscribe(batchID, wsID)
 
-	s.sendBatchSnapshot(conn, batchID, userID)
+	var ch chan *worker.UploadJob
+
+	if batchID != "" {
+		ch = s.workerPool.Subscribe(batchID, wsID)
+		defer s.workerPool.Unsubscribe(batchID, wsID)
+		s.sendBatchSnapshot(conn, batchID, userID)
+	} else {
+		ch = s.workerPool.SubscribeUser(userID, wsID)
+		defer s.workerPool.UnsubscribeUser(userID, wsID)
+	}
 
 	done := make(chan struct{})
 	go func() {

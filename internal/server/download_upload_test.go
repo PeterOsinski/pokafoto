@@ -179,3 +179,82 @@ func TestUpload_shouldRejectUnauthenticated(t *testing.T) {
 		t.Errorf("expected 401, got %d", w.Code)
 	}
 }
+
+func TestUploadCheck_shouldReturnDuplicates(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("dupcheck_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/existing.jpg",
+		OriginalName: "existing.jpg",
+		Path:         "2024/07",
+		SizeBytes:    2048,
+		MimeType:     "image/jpeg",
+		SHA256:       makeHandlerSHA256("existing"),
+		MediaType:    model.MediaTypePhoto,
+	}
+	fs.Create(f)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	body := `[{"filename":"existing.jpg","size":2048},{"filename":"new.jpg","size":4096}]`
+	w := testRequest(t, srv, "POST", "/api/v1/upload/check", body, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	dupes := resp["duplicates"].([]interface{})
+	if len(dupes) != 1 {
+		t.Fatalf("expected 1 duplicate, got %d", len(dupes))
+	}
+
+	d := dupes[0].(map[string]interface{})
+	if d["filename"] != "existing.jpg" {
+		t.Errorf("expected existing.jpg, got %v", d["filename"])
+	}
+}
+
+func TestUploadCheck_shouldReturnEmptyWhenNoDuplicates(t *testing.T) {
+	srv, _, cleanup := newTestServer(t)
+	defer cleanup()
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, "user-id", "member")
+
+	body := `[{"filename":"brand_new.jpg","size":1024}]`
+	w := testRequest(t, srv, "POST", "/api/v1/upload/check", body, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	dupes := resp["duplicates"].([]interface{})
+	if len(dupes) != 0 {
+		t.Errorf("expected 0 duplicates, got %d", len(dupes))
+	}
+}
+
+func TestUploadCheck_shouldRejectUnauthenticated(t *testing.T) {
+	srv, _, cleanup := newTestServer(t)
+	defer cleanup()
+
+	w := testRequest(t, srv, "POST", "/api/v1/upload/check", "[]", jsonHeaders())
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}

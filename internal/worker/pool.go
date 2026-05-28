@@ -101,6 +101,8 @@ type Pool struct {
 	batchesMu        sync.RWMutex
 	subscribers      map[string]map[string]chan *UploadJob
 	subMu            sync.RWMutex
+	userSubscribers  map[string]map[string]chan *UploadJob
+	userSubMu        sync.RWMutex
 }
 
 type Batch struct {
@@ -131,6 +133,7 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		jobChan:          make(chan *UploadJob, workers*2),
 		batches:          make(map[string]*Batch),
 		subscribers:      make(map[string]map[string]chan *UploadJob),
+		userSubscribers:  make(map[string]map[string]chan *UploadJob),
 	}
 
 	for i := 0; i < workers; i++ {
@@ -207,6 +210,39 @@ func (p *Pool) notifySubscribers(job *UploadJob) {
 			}
 		}
 	}
+
+	p.userSubMu.RLock()
+	defer p.userSubMu.RUnlock()
+	if sub, ok := p.userSubscribers[job.UserID]; ok {
+		for _, ch := range sub {
+			select {
+			case ch <- job:
+			default:
+			}
+		}
+	}
+}
+
+func (p *Pool) SubscribeUser(userID string, listenerID string) chan *UploadJob {
+	p.userSubMu.Lock()
+	defer p.userSubMu.Unlock()
+	if p.userSubscribers[userID] == nil {
+		p.userSubscribers[userID] = make(map[string]chan *UploadJob)
+	}
+	ch := make(chan *UploadJob, 20)
+	p.userSubscribers[userID][listenerID] = ch
+	return ch
+}
+
+func (p *Pool) UnsubscribeUser(userID, listenerID string) {
+	p.userSubMu.Lock()
+	defer p.userSubMu.Unlock()
+	if sub, ok := p.userSubscribers[userID]; ok {
+		if ch, ok := sub[listenerID]; ok {
+			close(ch)
+			delete(sub, listenerID)
+		}
+	}
 }
 
 func (p *Pool) Shutdown() {
@@ -280,10 +316,16 @@ func (p *Pool) processJob(job *UploadJob) {
 		return
 	}
 
-	job.SetProgress(StageExif, 0.3)
-	exifData, _ := p.exifService.Extract(job.TempPath)
+	var exifData *model.ExifData
+	var now = time.Now().UTC()
 
-	now := time.Now().UTC()
+	if mediaType != model.MediaTypeFile {
+		job.SetProgress(StageExif, 0.3)
+		exifData, _ = p.exifService.Extract(job.TempPath)
+	} else {
+		job.SetProgress(StageStoring, 0.3)
+	}
+
 	yearMonth := now.Format("2006/01")
 
 	if exifData != nil && exifData.DateTaken != nil {
@@ -376,14 +418,18 @@ func (p *Pool) processJob(job *UploadJob) {
 		}
 	}
 
-	job.SetProgress(StageThumbnails, 0.8)
-	thumbs, err := p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType)
-	if err != nil {
-		slog.Warn("thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
-	} else {
-		for _, t := range thumbs {
-			if err := p.thumbnailStore.Create(t); err != nil {
-				slog.Warn("failed to store thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
+	var thumbs []*model.Thumbnail
+
+	if mediaType != model.MediaTypeFile {
+		job.SetProgress(StageThumbnails, 0.8)
+		thumbs, err = p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType)
+		if err != nil {
+			slog.Warn("thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
+		} else {
+			for _, t := range thumbs {
+				if err := p.thumbnailStore.Create(t); err != nil {
+					slog.Warn("failed to store thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
+				}
 			}
 		}
 	}
