@@ -498,7 +498,16 @@ type thumbnailInfoResponse struct {
 }
 
 func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetResponse {
-	ts := &thumbnailSetResponse{
+	if mediaType == model.MediaTypeVideo {
+		return &thumbnailSetResponse{
+			VideoStill: &thumbnailInfoResponse{
+				URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg", fileID),
+				Width:  600,
+				Height: 338,
+			},
+		}
+	}
+	return &thumbnailSetResponse{
 		SM: &thumbnailInfoResponse{
 			URL:    fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", fileID),
 			Width:  60,
@@ -515,14 +524,6 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 			Height: 720,
 		},
 	}
-	if mediaType == model.MediaTypeVideo {
-		ts.VideoStill = &thumbnailInfoResponse{
-			URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg", fileID),
-			Width:  600,
-			Height: 338,
-		}
-	}
-	return ts
 }
 
 var timeRFC3339 = "2006-01-02T15:04:05Z07:00"
