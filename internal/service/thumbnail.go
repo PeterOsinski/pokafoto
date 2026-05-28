@@ -23,20 +23,24 @@ func NewThumbnailService(thumbnailsDir string) *ThumbnailService {
 	return &ThumbnailService{thumbnailsDir: thumbnailsDir}
 }
 
-func (s *ThumbnailService) GenerateAll(fileID, sourcePath, mimeType string) ([]*model.Thumbnail, error) {
+func (s *ThumbnailService) GenerateAll(fileID, sourcePath, mimeType string, orientation *int) ([]*model.Thumbnail, error) {
 	isVideo := mimeType == "video/mp4" || mimeType == "video/quicktime" || mimeType == "video/x-msvideo" || mimeType == "video/x-matroska"
 
 	if isVideo {
 		return s.generateVideoStills(fileID, sourcePath)
 	}
 
-	return s.generateImageThumbs(fileID, sourcePath, mimeType)
+	return s.generateImageThumbs(fileID, sourcePath, mimeType, orientation)
 }
 
-func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType string) ([]*model.Thumbnail, error) {
+func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType string, orientation *int) ([]*model.Thumbnail, error) {
 	img, err := decodeImage(sourcePath, mimeType)
 	if err != nil {
 		return nil, err
+	}
+
+	if orientation != nil && *orientation >= 2 && *orientation <= 8 && !alreadyNormalized(img, *orientation) {
+		img = autoOrient(img, *orientation)
 	}
 
 	var thumbs []*model.Thumbnail
@@ -176,6 +180,37 @@ func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*mo
 	}
 
 	return []*model.Thumbnail{still}, nil
+}
+
+func autoOrient(img image.Image, orientation int) image.Image {
+	switch orientation {
+	case 2:
+		return imaging.FlipH(img)
+	case 3:
+		return imaging.Rotate180(img)
+	case 4:
+		return imaging.FlipV(img)
+	case 5:
+		return imaging.FlipH(imaging.Rotate90(img))
+	case 6:
+		return imaging.Rotate90(img)
+	case 7:
+		return imaging.FlipH(imaging.Rotate270(img))
+	case 8:
+		return imaging.Rotate270(img)
+	default:
+		return img
+	}
+}
+
+func alreadyNormalized(img image.Image, orientation int) bool {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	switch orientation {
+	case 5, 6, 7, 8:
+		return h > w
+	}
+	return false
 }
 
 func decodeImage(path, mimeType string) (image.Image, error) {

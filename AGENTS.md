@@ -1,5 +1,13 @@
 # Drive — Development Rules
 
+## PRD-First Workflow
+
+All feature requests and significant changes MUST go through the `prd/` folder first. Before writing any code:
+
+1. **Identify or create the relevant PRD file** — `prd/` contains numbered specification documents (e.g. `02-product-requirements.md`, `04-data-model.md`, `08-implementation-roadmap.md`).
+2. **Update the PRD** — Add the requirement, change, or design decision to the appropriate file. If no suitable file exists, create a new one following the `NN-short-name.md` naming pattern.
+3. **Plan from the PRD** — Once the PRD is updated, proceed to plan and implement the change based on what was specified.
+
 ## Test-Driven Development
 
 Every change starts with a failing test. No feature or fix is accepted without a corresponding test diff. Tests must run as a single command and complete in under 10 seconds.

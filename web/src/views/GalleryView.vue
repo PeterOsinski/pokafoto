@@ -47,6 +47,7 @@ interface FileItem {
   mediaType: string
   durationSec?: number
   takenAt?: string
+  videoStill?: { url: string }
   thumbnails?: {
     sm: { url: string; width: number; height: number }
     md: { url: string; width: number; height: number }

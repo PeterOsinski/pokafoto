@@ -26,10 +26,11 @@
       @touchend="onTouchEnd"
     >
       <VideoPlayer
-        v-if="file.mediaType === 'video'"
-        :src="`/api/v1/download/${file.id}`"
+        v-if="file.mediaType === 'video' && videoSrc"
+        :src="videoSrc"
         :poster="file.videoStill?.url"
       />
+      <div v-else-if="file.mediaType === 'video' && videoLoading" class="text-[var(--text-secondary)] text-lg">Loading video...</div>
       <img
         v-else-if="file.thumbnails?.preview || file.thumbnails?.md"
         :src="(file.thumbnails?.preview || file.thumbnails?.md)?.url"
@@ -108,16 +109,41 @@ const emit = defineEmits<{
 
 const lightboxEl = ref<HTMLElement | null>(null)
 const exif = ref<ExifData | null>(null)
+const videoSrc = ref('')
+const videoLoading = ref(false)
+
+let oldVideoURL = ''
 
 let touchStartX = 0
 let touchStartY = 0
 
 watch(() => props.file, async (file) => {
+  if (oldVideoURL) {
+    URL.revokeObjectURL(oldVideoURL)
+    oldVideoURL = ''
+  }
+  videoSrc.value = ''
+  videoLoading.value = false
+
   if (!file?.id) {
     exif.value = null
     return
   }
   nextTick(() => lightboxEl.value?.focus())
+
+  if (file.mediaType === 'video') {
+    videoLoading.value = true
+    try {
+      const res = await api.get(`/download/${file.id}`, { responseType: 'blob' })
+      oldVideoURL = URL.createObjectURL(res.data)
+      videoSrc.value = oldVideoURL
+    } catch (e) {
+      console.error('Failed to load video', e)
+    } finally {
+      videoLoading.value = false
+    }
+  }
+
   try {
     const res = await api.get(`/files/${file.id}`)
     exif.value = res.data.exif || null

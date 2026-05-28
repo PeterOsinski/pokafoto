@@ -62,7 +62,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 			DurationSec:  f.DurationSec,
 			TakenAt:      f.TakenAt,
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
-			Thumbnails:   buildThumbnailSet(f.ID),
+			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
 		}
 		items = append(items, item)
 	}
@@ -102,7 +102,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 		TakenAt:      file.TakenAt,
 		CreatedAt:    file.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:    file.UpdatedAt.Format(timeRFC3339),
-		Thumbnails:   buildThumbnailSet(file.ID),
+		Thumbnails:   buildThumbnailSet(file.ID, file.MediaType),
 		EXIF:         exif,
 	}
 
@@ -223,7 +223,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			DurationSec:  f.DurationSec,
 			TakenAt:      f.TakenAt,
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
-			Thumbnails:   buildThumbnailSet(f.ID),
+			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
 		}
 		items = append(items, item)
 	}
@@ -497,8 +497,8 @@ type thumbnailInfoResponse struct {
 	Height int    `json:"height"`
 }
 
-func buildThumbnailSet(fileID string) *thumbnailSetResponse {
-	return &thumbnailSetResponse{
+func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetResponse {
+	ts := &thumbnailSetResponse{
 		SM: &thumbnailInfoResponse{
 			URL:    fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", fileID),
 			Width:  60,
@@ -515,6 +515,14 @@ func buildThumbnailSet(fileID string) *thumbnailSetResponse {
 			Height: 720,
 		},
 	}
+	if mediaType == model.MediaTypeVideo {
+		ts.VideoStill = &thumbnailInfoResponse{
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg", fileID),
+			Width:  600,
+			Height: 338,
+		}
+	}
+	return ts
 }
 
 var timeRFC3339 = "2006-01-02T15:04:05Z07:00"
