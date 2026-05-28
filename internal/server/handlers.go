@@ -486,6 +486,7 @@ type fileResponse struct {
 
 type thumbnailSetResponse struct {
 	SM         *thumbnailInfoResponse `json:"sm"`
+	LG         *thumbnailInfoResponse `json:"lg"`
 	MD         *thumbnailInfoResponse `json:"md"`
 	Preview    *thumbnailInfoResponse `json:"preview"`
 	VideoStill *thumbnailInfoResponse `json:"videoStill,omitempty"`
@@ -512,6 +513,11 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 			URL:    fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", fileID),
 			Width:  60,
 			Height: 60,
+		},
+		LG: &thumbnailInfoResponse{
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/lg.jpg", fileID),
+			Width:  300,
+			Height: 300,
 		},
 		MD: &thumbnailInfoResponse{
 			URL:    fmt.Sprintf("/api/v1/thumb/%s/md.jpg", fileID),

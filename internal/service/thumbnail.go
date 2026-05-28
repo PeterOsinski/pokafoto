@@ -45,6 +45,11 @@ func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType stri
 		thumbs = append(thumbs, sm)
 	}
 
+	lg, err := s.generateSize(fileID, img, model.ThumbSizeLarge, 300, "jpeg")
+	if err == nil {
+		thumbs = append(thumbs, lg)
+	}
+
 	md, err := s.generateSize(fileID, img, model.ThumbSizeMedium, 600, "jpeg")
 	if err == nil {
 		thumbs = append(thumbs, md)

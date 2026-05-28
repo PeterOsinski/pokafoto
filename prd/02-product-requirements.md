@@ -23,6 +23,8 @@
 | G-05 | As a user, I can navigate between photos with keyboard arrows and swipe gestures (mobile) | P1 |
 | G-06 | As a user, I can sort gallery by date taken, date uploaded, or file name | P2 |
 | G-07 | As a user, I can filter gallery by media type (photos, videos, all) | P2 |
+| G-08 | As a user, I can switch between gallery layouts — tiles (grid), list (table), and grouped by day | P2 |
+| G-09 | As a user, I can choose thumbnail sizes — small, medium, and large — in the gallery view | P2 |
 
 ### Timeline View
 | ID | User Story | Priority |

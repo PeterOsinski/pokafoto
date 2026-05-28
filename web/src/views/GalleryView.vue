@@ -1,6 +1,13 @@
 <template>
   <div>
-    <FilterBar v-model:mediaType="mediaType" v-model:sortBy="sortBy" @update:mediaType="loadFiles()" @update:sortBy="loadFiles()" />
+    <FilterBar
+      v-model:mediaType="mediaType"
+      v-model:sortBy="sortBy"
+      v-model:layout="layout"
+      v-model:thumbSize="thumbSize"
+      @update:mediaType="loadFiles()"
+      @update:sortBy="loadFiles()"
+    />
 
     <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
       <p class="text-lg">No photos yet.</p>
@@ -8,11 +15,9 @@
       <router-link to="/upload" class="mt-4 inline-block px-6 py-2 rounded-md text-white" style="background: var(--accent)">Upload</router-link>
     </div>
 
-    <div class="grid gap-2" :class="gridClass">
-      <div v-for="(file, i) in files" :key="file.id" @click="openLightbox(i)">
-        <ThumbnailCard :file="file" />
-      </div>
-    </div>
+    <GalleryTileView v-if="layout === 'tiles'" :files="files" :thumbSize="thumbSize" @open="openLightbox" />
+    <GalleryListView v-else-if="layout === 'list'" :files="files" @open="openLightbox" />
+    <GalleryGroupedView v-else-if="layout === 'grouped'" :files="files" :thumbSize="thumbSize" @open="openLightbox" />
 
     <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
     <div ref="sentinel" class="h-4"></div>
@@ -35,7 +40,9 @@ import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import Lightbox from '../components/Lightbox.vue'
-import ThumbnailCard from '../components/ThumbnailCard.vue'
+import GalleryTileView from '../components/GalleryTileView.vue'
+import GalleryListView from '../components/GalleryListView.vue'
+import GalleryGroupedView from '../components/GalleryGroupedView.vue'
 import FilterBar from '../components/FilterBar.vue'
 
 interface FileItem {
@@ -50,6 +57,7 @@ interface FileItem {
   videoStill?: { url: string }
   thumbnails?: {
     sm: { url: string; width: number; height: number }
+    lg: { url: string; width: number; height: number }
     md: { url: string; width: number; height: number }
     preview: { url: string; width: number; height: number }
   }
@@ -63,14 +71,14 @@ const nextCursor = ref('')
 const loading = ref(false)
 const mediaType = ref('')
 const sortBy = ref('taken_at')
+const layout = ref('tiles')
+const thumbSize = ref<'sm' | 'md' | 'lg'>('md')
 const lightboxIndex = ref(-1)
 
 const lightboxFile = computed(() => {
   if (lightboxIndex.value < 0 || lightboxIndex.value >= files.value.length) return null
   return files.value[lightboxIndex.value]
 })
-
-const gridClass = computed(() => 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8')
 
 async function loadFiles(reset = true) {
   if (reset) {

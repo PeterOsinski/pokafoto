@@ -107,6 +107,7 @@ func DefaultConfig() *Config {
 			OrganizationPattern: "{{year}}/{{month}}",
 			ThumbnailSizes: map[string]ThumbnailSizeConfig{
 				"small":       {Width: 60, Quality: 60, Format: "jpeg"},
+				"large":       {Width: 300, Quality: 75, Format: "jpeg"},
 				"medium":      {Width: 600, Quality: 75, Format: "jpeg"},
 				"preview":     {MaxDimension: 720, Quality: 80, Format: "webp"},
 				"video_still": {MaxDimension: 600, Quality: 75, Format: "jpeg"},

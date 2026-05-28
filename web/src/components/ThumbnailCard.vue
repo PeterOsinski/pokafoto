@@ -4,7 +4,7 @@
     style="background: var(--bg-elevated); aspect-ratio: 1"
   >
     <img
-      v-if="(file.thumbnails?.md || file.thumbnails?.videoStill) && !loadError"
+      v-if="imgSrc && !loadError"
       :src="imgSrc"
       :alt="file.originalName"
       class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
@@ -17,7 +17,7 @@
         Retry
       </button>
     </div>
-    <div v-else-if="!file.thumbnails?.md && !file.thumbnails?.videoStill" class="w-full h-full flex items-center justify-center text-3xl text-[var(--text-secondary)]">
+    <div v-else-if="!imgSrc" class="w-full h-full flex items-center justify-center text-3xl text-[var(--text-secondary)]">
       {{ file.mediaType === 'video' ? '▶' : '📄' }}
     </div>
     <div v-if="file.mediaType === 'video' && file.durationSec && !loadError" class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-xs text-white bg-black/60">
@@ -40,18 +40,33 @@ interface FileItem {
   takenAt?: string
   thumbnails?: {
     sm?: { url: string; width: number; height: number }
+    lg?: { url: string; width: number; height: number }
     md?: { url: string; width: number; height: number }
+    preview?: { url: string; width: number; height: number }
     videoStill?: { url: string; width: number; height: number }
   }
 }
 
-const props = defineProps<{ file: FileItem }>()
+const props = defineProps<{
+  file: FileItem
+  thumbSize?: 'sm' | 'md' | 'lg'
+}>()
 
 const loadError = ref(false)
 const retryCounter = ref(0)
 
+const sizeKey = computed<'sm' | 'lg' | 'md'>(() => {
+  if (props.thumbSize === 'lg') return 'md'
+  if (!props.thumbSize || props.thumbSize === 'md' || props.thumbSize === 'sm') return 'lg'
+  return 'sm'
+})
+
 const imgSrc = computed(() => {
-  const base = props.file.thumbnails?.md?.url || props.file.thumbnails?.videoStill?.url || ''
+  const t = props.file.thumbnails
+  if (!t) return ''
+  const primary = t[sizeKey.value]
+  const fallback = t.md || t.sm || t.videoStill || t.preview
+  const base = primary?.url || fallback?.url || ''
   if (!base) return ''
   return retryCounter.value > 0 ? `${base}#t=${retryCounter.value}` : base
 })

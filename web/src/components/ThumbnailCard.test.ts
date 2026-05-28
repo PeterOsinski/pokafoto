@@ -7,7 +7,12 @@ function makeFile(overrides: Record<string, any> = {}) {
     id: 'file-1',
     originalName: 'test.jpg',
     mediaType: 'photo',
-    thumbnails: { md: { url: '/thumb/md.jpg', width: 600, height: 600 } },
+    thumbnails: {
+      sm: { url: '/thumb/sm.jpg', width: 60, height: 60 },
+      lg: { url: '/thumb/lg.jpg', width: 300, height: 300 },
+      md: { url: '/thumb/md.jpg', width: 600, height: 600 },
+      preview: { url: '/thumb/preview.webp', width: 720, height: 720 },
+    },
     ...overrides,
   }
 }
@@ -17,6 +22,42 @@ describe('ThumbnailCard', () => {
     it('renders image with correct src when thumbnail exists', () => {
       const file = makeFile()
       const wrapper = mount(ThumbnailCard, { props: { file } })
+
+      const img = wrapper.find('img')
+      expect(img.exists()).toBe(true)
+      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
+    })
+
+    it('renders lg thumbnail when thumbSize is sm', () => {
+      const file = makeFile()
+      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'sm' } })
+
+      const img = wrapper.find('img')
+      expect(img.exists()).toBe(true)
+      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
+    })
+
+    it('renders md thumbnail when thumbSize is lg', () => {
+      const file = makeFile()
+      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'lg' } })
+
+      const img = wrapper.find('img')
+      expect(img.exists()).toBe(true)
+      expect(img.attributes('src')).toBe('/thumb/md.jpg')
+    })
+
+    it('renders lg thumbnail when thumbSize is md', () => {
+      const file = makeFile()
+      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'md' } })
+
+      const img = wrapper.find('img')
+      expect(img.exists()).toBe(true)
+      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
+    })
+
+    it('falls back to md when requested size is missing', () => {
+      const file = makeFile({ thumbnails: { md: { url: '/thumb/md.jpg', width: 600, height: 600 } } })
+      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'sm' } })
 
       const img = wrapper.find('img')
       expect(img.exists()).toBe(true)

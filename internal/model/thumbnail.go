@@ -7,6 +7,7 @@ type ThumbnailSize string
 const (
 	ThumbSizeSmall      ThumbnailSize = "sm"
 	ThumbSizeMedium     ThumbnailSize = "md"
+	ThumbSizeLarge      ThumbnailSize = "lg"
 	ThumbSizePreview    ThumbnailSize = "preview"
 	ThumbSizeVideoStill ThumbnailSize = "video_still"
 )

@@ -1,0 +1,98 @@
+<template>
+  <div class="space-y-8">
+    <div v-for="group in groups" :key="group.label">
+      <h3 class="sticky top-0 z-10 text-sm font-semibold text-[var(--text-secondary)] py-2 mb-3 border-b border-[var(--border-color)]" style="background: var(--bg-color)">
+        {{ group.label }}
+        <span class="font-normal text-xs">· {{ group.files.length }} {{ group.files.length === 1 ? 'photo' : 'photos' }}</span>
+      </h3>
+      <div class="grid gap-2" :class="gridClass">
+        <div v-for="item in group.files" :key="item.file.id" @click="$emit('open', item.index)">
+          <ThumbnailCard :file="item.file" :thumbSize="thumbSize" />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import ThumbnailCard from './ThumbnailCard.vue'
+
+interface FileItem {
+  id: string
+  originalName: string
+  filename: string
+  sizeBytes: number
+  mimeType: string
+  mediaType: string
+  durationSec?: number
+  takenAt?: string
+  thumbnails?: {
+    sm?: { url: string; width: number; height: number }
+    lg?: { url: string; width: number; height: number }
+    md?: { url: string; width: number; height: number }
+    preview?: { url: string; width: number; height: number }
+    videoStill?: { url: string; width: number; height: number }
+  }
+}
+
+interface GroupedItem {
+  file: FileItem
+  index: number
+}
+
+interface DayGroup {
+  label: string
+  dateKey: string
+  files: GroupedItem[]
+}
+
+const props = defineProps<{
+  files: FileItem[]
+  thumbSize?: 'sm' | 'md' | 'lg'
+}>()
+
+defineEmits<{
+  open: [index: number]
+}>()
+
+const gridClass = computed(() => {
+  if (props.thumbSize === 'sm') return 'grid-cols-5 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12'
+  if (props.thumbSize === 'lg') return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
+  return 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8'
+})
+
+const groups = computed<DayGroup[]>(() => {
+  const map = new Map<string, GroupedItem[]>()
+  const unknown: GroupedItem[] = []
+
+  props.files.forEach((file, index) => {
+    if (!file.takenAt) {
+      unknown.push({ file, index })
+      return
+    }
+    const key = new Date(file.takenAt).toISOString().slice(0, 10)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push({ file, index })
+  })
+
+  const sorted = Array.from(map.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([dateKey, entries]) => {
+      const firstDate = new Date(entries[0].file.takenAt!)
+      const label = firstDate.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+      return { label, dateKey, files: entries }
+    })
+
+  if (unknown.length > 0) {
+    sorted.push({ label: 'Unknown date', dateKey: '__unknown__', files: unknown })
+  }
+
+  return sorted
+})
+</script>
