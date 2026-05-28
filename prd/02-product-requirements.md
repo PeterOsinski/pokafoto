@@ -1,0 +1,196 @@
+# 2. Product Requirements
+
+## 2.1 Core User Stories
+
+### Upload & Ingest
+| ID | User Story | Priority |
+|---|---|---|
+| U-01 | As a user, I can upload photos and files via a drag-and-drop web interface | P0 |
+| U-02 | As a user, I can select an entire folder for upload (browser File API / directory picker) | P0 |
+| U-03 | As a user, photos are automatically organized into monthly folders (`YYYY/MM`) upon upload | P0 |
+| U-04 | As a user, I can see upload progress with per-file status (queued, uploading, processing, done, error) | P1 |
+| U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped | P1 |
+| U-05a | As a user, when uploading to the photos folder, files with the same name and size as an existing file are silently skipped (ignored) without re-uploading | P0 |
+| U-06 | As a user, I can upload from mobile devices with the same responsive UI | P1 |
+
+### Gallery & Browsing
+| ID | User Story | Priority |
+|---|---|---|
+| G-01 | As a user, I can browse my photos in a responsive thumbnail grid | P0 |
+| G-02 | As a user, thumbnails load instantly from local cache, with lazy loading for off-screen images | P0 |
+| G-03 | As a user, I can navigate nested directory structures in the gallery | P0 |
+| G-04 | As a user, I can view a photo in full resolution with zoom and pan | P1 |
+| G-05 | As a user, I can navigate between photos with keyboard arrows and swipe gestures (mobile) | P1 |
+| G-06 | As a user, I can sort gallery by date taken, date uploaded, or file name | P2 |
+| G-07 | As a user, I can filter gallery by media type (photos, videos, all) | P2 |
+
+### Timeline View
+| ID | User Story | Priority |
+|---|---|---|
+| T-01 | As a user, I can scroll through a timeline of my photos grouped by month/year | P0 |
+| T-02 | As a user, the timeline shows a representative thumbnail for each time group | P1 |
+| T-03 | As a user, I can jump to a specific month/year via a date picker or scrubber | P1 |
+
+### Map View
+| ID | User Story | Priority |
+|---|---|---|
+| M-01 | As a user, I can see my geo-tagged photos plotted on an interactive map (Leaflet) | P0 |
+| M-02 | As a user, photo markers cluster automatically when zoomed out | P0 |
+| M-03 | As a user, clicking a cluster zooms in; clicking a single marker shows the photo thumbnail | P1 |
+| M-04 | As a user, I can see a heatmap overlay of photo density | P2 |
+| M-05 | As a user, photos without GPS data are not shown on the map (no fake locations) | P0 |
+
+### EXIF & Metadata
+| ID | User Story | Priority |
+|---|---|---|
+| E-01 | As a user, I can view EXIF data for any photo (camera, lens, aperture, shutter, ISO, GPS, date) | P0 |
+| E-02 | As a user, GPS coordinates are extracted and stored for map rendering | P0 |
+| E-03 | As a user, I can search/filter photos by EXIF metadata (camera model, lens, date range) | P2 |
+| E-04 | As a user, EXIF data is preserved in original files and never modified | P0 |
+
+### File Backup
+| ID | User Story | Priority |
+|---|---|---|
+| F-01 | As a user, I can upload any file type (documents, archives, etc.) — not just media | P1 |
+| F-02 | As a user, non-media files show appropriate file type icons in the gallery | P1 |
+| F-03 | As a user, I can download original files individually or as a zip bundle | P1 |
+| F-04 | As a user, I can delete files with a confirmation step (soft-delete with trash) | P2 |
+
+### Authentication & User Management
+| ID | User Story | Priority |
+|---|---|---|
+| A-01 | As a user, I can register an account with a username and password | P0 |
+| A-02 | As a user, I can log in and log out of my account | P0 |
+| A-03 | As a user, my files are private and only accessible to me | P0 |
+| A-04 | As an admin, I can create the first admin user via the CLI | P0 |
+| A-05 | As an admin, I can manage users (list, delete, change roles) | P1 |
+| A-06 | As an admin, I can enable or disable public registration | P1 |
+
+### Sharing (Future / V2)
+| ID | User Story | Priority |
+|---|---|---|
+| S-01 | As a user, I can generate a shareable link to an album or individual photo | P3 |
+| S-02 | As a user, shared links can be password-protected and time-limited | P3 |
+
+---
+
+## 2.2 Functional Requirements
+
+### FR-01: Media Processing Pipeline
+Upon upload, every image and video goes through:
+1. **Name+Size dedup check (photos folder only)** — If a file with the same `original_name` AND `size_bytes` already exists, skip the upload entirely (silently ignored, no DB update). This is a fast pre-check before any processing.
+2. **Hash computation** — SHA-256 of file content for content-level deduplication (catches renamed duplicates). Content-hash duplicates return `409 Conflict`.
+3. **EXIF extraction** — Parse all EXIF/XMP tags using `goexif` (JPEG/PNG/TIFF) with `exiftool` subprocess fallback (HEIC/AVIF). Non-media files skip EXIF entirely.
+4. **Thumbnail generation** — Four sizes per image:
+   - `thumb_sm`: 60px wide (JPEG, quality 60%) — for grid thumbnails
+   - `thumb_md`: 600px wide (JPEG, quality 75%) — for preview/lightbox
+   - `preview`: 720p max dimension (WebP, quality 80%) — for full preview
+   - `video_still`: frame at 5s (JPEG, quality 75%) — videos only
+5. **Video proxy** — Generate a 720p H.264/AAC MP4 proxy for browser playback. Stored as original + proxy in storage.
+6. **Storage** — Originals go to local disk (and S3 if enabled). Thumbnails go to local cache (and S3 if enabled).
+
+### FR-02: Storage Tiers
+
+Two modes of operation determined by `s3.enabled` configuration:
+
+**Local-Only Mode (default, no S3 config needed):**
+```
+Storage Root (local disk, e.g., /data)
+├── originals/    (full-resolution uploads)
+├── thumbnails/   (60px, 600px, 720p previews, video stills)
+└── sqlite.db     (metadata, EXIF, file index)
+```
+
+**S3 Mode (s3.enabled: true):**
+```
+Tier 1 — Local Cache (SSD/NVMe, fast)
+  ├── thumbnails/  (60px, 600px, 720p previews, video stills)
+  └── sqlite.db    (metadata, EXIF, file index)
+
+Tier 2 — S3-Compatible Object Storage (durable, scalable)
+  ├── originals/   (full-resolution uploads)
+  └── thumbnails/  (backup copy of all thumbnails)
+```
+
+Cache eviction policy: LRU (least recently used), configurable max cache size (default: 50GB). Eviction runs as a scheduled background goroutine every 5 minutes. Thumbnails are regenerated on cache miss from stored originals (or S3 if enabled).
+
+### FR-03: Auto-Organization
+- Photos are organized by **date taken** (from EXIF `DateTimeOriginal`), falling back to file modification date
+- Directory structure: `{root}/{YYYY}/{MM}/{filename}`
+- Videos follow the same structure using `CreateDate` or file date
+- Non-media files are organized by upload date: `{root}/files/{YYYY}/{MM}/{filename}`
+
+### FR-04: Map Rendering
+- Uses **Leaflet** with OpenStreetMap tiles (no API key required)
+- Optional: MapLibre GL JS with self-hosted vector tiles for offline use
+- Photo markers clustered with **Supercluster** (client-side) or **H3** (server-side pre-computed)
+- GPS coordinates stored as `latitude`, `longitude` (float64) in SQLite
+- Spatial index on (lat, lon) for fast bounding-box queries
+
+### FR-05: Responsive Design
+- Mobile-first CSS with CSS Grid for thumbnail layout
+- Touch gestures: swipe left/right for photo navigation, pinch-to-zoom
+- Progressive Web App (PWA) capable: service worker for offline thumbnail cache
+- Adaptive thumbnail resolution based on device pixel ratio and viewport
+
+### FR-06: Authentication & User Management
+- User registration with username + password (bcrypt hashed)
+- JWT-based sessions with access + refresh tokens
+- Roles: `admin` and `member`
+- Admin user created via CLI: `drive admin create`
+- Self-registration can be enabled/disabled via config (`auth.allow_registration`)
+- All API endpoints require `Authorization: Bearer <token>` header (exceptions: health, login, register)
+- Row-level filtering: all file/resource queries scoped to `user_id`
+- Admins can list, delete, and change roles of all users
+
+---
+
+## 2.3 Non-Functional Requirements
+
+| ID | Requirement | Target |
+|---|---|---|
+| NFR-01 | Gallery page load (100 thumbnails) | < 500ms |
+| NFR-02 | Single photo upload + processing | < 2s |
+| NFR-03 | Map render with 10k markers | < 1s |
+| NFR-04 | Idle memory usage | < 200MB |
+| NFR-05 | Concurrent upload support | 10 simultaneous, 4 processing workers |
+| NFR-06 | Supported image formats | JPEG, PNG, HEIC, WebP, AVIF, TIFF, RAW (CR2, NEF, ARW, DNG) |
+| NFR-07 | Supported video formats | MP4, MOV, AVI, MKV, HEVC |
+| NFR-08 | Max individual file size | 10GB (configurable) |
+| NFR-09 | Storage backends | Local disk, AWS S3, Cloudflare R2, Backblaze B2, MinIO, Wasabi |
+| NFR-10 | Browser support | Chrome 100+, Firefox 100+, Safari 16+, Mobile Safari, Chrome Android |
+
+---
+
+## 2.4 User Flows
+
+### Primary Flow: Upload & View Photos
+```
+1. User opens Drive web UI → redirected to login page
+2. User logs in with username + password (or registers if registration enabled)
+3. Lands on Gallery view (most recent first)
+4. Drags photos onto upload zone (or clicks to select files/folder)
+5. Upload progress bar shows per-file status
+6. Photos appear in gallery as thumbnails are generated
+7. User switches to Timeline view → scrolls through months
+8. User switches to Map view → sees photo clusters on world map
+9. User clicks a photo → lightbox with full preview, EXIF panel, map pin
+```
+
+### Secondary Flow: Browse Existing Library
+```
+1. User opens Drive web UI → logs in
+2. Lands on Gallery view (most recent first)
+3. Scrolls down → lazy-loaded thumbnails appear instantly
+4. Uses directory tree sidebar to navigate to a specific folder
+5. Clicks Timeline tab → jumps to a specific month
+6. Clicks Map tab → explores photos by location
+```
+
+### Secondary Flow: Browse Existing Library
+```
+1. User opens Drive → lands on Gallery view (most recent first)
+2. Scrolls down → lazy-loaded thumbnails appear instantly
+3. Uses directory tree sidebar to navigate to a specific folder
+4. Clicks Timeline tab → jumps to a specific month
+5. Clicks Map tab → explores photos by location

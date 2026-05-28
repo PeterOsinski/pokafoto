@@ -1,0 +1,15 @@
+services:
+  drive:
+    build: .
+    container_name: drive
+    ports:
+      - "${DRIVE_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - DRIVE_STORAGE_PATH=/data
+      - DRIVE_DB_PATH=/data/drive.db
+      - DRIVE_JWT_SECRET=${DRIVE_JWT_SECRET:-}
+      - DRIVE_ALLOW_REGISTRATION=${DRIVE_ALLOW_REGISTRATION:-true}
+      - DRIVE_PORT=${DRIVE_PORT:-8080}
+    restart: unless-stopped

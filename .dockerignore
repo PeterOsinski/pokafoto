@@ -1,0 +1,9 @@
+bin/
+data/
+node_modules/
+web/dist/
+web/node_modules/
+*.db
+*.db-journal
+*.db-wal
+coverage.out

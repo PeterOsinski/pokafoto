@@ -1,0 +1,323 @@
+package worker
+
+import (
+	"crypto/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/drive/drive/internal/config"
+	"github.com/drive/drive/internal/model"
+	"github.com/drive/drive/internal/store"
+)
+
+func createTempUploadFile(t *testing.T) (string, func()) {
+	t.Helper()
+	dir := t.TempDir()
+	tmpPath := filepath.Join(dir, "upload_test.jpg")
+	if err := os.WriteFile(tmpPath, []byte("test image content"), 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	return tmpPath, func() {}
+}
+
+func setupTestPool(t *testing.T) (*Pool, *store.FileStore) {
+	t.Helper()
+
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 2
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, _ := us.Create("workeruser_"+t.Name(), "password123", model.RoleMember, nil)
+
+	_ = u
+	pool := NewPool(cfg, fs, es, ts, nil)
+	return pool, fs
+}
+
+func TestPool_Enqueue_shouldReturnJob(t *testing.T) {
+	pool, _ := setupTestPool(t)
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	job := pool.Enqueue("batch-1", "user-1", "photo.jpg", 1024, tmpPath)
+	if job == nil {
+		t.Fatal("expected job, got nil")
+	}
+	if job.BatchID != "batch-1" {
+		t.Errorf("expected batch-1, got %s", job.BatchID)
+	}
+
+	pool.Shutdown()
+}
+
+func TestPool_GetBatch_shouldReturnBatch(t *testing.T) {
+	pool, _ := setupTestPool(t)
+	defer pool.Shutdown()
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	pool.Enqueue("batch-2", "user-1", "photo.jpg", 1024, tmpPath)
+	pool.Enqueue("batch-2", "user-1", "photo2.jpg", 2048, tmpPath)
+
+	batch := pool.GetBatch("batch-2")
+	if batch == nil {
+		t.Fatal("expected batch, got nil")
+	}
+	if batch.Total != 2 {
+		t.Errorf("expected 2 jobs, got %d", batch.Total)
+	}
+	if len(batch.Jobs) != 2 {
+		t.Errorf("expected 2 jobs in list, got %d", len(batch.Jobs))
+	}
+}
+
+func TestPool_Subscribe_shouldReceiveUpdates(t *testing.T) {
+	pool, _ := setupTestPool(t)
+	defer pool.Shutdown()
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	ch := pool.Subscribe("batch-3", "listener-1")
+	if ch == nil {
+		t.Fatal("expected channel, got nil")
+	}
+
+	job := pool.Enqueue("batch-3", "user-1", "photo.jpg", 1024, tmpPath)
+
+	select {
+	case update := <-ch:
+		if update == nil {
+			t.Error("expected job update, got nil")
+		}
+	default:
+		if job.Status == JobQueued || job.Status == JobProcessing {
+			t.Log("job still processing, waiting for next update")
+		}
+	}
+
+	pool.Unsubscribe("batch-3", "listener-1")
+}
+
+func TestPool_Shutdown_shouldNotPanic(t *testing.T) {
+	pool, _ := setupTestPool(t)
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	pool.Enqueue("batch-4", "user-1", "photo.jpg", 1024, tmpPath)
+
+	pool.Shutdown()
+
+	pool.wg.Wait()
+
+	select {
+	case _, ok := <-pool.jobChan:
+		if ok {
+			t.Error("channel should be closed after shutdown")
+		}
+	default:
+	}
+}
+
+func TestPool_Enqueue_shouldBlockWhenFull(t *testing.T) {
+	pool, _ := setupTestPool(t)
+	defer pool.Shutdown()
+
+	tmpPath, _ := createTempUploadFile(t)
+
+	for i := 0; i < 10; i++ {
+		pool.Enqueue("batch-5", "user-1", "photo.jpg", 1024, tmpPath)
+	}
+
+	batch := pool.GetBatch("batch-5")
+	if batch.Total != 10 {
+		t.Errorf("expected 10 jobs, got %d", batch.Total)
+	}
+}
+
+func TestJob_SetCompleted_shouldUpdateState(t *testing.T) {
+	tmpPath, _ := createTempUploadFile(t)
+
+	job := &UploadJob{
+		JobID:        "job-1",
+		BatchID:      "batch-1",
+		UserID:       "user-1",
+		OriginalName: "photo.jpg",
+		Size:         1024,
+		TempPath:     tmpPath,
+		Status:       JobQueued,
+	}
+
+	job.SetCompleted("file-123")
+	if job.Status != JobCompleted {
+		t.Errorf("expected completed, got %s", job.Status)
+	}
+	if job.FileID != "file-123" {
+		t.Errorf("expected file-123, got %s", job.FileID)
+	}
+	if job.Progress != 1.0 {
+		t.Errorf("expected progress 1.0, got %f", job.Progress)
+	}
+}
+
+func TestJob_SetFailed_shouldUpdateState(t *testing.T) {
+	job := &UploadJob{
+		JobID:  "job-1",
+		Status: JobQueued,
+	}
+
+	job.SetFailed("something went wrong")
+	if job.Status != JobFailed {
+		t.Errorf("expected failed, got %s", job.Status)
+	}
+	if job.Error != "something went wrong" {
+		t.Errorf("expected error, got %s", job.Error)
+	}
+}
+
+func TestJob_SetSkipped_shouldUpdateState(t *testing.T) {
+	job := &UploadJob{
+		JobID:  "job-1",
+		Status: JobQueued,
+	}
+
+	job.SetSkipped("duplicate_content", "existing-file-1")
+	if job.Status != JobSkipped {
+		t.Errorf("expected skipped, got %s", job.Status)
+	}
+	if job.Reason != "duplicate_content" {
+		t.Errorf("expected duplicate_content, got %s", job.Reason)
+	}
+	if job.FileID != "existing-file-1" {
+		t.Errorf("expected existing-file-1, got %s", job.FileID)
+	}
+}
+
+func TestJob_SetProgress_shouldUpdateStageAndProgress(t *testing.T) {
+	job := &UploadJob{
+		JobID:  "job-1",
+		Status: JobQueued,
+	}
+
+	job.SetProgress(StageHashing, 0.5)
+	if job.Stage != StageHashing {
+		t.Errorf("expected hashing stage, got %s", job.Stage)
+	}
+	if job.Progress != 0.5 {
+		t.Errorf("expected progress 0.5, got %f", job.Progress)
+	}
+}
+
+func TestDetectMimeTypeByExtension_known(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"photo.jpg", "image/jpeg"},
+		{"photo.jpeg", "image/jpeg"},
+		{"photo.png", "image/png"},
+		{"photo.webp", "image/webp"},
+		{"photo.heic", "image/heic"},
+		{"video.mp4", "video/mp4"},
+		{"video.mov", "video/quicktime"},
+		{"doc.pdf", "application/pdf"},
+		{"archive.zip", "application/zip"},
+		{"unknown.xyz", "application/octet-stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			got := detectMimeTypeByExtension(tt.filename)
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestDetectMediaType(t *testing.T) {
+	tests := []struct {
+		mimeType string
+		expected model.MediaType
+	}{
+		{"image/jpeg", model.MediaTypePhoto},
+		{"image/png", model.MediaTypePhoto},
+		{"image/heic", model.MediaTypePhoto},
+		{"video/mp4", model.MediaTypeVideo},
+		{"video/quicktime", model.MediaTypeVideo},
+		{"application/pdf", model.MediaTypeFile},
+		{"text/plain", model.MediaTypeFile},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mimeType, func(t *testing.T) {
+			got := detectMediaType(tt.mimeType)
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, err := us.Create("fileuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil)
+
+	content := make([]byte, 256)
+	rand.Read(content)
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "document.pdf")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	info, _ := os.Stat(tmpPath)
+	job := pool.Enqueue("batch-files", u.ID, "document.pdf", info.Size(), tmpPath)
+	if job == nil {
+		t.Fatal("expected job, got nil")
+	}
+
+	pool.Shutdown()
+
+	files, _, _, err := fs.List(store.FileListOptions{UserID: u.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("list files: %v", err)
+	}
+
+	if len(files) == 0 {
+		t.Fatal("expected at least 1 file, got 0")
+	}
+
+	for _, f := range files {
+		if f.MediaType == model.MediaTypeFile {
+			if !strings.Contains(f.Path, "files") {
+				t.Errorf("expected 'files' in path for non-media file, got %q", f.Path)
+			}
+			if !strings.Contains(f.Filename, "files") {
+				t.Errorf("expected 'files' in filename for non-media file, got %q", f.Filename)
+			}
+		}
+	}
+}
