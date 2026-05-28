@@ -152,6 +152,8 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 	ch := s.workerPool.Subscribe(batchID, wsID)
 	defer s.workerPool.Unsubscribe(batchID, wsID)
 
+	s.sendBatchSnapshot(conn, batchID, userID)
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -172,26 +174,44 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 			if job.UserID != userID {
 				continue
 			}
-			msg := map[string]interface{}{
-				"job_id":   job.JobID,
-				"filename": job.Filename,
-				"status":   job.Status,
-				"progress": job.Progress,
-			}
-			if job.FileID != "" {
-				msg["file_id"] = job.FileID
-			}
-			if job.Error != "" {
-				msg["error"] = job.Error
-			}
-			if job.Stage != "" {
-				msg["stage"] = job.Stage
-			}
-			data, _ := json.Marshal(msg)
+			data, _ := json.Marshal(workerJobToMsg(job))
 			conn.WriteMessage(websocket.TextMessage, data)
 		case <-done:
 			return
 		}
+	}
+}
+
+func workerJobToMsg(job *worker.UploadJob) map[string]interface{} {
+	msg := map[string]interface{}{
+		"job_id":   job.JobID,
+		"filename": job.Filename,
+		"status":   job.Status,
+		"progress": job.Progress,
+	}
+	if job.FileID != "" {
+		msg["file_id"] = job.FileID
+	}
+	if job.Error != "" {
+		msg["error"] = job.Error
+	}
+	if job.Stage != "" {
+		msg["stage"] = job.Stage
+	}
+	return msg
+}
+
+func (s *Server) sendBatchSnapshot(conn *websocket.Conn, batchID, userID string) {
+	batch := s.workerPool.GetBatch(batchID)
+	if batch == nil {
+		return
+	}
+	for _, j := range batch.Jobs {
+		if j.UserID != userID {
+			continue
+		}
+		data, _ := json.Marshal(workerJobToMsg(j))
+		conn.WriteMessage(websocket.TextMessage, data)
 	}
 }
 

@@ -2,10 +2,12 @@ package worker
 
 import (
 	"crypto/rand"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/model"
@@ -263,6 +265,95 @@ func TestDetectMediaType(t *testing.T) {
 				t.Errorf("expected %s, got %s", tt.expected, got)
 			}
 		})
+	}
+}
+
+func TestDetectMimeTypeFromFile_tinyFilesShouldNotPanic(t *testing.T) {
+	sizes := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 20, 50}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%d_bytes", size), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "tiny.bin")
+			content := make([]byte, size)
+			if size > 0 {
+				for i := range content {
+					content[i] = byte(i % 256)
+				}
+			}
+			if err := os.WriteFile(path, content, 0644); err != nil {
+				t.Fatalf("write temp file: %v", err)
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("open temp file: %v", err)
+			}
+			defer f.Close()
+
+			result := detectMimeTypeFromFile(f, "tiny.bin")
+			if result == "" {
+				t.Error("expected non-empty result")
+			}
+		})
+	}
+}
+
+func TestPool_WorkerRecovery_poolShouldNotDie(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 2
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, err := us.Create("recoveryuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil)
+
+	tmpDir := t.TempDir()
+
+	for i := 0; i < 8; i++ {
+		content := make([]byte, 5+i) // 5 to 12 bytes
+		rand.Read(content)
+		path := filepath.Join(tmpDir, fmt.Sprintf("file_%d.bin", i))
+		if err := os.WriteFile(path, content, 0644); err != nil {
+			t.Fatalf("write temp file: %v", err)
+		}
+		info, _ := os.Stat(path)
+		pool.Enqueue("batch-recovery", u.ID, fmt.Sprintf("file_%d.bin", i), info.Size(), path)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	batch := pool.GetBatch("batch-recovery")
+	if batch == nil {
+		t.Fatal("expected batch, got nil")
+	}
+
+	pool.Shutdown()
+
+	laterJob := &UploadJob{
+		JobID:    "later-job",
+		BatchID:  "batch-recovery",
+		UserID:   u.ID,
+		Filename: "later.bin",
+		Status:   JobQueued,
+	}
+	pool.notifySubscribers(laterJob)
+
+	pooled := 0
+	for _, j := range batch.Jobs {
+		if j.Stage != "" || j.Status == JobFailed || j.Status == JobCompleted {
+			pooled++
+		}
+	}
+	if pooled == 0 && batch.Total > 0 {
+		t.Error("expected some jobs to be processed, all were ignored")
 	}
 }
 

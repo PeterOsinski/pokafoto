@@ -52,12 +52,26 @@ describe('GalleryListView', () => {
     expect(img.attributes('src')).toBe('/thumb/1-sm.jpg')
   })
 
-  it('shows fallback icon when no thumbnail', () => {
+  it('shows fallback icon when no thumbnail for photo', () => {
     const files = [makeFile('1', { thumbnails: undefined })]
     const wrapper = mount(GalleryListView, { props: { files } })
 
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.text()).toContain('📄')
+  })
+
+  it('shows extension icon for file type without thumbnail', () => {
+    const files = [makeFile('1', {
+      mediaType: 'file',
+      originalName: 'report.csv',
+      filename: 'report.csv',
+      thumbnails: undefined,
+    })]
+    const wrapper = mount(GalleryListView, { props: { files } })
+
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('📄')
+    expect(wrapper.text()).toContain('.csv')
   })
 
   it('emits open with correct index on row click', async () => {

@@ -12,13 +12,27 @@
       @error="onImageError"
     />
     <div v-if="loadError" class="w-full h-full flex flex-col items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
-      <span>{{ file.mediaType === 'video' ? '▶' : '📄' }}</span>
+      <span v-if="file.mediaType === 'video'">▶</span>
+      <span v-else-if="file.mediaType === 'file'" class="flex flex-col items-center gap-1">
+        <span class="text-2xl">📄</span>
+        <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
+      </span>
+      <span v-else>📄</span>
       <button @click.prevent.stop="retryLoad" class="px-2 py-1 rounded text-xs bg-[var(--accent)] text-white">
         Retry
       </button>
     </div>
-    <div v-else-if="!imgSrc" class="w-full h-full flex items-center justify-center text-3xl text-[var(--text-secondary)]">
-      {{ file.mediaType === 'video' ? '▶' : '📄' }}
+    <div v-else-if="!imgSrc" class="w-full h-full flex flex-col items-center justify-center gap-1 text-[var(--text-secondary)]">
+      <template v-if="file.mediaType === 'video'">
+        <span class="text-3xl">▶</span>
+      </template>
+      <template v-else-if="file.mediaType === 'file'">
+        <span class="text-2xl">📄</span>
+        <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
+      </template>
+      <template v-else>
+        <span class="text-3xl">📄</span>
+      </template>
     </div>
     <div v-if="file.mediaType === 'video' && file.durationSec && !loadError" class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-xs text-white bg-black/60">
       {{ formatDuration(file.durationSec) }}
@@ -35,6 +49,7 @@ import { ref, computed } from 'vue'
 interface FileItem {
   id: string
   originalName: string
+  filename: string
   mediaType: string
   durationSec?: number
   takenAt?: string
@@ -54,6 +69,12 @@ const props = defineProps<{
 
 const loadError = ref(false)
 const retryCounter = ref(0)
+
+const fileExtension = computed(() => {
+  const name = props.file.originalName || props.file.filename || ''
+  const ext = name.split('.').pop() || ''
+  return ext ? `.${ext.toLowerCase()}` : ''
+})
 
 const sizeKey = computed<'sm' | 'lg' | 'md'>(() => {
   if (props.thumbSize === 'lg') return 'md'

@@ -217,7 +217,16 @@ func (p *Pool) Shutdown() {
 func (p *Pool) worker(id int) {
 	defer p.wg.Done()
 	for job := range p.jobChan {
-		p.processJob(job)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					job.SetFailed(fmt.Sprintf("worker panic: %v", r))
+					p.notifySubscribers(job)
+					slog.Error("worker panic recovered", "worker_id", id, "job_id", job.JobID, "panic", r)
+				}
+			}()
+			p.processJob(job)
+		}()
 	}
 }
 
@@ -419,7 +428,7 @@ func detectMimeTypeFromFile(f *os.File, filename string) string {
 	if n >= 4 && head[0] == 0x52 && head[1] == 0x49 && head[2] == 0x46 && head[3] == 0x46 {
 		return "image/webp"
 	}
-	if n >= 4 && head[4] == 0x66 && head[5] == 0x74 && head[6] == 0x79 && head[7] == 0x70 {
+	if n >= 8 && head[4] == 0x66 && head[5] == 0x74 && head[6] == 0x79 && head[7] == 0x70 {
 		if n >= 12 {
 			brand := string(head[8:12])
 			if brand == "heic" || brand == "heix" || brand == "hevc" || brand == "hevx" {
@@ -430,8 +439,8 @@ func detectMimeTypeFromFile(f *os.File, filename string) string {
 	if n >= 12 && string(head[4:8]) == "ftyp" && string(head[8:12]) == "avif" {
 		return "image/avif"
 	}
-	if n >= 4 && (head[0] == 0x49 && head[1] == 0x49 && head[2] == 0x2A && head[3] == 0x00) ||
-		(head[0] == 0x4D && head[1] == 0x4D && head[2] == 0x00 && head[3] == 0x2A) {
+	if n >= 4 && ((head[0] == 0x49 && head[1] == 0x49 && head[2] == 0x2A && head[3] == 0x00) ||
+		(head[0] == 0x4D && head[1] == 0x4D && head[2] == 0x00 && head[3] == 0x2A)) {
 		return "image/tiff"
 	}
 	if n >= 4 && head[0] == 0x00 && head[1] == 0x00 && head[2] == 0x00 && (head[3]&0xF0) == 0x10 {
@@ -446,7 +455,7 @@ func detectMimeTypeFromFile(f *os.File, filename string) string {
 	if n >= 4 && head[0] == 0x50 && head[1] == 0x4B && head[2] == 0x03 && head[3] == 0x04 {
 		return "application/zip"
 	}
-	if n >= 8 && string(head[4:8]) == "ftyp" && head[8] == 'q' && head[9] == 't' {
+	if n >= 10 && string(head[4:8]) == "ftyp" && head[8] == 'q' && head[9] == 't' {
 		return "video/quicktime"
 	}
 

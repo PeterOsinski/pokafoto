@@ -100,8 +100,7 @@ function connectWS(batchID: string) {
   }
 
   ws.onerror = () => {
-    console.error('WebSocket error, falling back to polling')
-    pollStatus(batchID)
+    console.error('WebSocket error')
   }
 }
 

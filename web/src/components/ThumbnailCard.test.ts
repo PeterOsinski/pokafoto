@@ -6,6 +6,7 @@ function makeFile(overrides: Record<string, any> = {}) {
   return {
     id: 'file-1',
     originalName: 'test.jpg',
+    filename: 'test.jpg',
     mediaType: 'photo',
     thumbnails: {
       sm: { url: '/thumb/sm.jpg', width: 60, height: 60 },
@@ -71,11 +72,12 @@ describe('ThumbnailCard', () => {
       expect(wrapper.text()).toContain('▶')
     })
 
-    it('renders 📄 icon for file without thumbnail', () => {
-      const file = makeFile({ mediaType: 'file', thumbnails: undefined })
+    it('renders extension icon for file type without thumbnail', () => {
+      const file = makeFile({ mediaType: 'file', originalName: 'document.pdf', filename: 'document.pdf', thumbnails: undefined })
       const wrapper = mount(ThumbnailCard, { props: { file } })
 
       expect(wrapper.text()).toContain('📄')
+      expect(wrapper.text()).toContain('.pdf')
     })
 
     it('shows duration badge for videos with durationSec', () => {

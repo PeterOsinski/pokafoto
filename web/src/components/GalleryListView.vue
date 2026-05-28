@@ -25,6 +25,10 @@
               class="w-10 h-10 rounded object-cover"
               loading="lazy"
             />
+            <div v-else-if="file.mediaType === 'file'" class="w-10 h-10 rounded flex flex-col items-center justify-center text-[var(--text-secondary)]" style="background: var(--bg-elevated)">
+              <span class="text-sm">📄</span>
+              <span class="text-[10px] font-mono opacity-60 leading-none">{{ fileExtension(file) }}</span>
+            </div>
             <div v-else class="w-10 h-10 rounded flex items-center justify-center text-lg" style="background: var(--bg-elevated)">
               {{ file.mediaType === 'video' ? '▶' : '📄' }}
             </div>
@@ -89,5 +93,11 @@ function typeBadgeClass(mediaType: string): string {
     case 'photo': return 'bg-blue-900/40 text-blue-300'
     default: return 'bg-gray-700/40 text-gray-300'
   }
+}
+
+function fileExtension(file: FileItem): string {
+  const name = file.originalName || file.filename || ''
+  const ext = name.split('.').pop() || ''
+  return ext ? `.${ext.toLowerCase()}` : ''
 }
 </script>
