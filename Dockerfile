@@ -1,21 +1,26 @@
+# syntax=docker/dockerfile:1
 FROM golang:1.25-alpine AS go-builder
 
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY . .
-
-RUN go build -ldflags="-s -w" -o /app/bin/drive ./cmd/drive
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go build -ldflags="-s -w" -o /app/bin/drive ./cmd/drive
 
 FROM node:22-alpine AS web-builder
 
 WORKDIR /app
 COPY web/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 COPY web/ .
-RUN npm run build
+RUN --mount=type=cache,target=/root/.npm \
+    npm run build
 
 FROM alpine:3.21
 

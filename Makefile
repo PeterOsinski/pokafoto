@@ -33,7 +33,7 @@ clean:
 	rm -rf data/
 
 docker:
-	docker compose build
+	COMPOSE_BAKE=true DOCKER_BUILDKIT=1 docker compose build
 
 docker-up:
 	docker compose up -d
