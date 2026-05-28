@@ -27,7 +27,7 @@
       <h3 class="text-sm font-semibold mb-3 text-[var(--text-primary)]">Upload Queue</h3>
       <div v-for="job in sortedJobs" :key="job.job_id" class="flex items-center gap-3 py-2 text-sm">
         <span class="truncate flex-1 text-[var(--text-primary)]">{{ job.filename }}</span>
-        <div v-if="job.status === 'processing' && job.progress !== undefined" class="w-24 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-elevated)">
+        <div v-if="(job.status === 'processing' || job.status === 'uploading') && job.progress !== undefined" class="w-24 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-elevated)">
           <div class="h-full rounded-full transition-all" style="background: var(--accent)" :style="{ width: (job.progress * 100) + '%' }"></div>
         </div>
         <span class="text-xs w-16 text-right" :class="statusClass(job.status)">{{ statusLabel(job) }}</span>
@@ -52,6 +52,8 @@ interface Job {
   file_id?: string
   progress?: number
   stage?: string
+  size?: number
+  uploaded?: number
 }
 
 const auth = useAuthStore()
@@ -61,7 +63,7 @@ const jobs = ref<Job[]>([])
 const currentBatchID = ref('')
 
 const sortedJobs = computed(() => {
-  const order: Record<string, number> = { processing: 0, queued: 1, completed: 2, skipped: 3, failed: 4 }
+  const order: Record<string, number> = { uploading: 0, processing: 1, queued: 2, completed: 3, skipped: 4, failed: 5 }
   return [...jobs.value].sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5))
 })
 
@@ -77,6 +79,7 @@ function statusClass(status: string) {
 }
 
 function statusLabel(job: Job) {
+  if (job.status === 'uploading' && job.progress !== undefined) return `${Math.round(job.progress * 100)}%`
   if (job.status === 'processing' && job.stage) return job.stage
   return job.status
 }
@@ -122,6 +125,17 @@ async function pollStatus(batchID: string) {
 }
 
 async function uploadFiles(fileList: FileList | File[]) {
+  const uploadJobs: Job[] = Array.from(fileList).map((file, i) => ({
+    job_id: `upload-${i}`,
+    filename: file.name,
+    status: 'uploading',
+    progress: 0,
+    stage: 'uploading',
+    size: file.size,
+    uploaded: 0,
+  }))
+  jobs.value = [...uploadJobs, ...jobs.value]
+
   const form = new FormData()
   for (let i = 0; i < fileList.length; i++) {
     form.append('files', fileList[i])
@@ -129,15 +143,47 @@ async function uploadFiles(fileList: FileList | File[]) {
   try {
     const res = await api.post('/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (!progressEvent.total) return
+        const overallProgress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
+        for (const job of uploadJobs) {
+          const jobIdx = jobs.value.findIndex(j => j.job_id === job.job_id)
+          if (jobIdx >= 0) {
+            const jobProgress = Math.min(overallProgress, 0.99)
+            jobs.value[jobIdx] = {
+              ...jobs.value[jobIdx],
+              progress: Math.round(jobProgress * 100) / 100,
+              uploaded: Math.round(overallProgress * (job.size! || 1)),
+            }
+          }
+        }
+      },
     })
-    const newJobs: Job[] = res.data.jobs.map((j: any) => ({ ...j, progress: 0 }))
-    jobs.value = [...newJobs, ...jobs.value]
+
+    const realJobs: Job[] = res.data.jobs.map((j: any) => ({ ...j, progress: 0 }))
+    for (const uploadJob of uploadJobs) {
+      const idx = jobs.value.findIndex(j => j.job_id === uploadJob.job_id)
+      if (idx >= 0) {
+        jobs.value = jobs.value.filter(j => j.job_id !== uploadJob.job_id)
+      }
+    }
+    jobs.value = [...realJobs, ...jobs.value]
 
     if (res.data.batch_id) {
       currentBatchID.value = res.data.batch_id
       connectWS(res.data.batch_id)
     }
   } catch (e: any) {
+    for (const uploadJob of uploadJobs) {
+      const idx = jobs.value.findIndex(j => j.job_id === uploadJob.job_id)
+      if (idx >= 0) {
+        jobs.value[idx] = {
+          ...jobs.value[idx],
+          status: 'failed',
+          stage: undefined,
+        }
+      }
+    }
     console.error('Upload failed', e)
   }
 }

@@ -47,7 +47,9 @@ Every change starts with a failing test. No feature or fix is accepted without a
 Before any piece of work is considered complete:
 
 1. **Run `make test-all`** and ensure all existing tests pass. Any new feature or fix MUST include one or more new tests that fail without the change and pass with it. Never skip running the test suite — even for small or "obvious" changes.
-2. **Commit and push your work** to the remote repository. All tests must pass before committing.
+2. **Run `go build ./...`** to verify the backend compiles without errors.
+3. **Run `npm run build` (in `web/`)** to verify the frontend compiles without TypeScript or Vite errors.
+4. **Commit and push your work** to the remote repository. All tests and builds must pass before committing.
 
 ## Running Tests
 
@@ -56,6 +58,13 @@ make test          # go test -count=1 ./...
 make test-cover    # go test -race -count=1 -coverprofile=coverage.out ./...
 make test-web      # cd web && npx vitest run
 make test-all      # both (test + test-web)
+```
+
+## Running Builds
+
+```bash
+go build ./...     # Backend Go compilation
+cd web && npm run build  # Frontend TypeScript + Vite build
 ```
 
 Backend tests run against `:memory:` SQLite with real migrations. Frontend tests run in jsdom with mocked API calls. The full suite completes in under 15 seconds.

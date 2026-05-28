@@ -9,6 +9,8 @@
 | U-02 | As a user, I can select an entire folder for upload (browser File API / directory picker) | P0 |
 | U-03 | As a user, photos are automatically organized into monthly folders (`YYYY/MM`) upon upload | P0 |
 | U-04 | As a user, I can see upload progress with per-file status (queued, uploading, processing, done, error) | P1 |
+
+**U-04 Implementation note:** Upload progress has two phases: (1) HTTP transfer progress (tracked via axios `onUploadProgress` — bytes sent / total), shown as `uploading` status with percentage; (2) server-side processing progress (WebSocket-driven — `hashing` → `dedup` → `exif` → `storing` → `thumbnails`), shown as `processing` status with stage name. Files appear in the queue immediately upon selection with `uploading` status. After the HTTP POST completes, they transition to `queued` and then `processing` as the worker pool handles them.
 | U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped | P1 |
 | U-05a | As a user, when uploading to the photos folder, files with the same name and size as an existing file are silently skipped (ignored) without re-uploading | P0 |
 | U-06 | As a user, I can upload from mobile devices with the same responsive UI | P1 |

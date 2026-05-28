@@ -1,4 +1,4 @@
-.PHONY: dev build build-web test test-cover test-web test-all lint clean docker
+.PHONY: dev build build-web test test-cover test-web test-all lint clean docker docker-rebuild
 
 dev:
 	@echo "Starting backend..."
@@ -40,3 +40,5 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+docker-rebuild: docker docker-down docker-up
