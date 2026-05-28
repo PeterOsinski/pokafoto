@@ -274,11 +274,6 @@ func (p *Pool) processJob(job *UploadJob) {
 	job.SetProgress(StageExif, 0.3)
 	exifData, _ := p.exifService.Extract(job.TempPath)
 
-	var orientation *int
-	if exifData != nil {
-		orientation = exifData.Orientation
-	}
-
 	now := time.Now().UTC()
 	yearMonth := now.Format("2006/01")
 
@@ -373,7 +368,7 @@ func (p *Pool) processJob(job *UploadJob) {
 	}
 
 	job.SetProgress(StageThumbnails, 0.8)
-	thumbs, err := p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType, orientation)
+	thumbs, err := p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType)
 	if err != nil {
 		slog.Warn("thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
 	} else {
