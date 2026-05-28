@@ -171,6 +171,7 @@ async function uploadFiles(fileList: FileList | File[]) {
     if (res.data.batch_id) {
       currentBatchID.value = res.data.batch_id
       connectWS(res.data.batch_id)
+      pollStatus(res.data.batch_id)
     }
   } catch (e: any) {
     for (const uploadJob of uploadJobs) {

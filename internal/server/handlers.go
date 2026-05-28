@@ -499,6 +499,9 @@ type thumbnailInfoResponse struct {
 }
 
 func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetResponse {
+	if mediaType == model.MediaTypeFile {
+		return nil
+	}
 	if mediaType == model.MediaTypeVideo {
 		return &thumbnailSetResponse{
 			VideoStill: &thumbnailInfoResponse{
