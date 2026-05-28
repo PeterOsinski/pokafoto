@@ -67,3 +67,20 @@ Backend tests run against `:memory:` SQLite with real migrations. Frontend tests
 - Imports grouped: stdlib, third-party, project
 - Errors always wrapped with `fmt.Errorf("context: %w", err)`
 - Use `interface{}` only for JSON map literals
+
+## Commit Conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org): `type: description`
+
+| Type | Usage |
+|---|---|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `style` | Formatting, missing semicolons, etc. (no code change) |
+| `refactor` | Code restructuring without feature/fix |
+| `perf` | Performance improvement |
+| `test` | Adding or updating tests |
+| `chore` | Build, CI, dependency, or tooling changes |
+
+Keep the description lowercase, imperative mood, and under 72 characters.
