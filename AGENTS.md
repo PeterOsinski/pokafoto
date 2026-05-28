@@ -44,7 +44,10 @@ Every change starts with a failing test. No feature or fix is accepted without a
 
 ## Required Before Finishing
 
-**Before any piece of work is considered complete, you MUST run `make test-all` and ensure all existing tests pass. Any new feature or fix MUST include one or more new tests that fail without the change and pass with it.** Never skip running the test suite — even for small or "obvious" changes.
+Before any piece of work is considered complete:
+
+1. **Run `make test-all`** and ensure all existing tests pass. Any new feature or fix MUST include one or more new tests that fail without the change and pass with it. Never skip running the test suite — even for small or "obvious" changes.
+2. **Commit and push your work** to the remote repository. All tests must pass before committing.
 
 ## Running Tests
 
