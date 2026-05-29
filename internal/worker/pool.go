@@ -19,76 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type JobStatus string
-
-const (
-	JobQueued     JobStatus = "queued"
-	JobProcessing JobStatus = "processing"
-	JobCompleted  JobStatus = "completed"
-	JobSkipped    JobStatus = "skipped"
-	JobFailed     JobStatus = "failed"
-)
-
-type JobStage string
-
-const (
-	StageHashing      JobStage = "hashing"
-	StageDedup        JobStage = "dedup"
-	StageStoring      JobStage = "storing"
-	StageExif         JobStage = "exif"
-	StageThumbnails   JobStage = "thumbnails"
-)
-
-type UploadJob struct {
-	JobID             string
-	BatchID           string
-	UserID            string
-	Filename          string
-	OriginalName      string
-	Size              int64
-	TempPath          string
-	FolderID          *string
-	SkipNameSizeDedup bool
-	Status            JobStatus
-	Stage             JobStage
-	Progress          float64
-	Error             string
-	FileID            string
-	Reason            string
-
-	mu sync.Mutex
-}
-
-func (j *UploadJob) SetProgress(stage JobStage, progress float64) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.Stage = stage
-	j.Progress = progress
-}
-
-func (j *UploadJob) SetCompleted(fileID string) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.Status = JobCompleted
-	j.FileID = fileID
-	j.Progress = 1.0
-}
-
-func (j *UploadJob) SetSkipped(reason, existingFileID string) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.Status = JobSkipped
-	j.Reason = reason
-	j.FileID = existingFileID
-	j.Progress = 1.0
-}
-
-func (j *UploadJob) SetFailed(errStr string) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.Status = JobFailed
-	j.Error = errStr
-}
+const pollInterval = 1 * time.Second
 
 type Pool struct {
 	cfg              *config.Config
@@ -98,32 +29,19 @@ type Pool struct {
 	exifService      *service.ExifService
 	thumbnailService *service.ThumbnailService
 	storageService   *service.StorageService
-	jobChan          chan *UploadJob
+	uploadJobStore   *store.UploadJobStore
 	totalWorkers     int
 	wg               sync.WaitGroup
-	batches          map[string]*Batch
-	batchesMu        sync.RWMutex
-	subscribers      map[string]map[string]chan *UploadJob
+	stopCh           chan struct{}
+	subscribers      map[string]map[string]chan *model.UploadJob
 	subMu            sync.RWMutex
-	userSubscribers  map[string]map[string]chan *UploadJob
+	userSubscribers  map[string]map[string]chan *model.UploadJob
 	userSubMu        sync.RWMutex
-	processingJobs   map[string]*UploadJob
+	processingJobs   map[string]*model.UploadJob
 	processingMu     sync.RWMutex
 	completedTotal   atomic.Int64
 	failedTotal      atomic.Int64
 	skippedTotal     atomic.Int64
-}
-
-type Batch struct {
-	ID    string
-	Jobs  []*UploadJob
-	Total int
-}
-
-type UploadInput struct {
-	BatchID string
-	UserID  string
-	Job     *UploadJob
 }
 
 type PoolStats struct {
@@ -144,7 +62,7 @@ type JobInfo struct {
 	Progress float64 `json:"progress"`
 }
 
-func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService) *Pool {
+func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore) *Pool {
 	workers := cfg.Upload.ConcurrentWorkers
 	if workers <= 0 {
 		workers = 4
@@ -157,13 +75,15 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		exifService:      service.NewExifService(),
 		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir()),
 		storageService:   storageService,
-		jobChan:          make(chan *UploadJob, workers*2),
+		uploadJobStore:   uploadJobStore,
 		totalWorkers:     workers,
-		batches:          make(map[string]*Batch),
-		subscribers:      make(map[string]map[string]chan *UploadJob),
-		userSubscribers:  make(map[string]map[string]chan *UploadJob),
-		processingJobs:   make(map[string]*UploadJob),
+		stopCh:           make(chan struct{}),
+		subscribers:      make(map[string]map[string]chan *model.UploadJob),
+		userSubscribers:  make(map[string]map[string]chan *model.UploadJob),
+		processingJobs:   make(map[string]*model.UploadJob),
 	}
+
+	p.recoverStuckJobs()
 
 	for i := 0; i < workers; i++ {
 		p.wg.Add(1)
@@ -173,214 +93,108 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 	return p
 }
 
-func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, tempPath string, folderID *string, skipNameSizeDedup bool) *UploadJob {
-	job := &UploadJob{
-		JobID:             uuid.New().String(),
-		BatchID:           batchID,
-		UserID:            userID,
-		Filename:          originalName,
-		OriginalName:      originalName,
-		Size:              size,
-		TempPath:          tempPath,
-		FolderID:          folderID,
-		SkipNameSizeDedup: skipNameSizeDedup,
-		Status:            JobQueued,
+func (p *Pool) recoverStuckJobs() {
+	processingCount, err := p.uploadJobStore.CountProcessing()
+	if err != nil {
+		slog.Warn("failed to count stuck jobs", "error", err)
+		return
 	}
 
-	p.batchesMu.Lock()
-	b, ok := p.batches[batchID]
-	if !ok {
-		b = &Batch{ID: batchID}
-		p.batches[batchID] = b
-	}
-	b.Jobs = append(b.Jobs, job)
-	b.Total++
-	p.batchesMu.Unlock()
-
-	p.jobChan <- job
-	p.notifySubscribers(job)
-	return job
-}
-
-func (p *Pool) GetBatch(batchID string) *Batch {
-	p.batchesMu.RLock()
-	defer p.batchesMu.RUnlock()
-	return p.batches[batchID]
-}
-
-func (p *Pool) Subscribe(batchID string, listenerID string) chan *UploadJob {
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
-	if p.subscribers[batchID] == nil {
-		p.subscribers[batchID] = make(map[string]chan *UploadJob)
-	}
-	ch := make(chan *UploadJob, 20)
-	p.subscribers[batchID][listenerID] = ch
-	return ch
-}
-
-func (p *Pool) Unsubscribe(batchID, listenerID string) {
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
-	if sub, ok := p.subscribers[batchID]; ok {
-		if ch, ok := sub[listenerID]; ok {
-			close(ch)
-			delete(sub, listenerID)
+	if processingCount > 0 {
+		slog.Warn("found stuck processing jobs, recovering", "count", processingCount)
+		recovered, err := p.uploadJobStore.RecoverStuckJobs()
+		if err != nil {
+			slog.Warn("failed to recover stuck jobs", "error", err)
+		} else if recovered > 0 {
+			slog.Info("recovered stuck upload jobs", "count", recovered)
 		}
 	}
-}
-
-func (p *Pool) notifySubscribers(job *UploadJob) {
-	p.subMu.RLock()
-	defer p.subMu.RUnlock()
-	if sub, ok := p.subscribers[job.BatchID]; ok {
-		for _, ch := range sub {
-			select {
-			case ch <- job:
-			default:
-			}
-		}
-	}
-
-	p.userSubMu.RLock()
-	defer p.userSubMu.RUnlock()
-	if sub, ok := p.userSubscribers[job.UserID]; ok {
-		for _, ch := range sub {
-			select {
-			case ch <- job:
-			default:
-			}
-		}
-	}
-}
-
-func (p *Pool) SubscribeUser(userID string, listenerID string) chan *UploadJob {
-	p.userSubMu.Lock()
-	defer p.userSubMu.Unlock()
-	if p.userSubscribers[userID] == nil {
-		p.userSubscribers[userID] = make(map[string]chan *UploadJob)
-	}
-	ch := make(chan *UploadJob, 20)
-	p.userSubscribers[userID][listenerID] = ch
-	return ch
-}
-
-func (p *Pool) UnsubscribeUser(userID, listenerID string) {
-	p.userSubMu.Lock()
-	defer p.userSubMu.Unlock()
-	if sub, ok := p.userSubscribers[userID]; ok {
-		if ch, ok := sub[listenerID]; ok {
-			close(ch)
-			delete(sub, listenerID)
-		}
-	}
-}
-
-func (p *Pool) Stats() PoolStats {
-	queueLen := len(p.jobChan)
-
-	p.processingMu.RLock()
-	processing := make([]JobInfo, 0, len(p.processingJobs))
-	for _, j := range p.processingJobs {
-		j.mu.Lock()
-		processing = append(processing, JobInfo{
-			JobID:    j.JobID,
-			Filename: j.Filename,
-			Status:   string(j.Status),
-			Stage:    string(j.Stage),
-			Progress: j.Progress,
-		})
-		j.mu.Unlock()
-	}
-	p.processingMu.RUnlock()
-
-	return PoolStats{
-		QueueLength:    queueLen,
-		ActiveWorkers:  len(processing),
-		TotalWorkers:   p.totalWorkers,
-		ProcessingJobs: processing,
-		CompletedTotal: p.completedTotal.Load(),
-		FailedTotal:    p.failedTotal.Load(),
-		SkippedTotal:   p.skippedTotal.Load(),
-	}
-}
-
-func (p *Pool) Shutdown() {
-	close(p.jobChan)
-	p.wg.Wait()
 }
 
 func (p *Pool) worker(id int) {
 	defer p.wg.Done()
-	for job := range p.jobChan {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					job.SetFailed(fmt.Sprintf("worker panic: %v", r))
-					p.notifySubscribers(job)
-					slog.Error("worker panic recovered", "worker_id", id, "job_id", job.JobID, "panic", r)
-				}
-			}()
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case <-ticker.C:
+			job, err := p.uploadJobStore.Claim()
+			if err != nil {
+				slog.Warn("worker claim failed", "worker_id", id, "error", err)
+				continue
+			}
+			if job == nil {
+				continue
+			}
+
+			if _, err := os.Stat(job.TempPath); os.IsNotExist(err) {
+				p.uploadJobStore.Fail(job.ID, "temp_file_missing")
+				p.notifySubscribers(job)
+				p.failedTotal.Add(1)
+				slog.Warn("temp file missing, marking job as failed", "job_id", job.ID, "temp_path", job.TempPath)
+				continue
+			}
+
+			p.processingMu.Lock()
+			p.processingJobs[job.ID] = job
+			p.processingMu.Unlock()
+
 			p.processJob(job)
-		}()
+
+			p.processingMu.Lock()
+			delete(p.processingJobs, job.ID)
+			p.processingMu.Unlock()
+		}
 	}
 }
 
-func (p *Pool) processJob(job *UploadJob) {
-	job.Status = JobProcessing
+func (p *Pool) processJob(job *model.UploadJob) {
+	stage := model.JobStageHashing
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.1)
 	p.notifySubscribers(job)
-
-	p.processingMu.Lock()
-	p.processingJobs[job.JobID] = job
-	p.processingMu.Unlock()
-
-	defer func() {
-		p.processingMu.Lock()
-		delete(p.processingJobs, job.JobID)
-		p.processingMu.Unlock()
-		switch job.Status {
-		case JobCompleted:
-			p.completedTotal.Add(1)
-		case JobSkipped:
-			p.skippedTotal.Add(1)
-		case JobFailed:
-			p.failedTotal.Add(1)
-		}
-	}()
 
 	f, err := os.Open(job.TempPath)
 	if err != nil {
-		job.SetFailed("cannot_open_temp_file")
+		p.uploadJobStore.Fail(job.ID, "cannot_open_temp_file")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 
-	job.SetProgress(StageHashing, 0.1)
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {
 		f.Close()
 		os.Remove(job.TempPath)
-		job.SetFailed("hash_error")
+		p.uploadJobStore.Fail(job.ID, "hash_error")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 	sha256Hash := fmt.Sprintf("%x", hasher.Sum(nil))
 	f.Seek(0, 0)
 
-	mimeType := detectMimeTypeFromFile(f, job.OriginalName)
+	mimeType := detectMimeTypeFromFile(f, job.Filename)
 	f.Seek(0, 0)
 
 	mediaType := detectMediaType(mimeType)
 
-	job.SetProgress(StageDedup, 0.2)
+	stage = model.JobStageDedup
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.2)
+	p.notifySubscribers(job)
 
 	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
-		existing, _ := p.fileStore.FindByNameAndSize(job.OriginalName, job.Size)
+		existing, _ := p.fileStore.FindByNameAndSize(job.Filename, job.SizeBytes)
 		if existing != nil {
 			f.Close()
 			os.Remove(job.TempPath)
-			job.SetSkipped("duplicate_name_size", existing.ID)
+			p.uploadJobStore.Skip(job.ID, "duplicate_name_size", existing.ID)
 			p.notifySubscribers(job)
+			p.skippedTotal.Add(1)
 			return
 		}
 	}
@@ -390,8 +204,9 @@ func (p *Pool) processJob(job *UploadJob) {
 		if existingHash != nil {
 			f.Close()
 			os.Remove(job.TempPath)
-			job.SetSkipped("duplicate_content", existingHash.ID)
+			p.uploadJobStore.Skip(job.ID, "duplicate_content", existingHash.ID)
 			p.notifySubscribers(job)
+			p.skippedTotal.Add(1)
 			return
 		}
 	}
@@ -400,10 +215,16 @@ func (p *Pool) processJob(job *UploadJob) {
 	var now = time.Now().UTC()
 
 	if mediaType != model.MediaTypeFile {
-		job.SetProgress(StageExif, 0.3)
+		stage = model.JobStageExif
+		job.Stage = &stage
+		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.3)
+		p.notifySubscribers(job)
 		exifData, _ = p.exifService.Extract(job.TempPath)
 	} else {
-		job.SetProgress(StageStoring, 0.3)
+		stage = model.JobStageStoring
+		job.Stage = &stage
+		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.3)
+		p.notifySubscribers(job)
 	}
 
 	yearMonth := now.Format("2006/01")
@@ -418,7 +239,11 @@ func (p *Pool) processJob(job *UploadJob) {
 		}
 	}
 
-	job.SetProgress(StageStoring, 0.5)
+	stage = model.JobStageStoring
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.5)
+	p.notifySubscribers(job)
+
 	pathPrefix := ""
 	if mediaType == model.MediaTypeFile {
 		pathPrefix = "files/"
@@ -428,20 +253,22 @@ func (p *Pool) processJob(job *UploadJob) {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		f.Close()
 		os.Remove(job.TempPath)
-		job.SetFailed("storage_error")
+		p.uploadJobStore.Fail(job.ID, "storage_error")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 
-	storedFilename := fmt.Sprintf("%s_%s", uuid.New().String(), job.OriginalName)
+	storedFilename := fmt.Sprintf("%s_%s", uuid.New().String(), job.Filename)
 	destPath := filepath.Join(destDir, storedFilename)
 
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		f.Close()
 		os.Remove(job.TempPath)
-		job.SetFailed("write_error")
+		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 
@@ -450,8 +277,9 @@ func (p *Pool) processJob(job *UploadJob) {
 		destFile.Close()
 		os.Remove(job.TempPath)
 		os.Remove(destPath)
-		job.SetFailed("write_error")
+		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 	f.Close()
@@ -475,9 +303,9 @@ func (p *Pool) processJob(job *UploadJob) {
 	fileRecord := &model.File{
 		UserID:       job.UserID,
 		Filename:     fileNamePath,
-		OriginalName: job.OriginalName,
+		OriginalName: job.Filename,
 		Path:         filePath,
-		SizeBytes:    job.Size,
+		SizeBytes:    job.SizeBytes,
 		MimeType:     mimeType,
 		SHA256:       sha256Hash,
 		MediaType:    mediaType,
@@ -487,8 +315,9 @@ func (p *Pool) processJob(job *UploadJob) {
 
 	if err := p.fileStore.Create(fileRecord); err != nil {
 		os.Remove(destPath)
-		job.SetFailed("db_error")
+		p.uploadJobStore.Fail(job.ID, "db_error")
 		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
 		return
 	}
 
@@ -502,7 +331,10 @@ func (p *Pool) processJob(job *UploadJob) {
 	var thumbs []*model.Thumbnail
 
 	if mediaType != model.MediaTypeFile {
-		job.SetProgress(StageThumbnails, 0.8)
+		stage = model.JobStageThumbnails
+		job.Stage = &stage
+		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.8)
+		p.notifySubscribers(job)
 		thumbs, err = p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType)
 		if err != nil {
 			slog.Warn("thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
@@ -520,25 +352,126 @@ func (p *Pool) processJob(job *UploadJob) {
 			slog.Warn("s3 upload failed for original", "file_id", fileRecord.ID, "error", err)
 		}
 		for _, t := range thumbs {
-			ext := ".jpg"
 			format := "jpg"
 			if t.Size == model.ThumbSizePreview {
-				ext = ".webp"
 				format = "webp"
 			}
 			if err := p.storageService.PutThumbnail(fileRecord.ID, string(t.Size), format, t.LocalPath); err != nil {
 				slog.Warn("s3 upload failed for thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
 			}
-			_ = ext
 		}
 	}
 
 	os.Remove(job.TempPath)
-	job.SetCompleted(fileRecord.ID)
-	job.SetProgress(StageStoring, 1.0)
+	p.uploadJobStore.Complete(job.ID, fileRecord.ID)
+	job.FileID = &fileRecord.ID
+	job.Status = model.JobStatusCompleted
+	job.Progress = 1.0
 	p.notifySubscribers(job)
+	p.completedTotal.Add(1)
 
-	slog.Info("processed upload", "job_id", job.JobID, "file_id", fileRecord.ID, "name", job.OriginalName)
+	slog.Info("processed upload", "job_id", job.ID, "file_id", fileRecord.ID, "name", job.Filename)
+}
+
+func (p *Pool) Shutdown() {
+	close(p.stopCh)
+	p.wg.Wait()
+}
+
+func (p *Pool) Subscribe(batchID string, listenerID string) chan *model.UploadJob {
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
+	if p.subscribers[batchID] == nil {
+		p.subscribers[batchID] = make(map[string]chan *model.UploadJob)
+	}
+	ch := make(chan *model.UploadJob, 20)
+	p.subscribers[batchID][listenerID] = ch
+	return ch
+}
+
+func (p *Pool) Unsubscribe(batchID, listenerID string) {
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
+	if sub, ok := p.subscribers[batchID]; ok {
+		if ch, ok := sub[listenerID]; ok {
+			close(ch)
+			delete(sub, listenerID)
+		}
+	}
+}
+
+func (p *Pool) SubscribeUser(userID string, listenerID string) chan *model.UploadJob {
+	p.userSubMu.Lock()
+	defer p.userSubMu.Unlock()
+	if p.userSubscribers[userID] == nil {
+		p.userSubscribers[userID] = make(map[string]chan *model.UploadJob)
+	}
+	ch := make(chan *model.UploadJob, 20)
+	p.userSubscribers[userID][listenerID] = ch
+	return ch
+}
+
+func (p *Pool) UnsubscribeUser(userID, listenerID string) {
+	p.userSubMu.Lock()
+	defer p.userSubMu.Unlock()
+	if sub, ok := p.userSubscribers[userID]; ok {
+		if ch, ok := sub[listenerID]; ok {
+			close(ch)
+			delete(sub, listenerID)
+		}
+	}
+}
+
+func (p *Pool) notifySubscribers(job *model.UploadJob) {
+	p.subMu.RLock()
+	defer p.subMu.RUnlock()
+	if sub, ok := p.subscribers[job.BatchID]; ok {
+		for _, ch := range sub {
+			select {
+			case ch <- job:
+			default:
+			}
+		}
+	}
+
+	p.userSubMu.RLock()
+	defer p.userSubMu.RUnlock()
+	if sub, ok := p.userSubscribers[job.UserID]; ok {
+		for _, ch := range sub {
+			select {
+			case ch <- job:
+			default:
+			}
+		}
+	}
+}
+
+func (p *Pool) Stats() PoolStats {
+	p.processingMu.RLock()
+	processing := make([]JobInfo, 0, len(p.processingJobs))
+	for _, j := range p.processingJobs {
+		stage := ""
+		if j.Stage != nil {
+			stage = string(*j.Stage)
+		}
+		processing = append(processing, JobInfo{
+			JobID:    j.ID,
+			Filename: j.Filename,
+			Status:   string(j.Status),
+			Stage:    stage,
+			Progress: j.Progress,
+		})
+	}
+	p.processingMu.RUnlock()
+
+	return PoolStats{
+		ActiveWorkers:  len(processing),
+		TotalWorkers:   p.totalWorkers,
+		ProcessingJobs: processing,
+		CompletedTotal: p.completedTotal.Load(),
+		FailedTotal:    p.failedTotal.Load(),
+		SkippedTotal:   p.skippedTotal.Load(),
+	}
 }
 
 func detectMimeTypeFromFile(f *os.File, filename string) string {

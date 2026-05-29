@@ -24,6 +24,7 @@ type Server struct {
 	exifStore      *store.ExifStore
 	thumbnailStore *store.ThumbnailStore
 	geoStore       *store.GeoStore
+	uploadJobStore *store.UploadJobStore
 	storageService *service.StorageService
 	workerPool     *worker.Pool
 }
@@ -39,6 +40,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		exifStore:      store.NewExifStore(db),
 		thumbnailStore: store.NewThumbnailStore(db),
 		geoStore:       store.NewGeoStore(db),
+		uploadJobStore: store.NewUploadJobStore(db),
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -47,7 +49,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		storageService, _ = service.NewStorageService(&config.Config{}) // disabled client
 	}
 
-	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService)
+	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore)
 	s.storageService = storageService
 
 	go NewCacheEvictor(cfg.ThumbnailsDir()).Start()
@@ -158,10 +160,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		dbOK = false
 	}
 
-	s3OK := true
-	if s.cfg.Storage.S3.Enabled {
-		s3OK = false
-	}
+	s3OK := !s.cfg.Storage.S3.Enabled || s.storageService.IsConnected()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":        "ok",

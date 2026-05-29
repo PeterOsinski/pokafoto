@@ -105,3 +105,7 @@ func (s *StorageService) PutThumbnail(fileID, size, format string, filePath stri
 	key := fmt.Sprintf("thumbnails/%s/%s.%s", fileID, size, format)
 	return s.PutObject(key, filePath)
 }
+
+func (s *StorageService) IsConnected() bool {
+	return s.client != nil
+}

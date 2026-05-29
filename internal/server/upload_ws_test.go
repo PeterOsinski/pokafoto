@@ -3,17 +3,17 @@ package server
 import (
 	"testing"
 
-	"github.com/drive/drive/internal/worker"
+	"github.com/drive/drive/internal/model"
 )
 
 func TestWorkerJobToMsg_shouldIncludeFolderIDWhenSet(t *testing.T) {
 	folderID := "folder-uuid-123"
-	job := &worker.UploadJob{
-		JobID:    "job-1",
+	job := &model.UploadJob{
+		ID:       "job-1",
 		Filename: "test.jpg",
-		Status:   worker.JobCompleted,
+		Status:   model.JobStatusCompleted,
 		Progress: 1.0,
-		FileID:   "file-1",
+		FileID:   strPtr("file-1"),
 		FolderID: &folderID,
 	}
 
@@ -27,12 +27,12 @@ func TestWorkerJobToMsg_shouldIncludeFolderIDWhenSet(t *testing.T) {
 }
 
 func TestWorkerJobToMsg_shouldOmitFolderIDWhenNil(t *testing.T) {
-	job := &worker.UploadJob{
-		JobID:    "job-2",
+	job := &model.UploadJob{
+		ID:       "job-2",
 		Filename: "test.jpg",
-		Status:   worker.JobCompleted,
+		Status:   model.JobStatusCompleted,
 		Progress: 1.0,
-		FileID:   "file-2",
+		FileID:   strPtr("file-2"),
 		FolderID: nil,
 	}
 
@@ -44,12 +44,12 @@ func TestWorkerJobToMsg_shouldOmitFolderIDWhenNil(t *testing.T) {
 }
 
 func TestWorkerJobToMsg_shouldIncludeFileIDWhenPresent(t *testing.T) {
-	job := &worker.UploadJob{
-		JobID:    "job-3",
+	job := &model.UploadJob{
+		ID:       "job-3",
 		Filename: "test.jpg",
-		Status:   worker.JobCompleted,
+		Status:   model.JobStatusCompleted,
 		Progress: 1.0,
-		FileID:   "file-3",
+		FileID:   strPtr("file-3"),
 	}
 
 	msg := workerJobToMsg(job)
@@ -59,4 +59,8 @@ func TestWorkerJobToMsg_shouldIncludeFileIDWhenPresent(t *testing.T) {
 	} else if v != "file-3" {
 		t.Errorf("expected file_id %q, got %v", "file-3", v)
 	}
+}
+
+func strPtr(s string) *string {
+	return &s
 }

@@ -239,21 +239,32 @@ drive/
 │     └────────┴────────┴────────┘           │
 │                    │                        │
 │           ┌────────┴────────┐              │
-│           │   Job Queue     │              │
-│           │ (buffered chan) │              │
+│           │  Poll SQLite    │              │
+│           │  upload_jobs    │              │
+│           │  (status=queued)│              │
 │           └────────┬────────┘              │
 └────────────────────┼───────────────────────┘
                      │
               ┌──────┴──────┐
               │ HTTP Handler │
               │ POST /upload │
-              └─────────────┘
+              └──────┬───────┘
+                     │
+              ┌──────┴──────┐
+              │ INSERT INTO  │
+              │ upload_jobs  │
+              │ (status:     │
+              │  queued)     │
+              └──────────────┘
 ```
 
-- Uploads are enqueued into a buffered Go channel
-- A configurable pool of worker goroutines (default: 4) processes jobs
+- Uploads are persisted directly into the `upload_jobs` SQLite table with `status = 'queued'`
+- A configurable pool of worker goroutines (default: 4) polls the table every 1 second
+- Each worker atomically claims a job via `UPDATE ... WHERE status = 'queued' LIMIT 1`
 - Each worker: dedup check → hashes → extracts EXIF → generates thumbnails → stores to local disk (+ S3 if enabled)
-- Progress is reported via WebSocket to the frontend
+- Progress is stored in the database at each stage and reported via WebSocket to the frontend
+- **Crash recovery**: On startup, any jobs stuck in `status = 'processing'` are reset to `queued` and reprocessed
+- Temp file existence is validated before processing; missing temp files mark the job as `failed`
 
 ## 3.7 Configuration
 

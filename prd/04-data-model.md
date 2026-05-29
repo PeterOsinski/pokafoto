@@ -72,6 +72,29 @@
     files.folder_id → folders.id (NULL = root, ON DELETE SET NULL)
 ```
 
+```
+┌──────────────────────┐
+│     upload_jobs       │
+├──────────────────────┤
+│ id (TEXT PK)         │
+│ batch_id (TEXT)      │
+│ user_id (TEXT FK)    │────▶ users.id
+│ filename (TEXT)      │
+│ size_bytes (INT)     │
+│ temp_path (TEXT)     │
+│ folder_id (TEXT)     │
+│ skip_name_size_dedup │
+│ status (TEXT)        │        queued | processing | completed | skipped | failed
+│ stage (TEXT)         │        hashing | dedup | storing | exif | thumbnails
+│ progress (REAL)      │
+│ error (TEXT)         │
+│ reason (TEXT)        │
+│ file_id (TEXT)       │        set on completion/skip
+│ created_at (TEXT)    │
+│ updated_at (TEXT)    │
+└──────────────────────┘
+```
+
 ## 4.2 SQL Schema
 
 ```sql
@@ -248,6 +271,34 @@ ALTER TABLE files ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE SET
 CREATE INDEX idx_files_folder ON files(folder_id);
 ```
 
+```sql
+-- migrations/005_upload_jobs.sql
+-- Durable upload worker queue for crash resilience
+
+CREATE TABLE IF NOT EXISTS upload_jobs (
+    id                    TEXT PRIMARY KEY,
+    batch_id              TEXT NOT NULL,
+    user_id               TEXT NOT NULL REFERENCES users(id),
+    filename              TEXT NOT NULL,
+    size_bytes            INTEGER NOT NULL,
+    temp_path             TEXT NOT NULL,
+    folder_id             TEXT,
+    skip_name_size_dedup  INTEGER NOT NULL DEFAULT 0,
+    status                TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','processing','completed','skipped','failed')),
+    stage                 TEXT,
+    progress              REAL NOT NULL DEFAULT 0.0,
+    error                 TEXT,
+    reason                TEXT,
+    file_id               TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_upload_jobs_status ON upload_jobs(status);
+CREATE INDEX idx_upload_jobs_batch ON upload_jobs(batch_id);
+CREATE INDEX idx_upload_jobs_user ON upload_jobs(user_id);
+```
+
 ## 4.3 Go Models
 
 ```go
@@ -381,6 +432,48 @@ type Thumbnail struct {
     S3Key     *string       `json:"s3_key,omitempty" db:"s3_key"`
     SizeBytes int64         `json:"size_bytes" db:"size_bytes"`
     CreatedAt time.Time     `json:"created_at" db:"created_at"`
+}
+
+// internal/model/uploadjob.go
+package model
+
+type JobStatus string
+
+const (
+    JobStatusQueued     JobStatus = "queued"
+    JobStatusProcessing JobStatus = "processing"
+    JobStatusCompleted  JobStatus = "completed"
+    JobStatusSkipped    JobStatus = "skipped"
+    JobStatusFailed     JobStatus = "failed"
+)
+
+type JobStage string
+
+const (
+    JobStageHashing    JobStage = "hashing"
+    JobStageDedup      JobStage = "dedup"
+    JobStageStoring    JobStage = "storing"
+    JobStageExif       JobStage = "exif"
+    JobStageThumbnails JobStage = "thumbnails"
+)
+
+type UploadJob struct {
+    ID                string    `json:"id" db:"id"`
+    BatchID           string    `json:"batch_id" db:"batch_id"`
+    UserID            string    `json:"user_id" db:"user_id"`
+    Filename          string    `json:"filename" db:"filename"`
+    SizeBytes         int64     `json:"size_bytes" db:"size_bytes"`
+    TempPath          string    `json:"temp_path" db:"temp_path"`
+    FolderID          *string   `json:"folder_id,omitempty" db:"folder_id"`
+    SkipNameSizeDedup bool      `json:"skip_name_size_dedup" db:"skip_name_size_dedup"`
+    Status            JobStatus `json:"status" db:"status"`
+    Stage             *JobStage `json:"stage,omitempty" db:"stage"`
+    Progress          float64   `json:"progress" db:"progress"`
+    Error             *string   `json:"error,omitempty" db:"error"`
+    Reason            *string   `json:"reason,omitempty" db:"reason"`
+    FileID            *string   `json:"file_id,omitempty" db:"file_id"`
+    CreatedAt         time.Time `json:"created_at" db:"created_at"`
+    UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 ```
 

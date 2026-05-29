@@ -157,6 +157,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 
 | Task | Details | Deliverable | Status |
 |---|---|---|---|
+| Durable upload queue | Persist upload jobs in SQLite `upload_jobs` table. Workers poll DB instead of in-memory Go channel. Crash recovery resets stuck `processing` jobs to `queued`. | `migration_005_upload_jobs.sql`, `internal/store/uploadjob.go`, `internal/worker/pool.go` refactor | ✅ |
 | Graceful degradation | S3 down → serve from cache, show banner | `internal/cache/` | ✅ S3 banner in App.vue |
 | Upload retry | Exponential backoff for failed S3 uploads | Worker | ❌ Not implemented |
 | Corrupt file handling | Detect during processing, quarantine, notify | `internal/service/validator.go` | ❌ Not implemented |
