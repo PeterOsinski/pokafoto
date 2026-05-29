@@ -89,11 +89,13 @@ Phase 3: Differentiators   (Weeks 13-20)  → AI tagging, mobile apps, albums
 |---|---|---|---|
 | Thumbnail grid component | CSS Grid, lazy loading, skeleton states | `web/src/components/GalleryGrid.vue` |
 | Infinite scroll | Intersection Observer, cursor-based pagination | Composable |
+| Deep-linkable URLs | `useRouteQuery` composable, URL-synced gallery state, photo ID in `?photo=` param | `web/src/composables/useRouteQuery.ts`, GalleryView |
 | Thumbnail card | Image, video overlay, file icon, hover effects | `web/src/components/ThumbnailCard.vue` |
 | Sort/filter bar | Media type filter, sort dropdown, search input | `web/src/components/FilterBar.vue` |
 | Directory sidebar | Tree component, collapsible, highlights current path | `web/src/components/DirSidebar.vue` |
 | Admin panel | User list, role management, registration toggle | `web/src/views/AdminView.vue` |
 | User settings/logout | User menu, profile display, logout action | Composable |
+| Folders tab | Dedicated `/folders` route with tiles/list/table layouts, URL-synced navigation | `web/src/views/FoldersView.vue` |
 
 ### Week 6: Vue.js Frontend — Lightbox & Detail
 

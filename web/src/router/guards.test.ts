@@ -28,6 +28,12 @@ function buildRouter(routes: RouteRecordRaw[] = []) {
         meta: { requiresAuth: true },
       },
       {
+        path: '/folders',
+        name: 'folders',
+        component: { template: '<div>folders</div>' },
+        meta: { requiresAuth: true },
+      },
+      {
         path: '/admin',
         name: 'admin',
         component: { template: '<div>admin</div>' },

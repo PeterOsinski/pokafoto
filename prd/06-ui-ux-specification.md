@@ -34,7 +34,7 @@
 ### Desktop Layout (≥1024px, authenticated)
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Drive Logo]  [Gallery] [Timeline] [Map] [Upload]  [👤]  │
+│  [Drive Logo]  [Gallery] [Folders] [Timeline] [Map] [Upload]  [👤]  │
 ├──────────┬──────────────────────────────────────────────┤
 │          │                                              │
 │  Dir     │          Main Content Area                   │
@@ -69,7 +69,7 @@
 │  └───┘ └───┘ └───┘ │
 │                     │
 ├─────────────────────┤
-│ [🏠] [📅] [🗺] [⬆] │  ← Bottom nav (56px)
+│ [🏠] [📁] [📅] [🗺] [⬆] │  ← Bottom nav (56px)
 └─────────────────────┘
 ```
 

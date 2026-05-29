@@ -17,23 +17,11 @@
       @update:sortBy="loadFiles()"
     />
 
-    <div v-if="layout !== 'folders'" class="flex items-center gap-2 mb-4">
-      <InlineUpload :folderId="currentFolderId" label="Upload" />
+    <div class="flex items-center gap-2 mb-4">
+      <InlineUpload label="Upload" />
     </div>
 
-    <FolderTreeView
-      v-if="layout === 'folders'"
-      :folderId="currentFolderId"
-      :selectedIds="selectedIds"
-      :selectionEnabled="selectionEnabled"
-      :thumbSize="thumbSize"
-      @navigate="navigateFolder"
-      @select="toggleSelect"
-      @deselect="toggleSelect"
-      @open="openLightbox"
-    />
-
-    <div v-else-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
+    <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
       <p class="text-lg">No photos yet.</p>
       <p class="mt-2">Upload your first photo to get started.</p>
       <router-link to="/upload" class="mt-4 inline-block px-6 py-2 rounded-md text-white" style="background: var(--accent)">Upload</router-link>
@@ -78,9 +66,9 @@
       :total="files.length"
       :hasPrev="lightboxIndex > 0"
       :hasNext="lightboxIndex < files.length - 1"
-      @close="lightboxIndex = -1"
-      @prev="lightboxIndex--"
-      @next="lightboxIndex++"
+      @close="closeLightbox"
+      @prev="goPrev"
+      @next="goNext"
     />
 
     <FolderPickerDialog
@@ -120,11 +108,11 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
+import { useRouteQuery } from '../composables/useRouteQuery'
 import Lightbox from '../components/Lightbox.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
 import GalleryListView from '../components/GalleryListView.vue'
 import GalleryGroupedView from '../components/GalleryGroupedView.vue'
-import FolderTreeView from '../components/FolderTreeView.vue'
 import FilterBar from '../components/FilterBar.vue'
 import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
@@ -155,16 +143,36 @@ const files = ref<FileItem[]>([])
 const total = ref(0)
 const nextCursor = ref('')
 const loading = ref(false)
-const mediaType = ref('')
-const sortBy = ref('taken_at')
-const layout = ref('tiles')
-const thumbSize = ref<'sm' | 'md' | 'lg'>('md')
-const lightboxIndex = ref(-1)
+
+const pathQuery = useRouteQuery('path', '')
+const layoutQuery = useRouteQuery('layout', 'tiles')
+const sortQuery = useRouteQuery('sort', 'taken_at')
+const mediaQuery = useRouteQuery('media', '')
+const thumbQuery = useRouteQuery('thumb', 'md')
+const photoQuery = useRouteQuery('photo', '')
+
+const currentPath = computed(() => pathQuery.value || null)
+const layout = computed({
+  get: () => layoutQuery.value,
+  set: (v: string) => { layoutQuery.value = v === 'tiles' ? '' : v },
+})
+const sortBy = computed({
+  get: () => sortQuery.value,
+  set: (v: string) => { sortQuery.value = v === 'taken_at' ? '' : v },
+})
+const mediaType = computed({
+  get: () => mediaQuery.value,
+  set: (v: string) => { mediaQuery.value = v || null },
+})
+const thumbSize = computed<'sm' | 'md' | 'lg'>({
+  get: () => (thumbQuery.value as 'sm' | 'md' | 'lg') || 'md',
+  set: (v: string) => { thumbQuery.value = v === 'md' ? '' : v },
+})
+
 const selectedIds = ref(new Set<string>())
 const lastClickedIndex = ref(-1)
 const selectionEnabled = ref(true)
 const showDeleteConfirm = ref(false)
-const currentFolderId = ref<string | null>(null)
 
 const upload = useUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
@@ -173,8 +181,13 @@ const moveDialog = ref({ open: false })
 const copyDialog = ref({ open: false })
 
 const lightboxFile = computed(() => {
-  if (lightboxIndex.value < 0 || lightboxIndex.value >= files.value.length) return null
-  return files.value[lightboxIndex.value]
+  if (!photoQuery.value) return null
+  return files.value.find(f => f.id === photoQuery.value) ?? null
+})
+
+const lightboxIndex = computed(() => {
+  if (!lightboxFile.value) return -1
+  return files.value.indexOf(lightboxFile.value)
 })
 
 async function loadFiles(reset = true) {
@@ -189,7 +202,7 @@ async function loadFiles(reset = true) {
     if (nextCursor.value) params.cursor = nextCursor.value
     if (route.query.date_from) params.date_from = route.query.date_from
     if (route.query.date_to) params.date_to = route.query.date_to
-    if (currentFolderId.value) params.folder_id = currentFolderId.value
+    if (currentPath.value) params.path = currentPath.value
     const res = await api.get('/files', { params })
     files.value = reset ? res.data.items : [...files.value, ...res.data.items]
     total.value = res.data.total
@@ -296,14 +309,25 @@ function openLightbox(index: number) {
   if (isShiftHeld()) {
     selectRange(index)
   } else {
-    lightboxIndex.value = index
+    const file = files.value[index]
+    if (file) photoQuery.value = file.id
   }
 }
 
-function navigateFolder(folderId: string | null) {
-  currentFolderId.value = folderId
-  selectedIds.value = new Set()
-  loadFiles()
+function closeLightbox() {
+  photoQuery.value = null
+}
+
+function goPrev() {
+  if (lightboxIndex.value > 0) {
+    photoQuery.value = files.value[lightboxIndex.value - 1].id
+  }
+}
+
+function goNext() {
+  if (lightboxIndex.value < files.value.length - 1) {
+    photoQuery.value = files.value[lightboxIndex.value + 1].id
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -321,10 +345,7 @@ watch(() => route.query, () => loadFiles(), { immediate: false })
 onMounted(() => {
   refreshInterval = setInterval(() => {
     const completed = upload.consumeCompletedJobs()
-    if (completed.length === 0) return
-    const folderKey = currentFolderId.value ?? null
-    const relevant = completed.filter(j => (j.folder_id ?? null) === folderKey)
-    if (relevant.length > 0) {
+    if (completed.length > 0) {
       loadFiles(true)
     }
   }, 2000)

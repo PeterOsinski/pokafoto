@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/folders',
+      name: 'folders',
+      component: () => import('../views/FoldersView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/upload',
       name: 'upload',
       component: () => import('../views/UploadView.vue'),

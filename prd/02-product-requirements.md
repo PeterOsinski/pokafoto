@@ -27,6 +27,7 @@
 | G-07 | As a user, I can filter gallery by media type (photos, videos, all) | P2 |
 | G-08 | As a user, I can switch between gallery layouts — tiles (grid), list (table), and grouped by day | P2 |
 | G-09 | As a user, I can choose thumbnail sizes — small, medium, and large — in the gallery view | P2 |
+| G-10 | As a user, the URL updates when I navigate folders, open photo previews, or change view state — enabling browser back/forward, refresh-without-context-loss, and shareable links | P0 |
 
 ### Timeline View
 | ID | User Story | Priority |
@@ -69,7 +70,7 @@
 | FO-02 | As a user, I can create nested folders (hierarchical, arbitrary depth) | P1 |
 | FO-03 | As a user, I can rename folders | P1 |
 | FO-04 | As a user, I can delete folders (files inside revert to root) | P1 |
-| FO-05 | As a user, I can switch to a folder tree view to browse files by folder | P0 |
+| FO-05 | As a user, I can switch to the Folders tab to browse files by folder with nested navigation | P0 |
 | FO-06 | As a user, I can navigate into a folder to see its files and subfolders | P0 |
 | FO-07 | As a user, I can upload files directly into a chosen folder | P1 |
 | FO-08 | As a user, I can upload files directly into the folder I'm currently browsing, without leaving the gallery/folder view | P1 |
@@ -176,6 +177,14 @@ Cache eviction policy: LRU (least recently used), configurable max cache size (d
 - Touch gestures: swipe left/right for photo navigation, pinch-to-zoom
 - Progressive Web App (PWA) capable: service worker for offline thumbnail cache
 - Adaptive thumbnail resolution based on device pixel ratio and viewport
+
+### FR-07: Deep-Linkable UI
+All primary UI states are reflected in the URL as query parameters on the gallery route `/`:
+- Navigating into a folder → `?folder_id=<uuid>` or `?path=<YYYY/MM>`
+- Opening photo preview (lightbox) → `?photo=<fileId>`
+- Gallery layout, sort order, media type filter, thumbnail size → `?layout=`, `?sort=`, `?media=`, `?thumb=`
+- Browser back/forward navigates between these states correctly
+- Copying the URL and opening it in another tab restores the same view (auth redirect preserves query params via vue-router)
 
 ### FR-06: Authentication & User Management
 - User registration with username + password (bcrypt hashed)

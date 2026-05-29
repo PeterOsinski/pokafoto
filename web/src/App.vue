@@ -8,6 +8,7 @@
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-6">
         <router-link to="/" class="text-sm" :class="navClass('/')">Gallery</router-link>
+        <router-link to="/folders" class="text-sm" :class="navClass('/folders')">Folders</router-link>
         <router-link to="/timeline" class="text-sm" :class="navClass('/timeline')">Timeline</router-link>
         <router-link to="/map" class="text-sm" :class="navClass('/map')">Map</router-link>
         <router-link to="/upload" class="text-sm" :class="navClass('/upload')">Upload</router-link>
@@ -36,6 +37,7 @@
     <!-- Mobile bottom nav -->
     <nav class="md:hidden h-14 flex items-center justify-around border-t shrink-0" style="border-color: var(--border-color); background: var(--bg-surface)">
       <router-link to="/" class="flex flex-col items-center text-xs" :class="navClass('/')">🏠<span>Home</span></router-link>
+      <router-link to="/folders" class="flex flex-col items-center text-xs" :class="navClass('/folders')">📁<span>Folders</span></router-link>
       <router-link to="/timeline" class="flex flex-col items-center text-xs" :class="navClass('/timeline')">📅<span>Timeline</span></router-link>
       <router-link to="/map" class="flex flex-col items-center text-xs" :class="navClass('/map')">🗺️<span>Map</span></router-link>
       <router-link to="/upload" class="flex flex-col items-center text-xs" :class="navClass('/upload')">⬆<span>Upload</span></router-link>
@@ -59,7 +61,8 @@ const route = useRoute()
 const showS3Banner = ref(false)
 
 function navClass(path: string) {
-  return route.path === path ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+  if (path === '/') return route.path === '/' ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+  return route.path.startsWith(path) ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
 }
 
 function handleLogout() {

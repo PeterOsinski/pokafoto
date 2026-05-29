@@ -178,25 +178,25 @@ const currentFolderName = computed(() => {
   const find = (nodes: FolderTreeNode[]): string | null => {
     for (const n of nodes) {
       if (n.folder.id === props.folderId) return n.folder.name
-      const found = find(n.children)
+      const found = find(n.children ?? [])
       if (found) return found
     }
     return null
   }
-  return find(folders.value.children)
+  return find(folders.value.children ?? [])
 })
 
 const subfolders = computed(() => {
   if (!props.folderId) return []
   const find = (nodes: FolderTreeNode[]): FolderTreeNode[] => {
     for (const n of nodes) {
-      if (n.folder.id === props.folderId) return n.children
-      const found = find(n.children)
-      if (found) return found
+      if (n.folder.id === props.folderId) return n.children ?? []
+      const found = find(n.children ?? [])
+      if (found.length) return found
     }
     return []
   }
-  return find(folders.value.children)
+  return find(folders.value.children ?? [])
 })
 
 watch(() => props.folderId, () => {
@@ -236,8 +236,8 @@ function navigateTo(id: string) {
 function navigateUp() {
   const findParent = (nodes: FolderTreeNode[], targetId: string): string | null => {
     for (const n of nodes) {
-      if (n.children.some(c => c.folder.id === targetId)) return n.folder.id
-      for (const c of n.children) {
+      if (n.children?.some(c => c.folder.id === targetId)) return n.folder.id
+      for (const c of n.children ?? []) {
         const found = findParent([c], targetId)
         if (found !== undefined) return found
       }
@@ -245,7 +245,7 @@ function navigateUp() {
     return null
   }
   if (!props.folderId) return
-  const parent = findParent(folders.value.children, props.folderId)
+  const parent = findParent(folders.value.children ?? [], props.folderId)
   emit('navigate', parent)
 }
 
