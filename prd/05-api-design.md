@@ -196,9 +196,12 @@ WebSocket endpoint for real-time upload progress. Requires authentication (send 
   "filename": "IMG_1234.jpg",
   "status": "processing",
   "progress": 0.75,
-  "stage": "generating_thumbnails"
+  "stage": "generating_thumbnails",
+  "file_id": "uuid-v7",
+  "folder_id": "optional-folder-uuid"
 }
 ```
+`file_id` is present when the file has been stored in the database. `folder_id` is present when the upload targeted a specific folder; it is `null` for root-scoped uploads.
 
 ---
 

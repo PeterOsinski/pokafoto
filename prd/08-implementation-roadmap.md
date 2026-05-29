@@ -125,6 +125,7 @@ Phase 3: Differentiators   (Weeks 13-20)  → AI tagging, mobile apps, albums
 | Upload page | Drag & drop zone, file picker, folder picker | `web/src/views/UploadView.vue` |
 | Upload progress | Per-file progress bars, WebSocket for live updates | `web/src/components/UploadQueue.vue` |
 | WebSocket endpoint | `WS /api/v1/upload/ws` for real-time progress | `internal/handler/upload_ws.go` |
+| Folder auto-refresh | Gallery/folder view listens for WS completion events and prepends new files to the current view | `web/src/views/GalleryView.vue`, `web/src/components/FolderTreeView.vue`, `web/src/stores/upload.ts` |
 | Responsive layout | Mobile bottom nav, tablet sidebar, desktop full layout | `web/src/App.vue` + CSS |
 | PWA manifest | `manifest.json`, service worker for offline caching | `web/public/` |
 | Dark/light theme | CSS variables, theme toggle, persisted preference | `web/src/composables/useTheme.ts` |

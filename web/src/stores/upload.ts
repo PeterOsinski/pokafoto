@@ -16,8 +16,15 @@ export interface UploadJob {
   error?: string
 }
 
+export interface CompletedJob {
+  file_id: string
+  filename: string
+  folder_id: string | null | undefined
+}
+
 export const useUploadStore = defineStore('upload', () => {
   const jobs = ref<UploadJob[]>([])
+  const completedJobs = ref<CompletedJob[]>([])
   let globalWs: WebSocket | null = null
 
   const activeJobs = computed(() => jobs.value.filter(j => j.status !== 'completed' && j.status !== 'skipped' && j.status !== 'failed'))
@@ -34,10 +41,17 @@ export const useUploadStore = defineStore('upload', () => {
     globalWs = new WebSocket(`${protocol}//${window.location.host}/api/v1/upload/ws?token=${token}`)
 
     globalWs.onmessage = (event) => {
-      const update = JSON.parse(event.data) as UploadJob
+      const update = JSON.parse(event.data) as UploadJob & { folder_id?: string | null }
       const idx = jobs.value.findIndex(j => j.job_id === update.job_id)
       if (idx >= 0) {
         jobs.value[idx] = { ...jobs.value[idx], ...update }
+      }
+      if ((update.status === 'completed' || (update.status === 'skipped' && update.file_id)) && update.file_id) {
+        completedJobs.value.push({
+          file_id: update.file_id,
+          filename: update.filename,
+          folder_id: update.folder_id,
+        })
       }
     }
 
@@ -171,8 +185,15 @@ export const useUploadStore = defineStore('upload', () => {
     await Promise.allSettled(uploadPromises)
   }
 
+  function consumeCompletedJobs(): CompletedJob[] {
+    const drained = [...completedJobs.value]
+    completedJobs.value = []
+    return drained
+  }
+
   return {
     jobs,
+    completedJobs,
     activeJobs,
     completedCount,
     hasActiveUploads,
@@ -182,6 +203,7 @@ export const useUploadStore = defineStore('upload', () => {
     addJob,
     removeJob,
     clearCompleted,
+    consumeCompletedJobs,
     uploadFiles,
   }
 })

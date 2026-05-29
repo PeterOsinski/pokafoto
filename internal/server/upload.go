@@ -255,6 +255,9 @@ func workerJobToMsg(job *worker.UploadJob) map[string]interface{} {
 	if job.Stage != "" {
 		msg["stage"] = job.Stage
 	}
+	if job.FolderID != nil {
+		msg["folder_id"] = *job.FolderID
+	}
 	return msg
 }
 

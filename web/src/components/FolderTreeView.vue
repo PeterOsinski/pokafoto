@@ -97,10 +97,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import api from '../api/client'
 import ThumbnailCard from './ThumbnailCard.vue'
 import InlineUpload from './InlineUpload.vue'
+import { useUploadStore } from '../stores/upload'
 
 interface FileItem {
   id: string
@@ -151,6 +152,25 @@ const loading = ref(false)
 const showCreate = ref(false)
 const newFolderName = ref('')
 const createInput = ref<HTMLInputElement | null>(null)
+
+const upload = useUploadStore()
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  refreshInterval = setInterval(() => {
+    const completed = upload.consumeCompletedJobs()
+    if (completed.length === 0) return
+    const folderKey = props.folderId ?? null
+    const relevant = completed.filter(j => (j.folder_id ?? null) === folderKey)
+    if (relevant.length > 0) {
+      loadFiles()
+    }
+  }, 2000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+})
 
 const currentFolderId = computed(() => props.folderId)
 const currentFolderName = computed(() => {

@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import Lightbox from '../components/Lightbox.vue'
@@ -129,6 +129,7 @@ import FilterBar from '../components/FilterBar.vue'
 import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 import InlineUpload from '../components/InlineUpload.vue'
+import { useUploadStore } from '../stores/upload'
 
 interface FileItem {
   id: string
@@ -164,6 +165,9 @@ const lastClickedIndex = ref(-1)
 const selectionEnabled = ref(true)
 const showDeleteConfirm = ref(false)
 const currentFolderId = ref<string | null>(null)
+
+const upload = useUploadStore()
+let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const moveDialog = ref({ open: false })
 const copyDialog = ref({ open: false })
@@ -313,6 +317,22 @@ if (typeof window !== 'undefined') {
 }
 
 watch(() => route.query, () => loadFiles(), { immediate: false })
+
+onMounted(() => {
+  refreshInterval = setInterval(() => {
+    const completed = upload.consumeCompletedJobs()
+    if (completed.length === 0) return
+    const folderKey = currentFolderId.value ?? null
+    const relevant = completed.filter(j => (j.folder_id ?? null) === folderKey)
+    if (relevant.length > 0) {
+      loadFiles(true)
+    }
+  }, 2000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+})
 
 loadFiles()
 </script>

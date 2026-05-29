@@ -75,6 +75,7 @@
 | FO-08 | As a user, I can upload files directly into the folder I'm currently browsing, without leaving the gallery/folder view | P1 |
 | FO-09 | As a user, I can see a floating upload tracker showing progress of all current uploads, regardless of which page I'm on | P1 |
 | FO-10 | As a user, uploads run asynchronously — I can start uploads in Folder A, then navigate to Folder B and start more uploads while Folder A's uploads continue | P1 |
+| FO-11 | As a user, when uploads complete in the folder I'm currently browsing, the file listing updates automatically with the new files (no manual refresh) | P1 |
 
 ### File Backup
 | ID | User Story | Priority |
@@ -214,7 +215,7 @@ Cache eviction policy: LRU (least recently used), configurable max cache size (d
 3. Lands on Gallery view (most recent first)
 4. Drags photos onto upload zone (or clicks to select files/folder)
 5. Upload progress bar shows per-file status
-6. Photos appear in gallery as thumbnails are generated
+6. Photos appear in gallery as thumbnails are generated — the file listing auto-refreshes in the current folder view when uploads complete
 7. User switches to Timeline view → scrolls through months
 8. User switches to Map view → sees photo clusters on world map
 9. User clicks a photo → lightbox with full preview, EXIF panel, map pin

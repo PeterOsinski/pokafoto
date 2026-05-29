@@ -68,10 +68,8 @@ function handleLogout() {
 }
 
 onMounted(async () => {
-  auth.fetchMe()
-  if (auth.isAuthenticated) {
-    upload.connectWS()
-  }
+  await auth.fetchMe()
+  upload.connectWS()
   try {
     const res = await api.get('/health')
     if (res.data.s3_connected === false) {
