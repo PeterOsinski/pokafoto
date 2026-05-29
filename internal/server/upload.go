@@ -242,6 +242,7 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 func workerJobToMsg(job *worker.UploadJob) map[string]interface{} {
 	msg := map[string]interface{}{
 		"job_id":   job.JobID,
+		"batch_id": job.BatchID,
 		"filename": job.Filename,
 		"status":   job.Status,
 		"progress": job.Progress,
