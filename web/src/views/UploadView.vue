@@ -142,14 +142,14 @@ onMounted(() => {
 function handleDrop(e: DragEvent) {
   dragOver.value = false
   if (e.dataTransfer?.files) {
-    upload.uploadFiles(e.dataTransfer.files, targetFolderId.value, false)
+    upload.uploadFiles(e.dataTransfer.files, targetFolderId.value, !!targetFolderId.value)
   }
 }
 
 function handleFileSelect(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files) {
-    upload.uploadFiles(input.files, targetFolderId.value, false)
+    upload.uploadFiles(input.files, targetFolderId.value, !!targetFolderId.value)
   }
 }
 </script>

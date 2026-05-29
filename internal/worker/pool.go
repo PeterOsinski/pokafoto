@@ -385,13 +385,15 @@ func (p *Pool) processJob(job *UploadJob) {
 		}
 	}
 
-	existing, _ := p.fileStore.FindBySHA256(sha256Hash)
-	if existing != nil {
-		f.Close()
-		os.Remove(job.TempPath)
-		job.SetSkipped("duplicate_content", existing.ID)
-		p.notifySubscribers(job)
-		return
+	if !job.SkipNameSizeDedup {
+		existingHash, _ := p.fileStore.FindBySHA256(sha256Hash)
+		if existingHash != nil {
+			f.Close()
+			os.Remove(job.TempPath)
+			job.SetSkipped("duplicate_content", existingHash.ID)
+			p.notifySubscribers(job)
+			return
+		}
 	}
 
 	var exifData *model.ExifData

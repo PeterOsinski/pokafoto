@@ -254,6 +254,98 @@ describe('UploadView', () => {
     expect(progressBars.length).toBe(1)
   })
 
+  it('skips pre-upload check when targetFolderId is set', async () => {
+    const api = (await import('../api/client')).default as any
+    let checkCalled = false
+    api.post.mockImplementation((url: string) => {
+      if (url === '/upload/check') {
+        checkCalled = true
+        return Promise.resolve({ data: { duplicates: [] } })
+      }
+      return new Promise(() => {})
+    })
+
+    const wrapper = mount(UploadView)
+    ;(wrapper.vm as any).targetFolderId = 'folder-abc'
+    await wrapper.vm.$nextTick()
+
+    const file = makeFile('test.jpg', 1024)
+    const input = wrapper.find('input[type="file"]')
+
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      writable: false,
+    })
+    await input.trigger('change')
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(checkCalled).toBe(false)
+  })
+
+  it('sends skip_name_size_dedup=true in form when folder is selected', async () => {
+    const api = (await import('../api/client')).default as any
+    let formData: FormData | null = null
+    api.post.mockImplementation((url: string, data: any) => {
+      if (url === '/upload/check') {
+        return Promise.resolve({ data: { duplicates: [] } })
+      }
+      if (url === '/upload') {
+        formData = data as FormData
+      }
+      return new Promise(() => {})
+    })
+
+    const wrapper = mount(UploadView)
+    ;(wrapper.vm as any).targetFolderId = 'folder-abc'
+    await wrapper.vm.$nextTick()
+
+    const file = makeFile('test.jpg', 1024)
+    const input = wrapper.find('input[type="file"]')
+
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      writable: false,
+    })
+    await input.trigger('change')
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(formData).not.toBeNull()
+    expect(formData!.get('skip_name_size_dedup')).toBe('true')
+    expect(formData!.get('folder_id')).toBe('folder-abc')
+  })
+
+  it('does not send skip_name_size_dedup when targetFolderId is null', async () => {
+    const api = (await import('../api/client')).default as any
+    let formData: FormData | null = null
+    api.post.mockImplementation((url: string, data: any) => {
+      if (url === '/upload/check') {
+        return Promise.resolve({ data: { duplicates: [] } })
+      }
+      if (url === '/upload') {
+        formData = data as FormData
+      }
+      return new Promise(() => {})
+    })
+
+    const wrapper = mount(UploadView)
+    const file = makeFile('test.jpg', 1024)
+    const input = wrapper.find('input[type="file"]')
+
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      writable: false,
+    })
+    await input.trigger('change')
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(formData).not.toBeNull()
+    expect(formData!.get('skip_name_size_dedup')).toBeNull()
+    expect(formData!.get('folder_id')).toBeNull()
+  })
+
   it('receives processing updates via global WebSocket', async () => {
     const api = (await import('../api/client')).default as any
     api.post.mockImplementation((url: string, _data: any, _config: any) => {

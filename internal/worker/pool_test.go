@@ -2,6 +2,7 @@ package worker
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -498,7 +499,7 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 	}
 }
 
-func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
+func TestPool_SkipNameSizeDedup_shouldSkipChecksWhenFlagSet(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -515,14 +516,17 @@ func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
+	content := []byte("same-content-for-sha256-test")
+	sha256Hash := fmt.Sprintf("%x", sha256.Sum256(content))
+
 	existing := &model.File{
 		UserID:       u.ID,
-		Filename:     "2024/07/dup.jpg",
+		Filename:     "other-folder/dup.jpg",
 		OriginalName: "dup.jpg",
-		Path:         "2024/07",
-		SizeBytes:    512,
+		Path:         "other-folder",
+		SizeBytes:    int64(len(content)),
 		MimeType:     "image/jpeg",
-		SHA256:       "abcdef_skipdedup_test",
+		SHA256:       sha256Hash,
 		MediaType:    model.MediaTypePhoto,
 	}
 	if err := fs.Create(existing); err != nil {
@@ -530,9 +534,6 @@ func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
 	}
 
 	pool := NewPool(cfg, fs, es, ts, nil)
-
-	content := make([]byte, 512)
-	rand.Read(content)
 
 	tmpDir := t.TempDir()
 	tmpPath := filepath.Join(tmpDir, "dup.jpg")
@@ -560,7 +561,7 @@ func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
 		}
 	}
 	if count != 2 {
-		t.Errorf("expected 2 files named dup.jpg (existing + new upload with dedup skipped), got %d", count)
+		t.Errorf("expected 2 files named dup.jpg (existing + new upload with dedup skipped including sha256), got %d", count)
 	}
 }
 

@@ -24,9 +24,11 @@ import { useUploadStore } from '../stores/upload'
 const props = withDefaults(defineProps<{
   folderId?: string | null
   label?: string
+  skipNameSizeDedup?: boolean
 }>(), {
   folderId: null,
   label: 'Upload here',
+  skipNameSizeDedup: true,
 })
 
 const upload = useUploadStore()
@@ -39,7 +41,7 @@ function triggerUpload() {
 function handleChange(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files && input.files.length > 0) {
-    upload.uploadFiles(input.files, props.folderId ?? null, true)
+    upload.uploadFiles(input.files, props.folderId ?? null, props.skipNameSizeDedup)
     input.value = ''
   }
 }

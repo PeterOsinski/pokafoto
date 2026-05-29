@@ -11,8 +11,8 @@
 | U-04 | As a user, I can see upload progress with per-file status (queued, uploading, processing, done, error) | P1 |
 
 **U-04 Implementation note:** Upload progress has two phases: (1) HTTP transfer progress (tracked via axios `onUploadProgress` — bytes sent / total), shown as `uploading` status with percentage; (2) server-side processing progress (WebSocket-driven — `hashing` → `dedup` → `exif` → `storing` → `thumbnails`), shown as `processing` status with stage name. Files appear in the queue immediately upon selection with `uploading` status. After the HTTP POST completes, they transition to `queued` and then `processing` as the worker pool handles them.
-| U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped (applies globally to all uploads) | P1 |
-| U-05a | As a user, when uploading via the dedicated Upload tab, files with the same name and size as an existing file are silently skipped (ignored) without re-uploading. Inline folder uploads (uploading directly from gallery/folder view) skip this name+size check — only content hash dedup applies. | P0 |
+| U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped — applies only to root uploads (no folder context). Folder-scoped uploads skip both name+size and content hash dedup. | P1 |
+| U-05a | As a user, both name+size dedup and content hash (SHA-256) dedup are applied only when uploading to the root (no folder context — gallery view or Upload tab without a target folder). Uploads targeting a specific folder skip both dedup checks entirely, allowing the same file to exist in multiple folders. | P0 |
 | U-06 | As a user, I can upload from mobile devices with the same responsive UI | P1 |
 
 ### Gallery & Browsing
@@ -107,8 +107,8 @@
 
 ### FR-01: Media Processing Pipeline
 Upon upload, every image and video goes through:
-1. **Name+Size dedup check (Upload tab only)** — If a file with the same `original_name` AND `size_bytes` already exists, skip the upload entirely (silently ignored, no DB update). This is a fast pre-check before any processing. Inline folder uploads (from gallery/folder view) skip this check — only content hash dedup applies to those.
-2. **Hash computation** — SHA-256 of file content for content-level deduplication (catches renamed duplicates). Content-hash duplicates return `409 Conflict`.
+1. **Name+Size dedup check (root uploads only)** — When uploading without a target folder (root/gallery context), if a file with the same `original_name` AND `size_bytes` already exists in the root (`folder_id IS NULL`), skip the upload entirely (silently ignored, no DB update). This is a fast pre-check before any processing. Folder-scoped uploads skip this check entirely.
+2. **Hash computation** — SHA-256 of file content for content-level deduplication. Content-hash dedup is only applied for root uploads (no folder context). Folder-scoped uploads skip this check.
 3. **EXIF extraction** — Parse all EXIF/XMP tags using `goexif` (JPEG/PNG/TIFF) with `exiftool` subprocess fallback (HEIC/AVIF). Non-media files skip EXIF entirely.
 4. **Thumbnail generation** — Four sizes per image:
    - `thumb_sm`: 60px wide (JPEG, quality 60%) — for grid thumbnails

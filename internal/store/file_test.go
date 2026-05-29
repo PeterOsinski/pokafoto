@@ -56,7 +56,7 @@ func TestFileStore_Create_shouldPersistFile(t *testing.T) {
 	}
 }
 
-func TestFileStore_Create_shouldReturnErrorOnDuplicateSHA256(t *testing.T) {
+func TestFileStore_Create_shouldAllowDuplicateSHA256(t *testing.T) {
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -70,8 +70,8 @@ func TestFileStore_Create_shouldReturnErrorOnDuplicateSHA256(t *testing.T) {
 		MediaType: model.MediaTypePhoto,
 	}
 	err := fs.Create(f2)
-	if err == nil {
-		t.Error("expected error on duplicate SHA256")
+	if err != nil {
+		t.Errorf("expected no error on duplicate SHA256 (constraint removed for folder-scoped dedup), got: %v", err)
 	}
 }
 

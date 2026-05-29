@@ -121,7 +121,7 @@ files: [binary] (multiple, required)
 folder_id: string (optional) — UUID of target folder. If omitted or empty, files go to root (auto-organized by date)
 path: string (optional) — target directory path, defaults to auto-organization
 relative_path: string (optional per file) — webkitRelativePath from folder picker for recursive directory preservation
-skip_name_size_dedup: string (optional) — "true" to skip name+size dedup pre-check (used for inline folder uploads). Defaults to false (dedup enabled).
+skip_name_size_dedup: string (optional) — "true" to skip name+size dedup pre-check (used for folder-scoped uploads). Defaults to false (dedup enabled for root uploads).
 ```
 
 When a folder is uploaded (via `webkitdirectory`), the browser provides `webkitRelativePath` for each file. If `relative_path` is present, Drive preserves the directory hierarchy relative to the chosen root folder. Example:
@@ -151,8 +151,8 @@ When a folder is uploaded (via `webkitdirectory`), the browser provides `webkitR
 ```
 
 **Deduplication behavior:**
-1. **Name+Size check (Upload tab only):** When `skip_name_size_dedup` is not set to `"true"` (i.e., dedicated Upload tab), before any processing, check if a file with the same `original_name` AND `size_bytes` already exists. If yes → status `skipped` with reason `duplicate_name_size`. The file is silently ignored — no upload, no processing. Inline folder uploads (from gallery/folder view) set `skip_name_size_dedup=true` and skip this check.
-2. **Content hash check (all files):** SHA-256 hash computed during upload. If an identical hash already exists → status `skipped` with reason `duplicate_content`. This catches renamed duplicates and applies to all uploads.
+1. **Name+Size check (root uploads only):** When `skip_name_size_dedup` is not set to `"true"` and `folder_id` is null (root uploads), before any processing, check if a file with the same `original_name` AND `size_bytes` already exists in the root. If yes → status `skipped` with reason `duplicate_name_size`. The file is silently ignored — no upload, no processing. Folder-scoped uploads set `skip_name_size_dedup=true` and skip this check.
+2. **Content hash check (root uploads only):** SHA-256 hash computed during upload. Applied only when `skip_name_size_dedup` is not `"true"` (root uploads). If an identical hash already exists → status `skipped` with reason `duplicate_content`. Folder-scoped uploads skip this check.
 
 #### `GET /api/v1/upload/{batch_id}/status`
 Check upload batch progress.

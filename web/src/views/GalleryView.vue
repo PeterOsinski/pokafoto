@@ -18,7 +18,7 @@
     />
 
     <div class="flex items-center gap-2 mb-4">
-      <InlineUpload label="Upload" />
+      <InlineUpload label="Upload" :skipNameSizeDedup="false" />
     </div>
 
     <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
