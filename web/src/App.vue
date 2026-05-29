@@ -31,6 +31,8 @@
       </main>
     </div>
 
+    <GlobalUploadTracker />
+
     <!-- Mobile bottom nav -->
     <nav class="md:hidden h-14 flex items-center justify-around border-t shrink-0" style="border-color: var(--border-color); background: var(--bg-surface)">
       <router-link to="/" class="flex flex-col items-center text-xs" :class="navClass('/')">🏠<span>Home</span></router-link>
@@ -45,10 +47,13 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { useUploadStore } from './stores/upload'
 import DirectoryTree from './components/DirectoryTree.vue'
+import GlobalUploadTracker from './components/GlobalUploadTracker.vue'
 import api from './api/client'
 
 const auth = useAuthStore()
+const upload = useUploadStore()
 const router = useRouter()
 const route = useRoute()
 const showS3Banner = ref(false)
@@ -64,6 +69,9 @@ function handleLogout() {
 
 onMounted(async () => {
   auth.fetchMe()
+  if (auth.isAuthenticated) {
+    upload.connectWS()
+  }
   try {
     const res = await api.get('/health')
     if (res.data.s3_connected === false) {

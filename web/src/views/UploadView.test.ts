@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import UploadView from './UploadView.vue'
 import { useAuthStore } from '../stores/auth'
+import { useUploadStore } from '../stores/upload'
 
 let mockWs: {
   url: string
@@ -266,6 +267,9 @@ describe('UploadView', () => {
         },
       })
     })
+
+    const upload = useUploadStore()
+    upload.connectWS()
 
     const wrapper = mount(UploadView)
     expect(mockWs).not.toBeNull()

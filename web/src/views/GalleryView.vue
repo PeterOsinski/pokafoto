@@ -17,6 +17,10 @@
       @update:sortBy="loadFiles()"
     />
 
+    <div v-if="layout !== 'folders'" class="flex items-center gap-2 mb-4">
+      <InlineUpload :folderId="currentFolderId" label="Upload" />
+    </div>
+
     <FolderTreeView
       v-if="layout === 'folders'"
       :folderId="currentFolderId"
@@ -124,6 +128,7 @@ import FolderTreeView from '../components/FolderTreeView.vue'
 import FilterBar from '../components/FilterBar.vue'
 import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
+import InlineUpload from '../components/InlineUpload.vue'
 
 interface FileItem {
   id: string

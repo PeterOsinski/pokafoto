@@ -39,20 +39,21 @@ const (
 )
 
 type UploadJob struct {
-	JobID         string
-	BatchID       string
-	UserID        string
-	Filename      string
-	OriginalName  string
-	Size          int64
-	TempPath      string
-	FolderID      *string
-	Status        JobStatus
-	Stage         JobStage
-	Progress      float64
-	Error         string
-	FileID        string
-	Reason        string
+	JobID             string
+	BatchID           string
+	UserID            string
+	Filename          string
+	OriginalName      string
+	Size              int64
+	TempPath          string
+	FolderID          *string
+	SkipNameSizeDedup bool
+	Status            JobStatus
+	Stage             JobStage
+	Progress          float64
+	Error             string
+	FileID            string
+	Reason            string
 
 	mu sync.Mutex
 }
@@ -145,17 +146,18 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 	return p
 }
 
-func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, tempPath string, folderID *string) *UploadJob {
+func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, tempPath string, folderID *string, skipNameSizeDedup bool) *UploadJob {
 	job := &UploadJob{
-		JobID:        uuid.New().String(),
-		BatchID:      batchID,
-		UserID:       userID,
-		Filename:     originalName,
-		OriginalName: originalName,
-		Size:         size,
-		TempPath:     tempPath,
-		FolderID:     folderID,
-		Status:       JobQueued,
+		JobID:             uuid.New().String(),
+		BatchID:           batchID,
+		UserID:            userID,
+		Filename:          originalName,
+		OriginalName:      originalName,
+		Size:              size,
+		TempPath:          tempPath,
+		FolderID:          folderID,
+		SkipNameSizeDedup: skipNameSizeDedup,
+		Status:            JobQueued,
 	}
 
 	p.batchesMu.Lock()
@@ -298,7 +300,7 @@ func (p *Pool) processJob(job *UploadJob) {
 
 	job.SetProgress(StageDedup, 0.2)
 
-	if p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
+	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
 		existing, _ := p.fileStore.FindByNameAndSize(job.OriginalName, job.Size)
 		if existing != nil {
 			f.Close()

@@ -49,7 +49,7 @@ func TestPool_Enqueue_shouldReturnJob(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	job := pool.Enqueue("batch-1", "user-1", "photo.jpg", 1024, tmpPath, nil)
+	job := pool.Enqueue("batch-1", "user-1", "photo.jpg", 1024, tmpPath, nil, false)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}
@@ -66,8 +66,8 @@ func TestPool_GetBatch_shouldReturnBatch(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	pool.Enqueue("batch-2", "user-1", "photo.jpg", 1024, tmpPath, nil)
-	pool.Enqueue("batch-2", "user-1", "photo2.jpg", 2048, tmpPath, nil)
+	pool.Enqueue("batch-2", "user-1", "photo.jpg", 1024, tmpPath, nil, false)
+	pool.Enqueue("batch-2", "user-1", "photo2.jpg", 2048, tmpPath, nil, false)
 
 	batch := pool.GetBatch("batch-2")
 	if batch == nil {
@@ -92,7 +92,7 @@ func TestPool_Subscribe_shouldReceiveUpdates(t *testing.T) {
 		t.Fatal("expected channel, got nil")
 	}
 
-	job := pool.Enqueue("batch-3", "user-1", "photo.jpg", 1024, tmpPath, nil)
+	job := pool.Enqueue("batch-3", "user-1", "photo.jpg", 1024, tmpPath, nil, false)
 
 	select {
 	case update := <-ch:
@@ -113,7 +113,7 @@ func TestPool_Shutdown_shouldNotPanic(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	pool.Enqueue("batch-4", "user-1", "photo.jpg", 1024, tmpPath, nil)
+	pool.Enqueue("batch-4", "user-1", "photo.jpg", 1024, tmpPath, nil, false)
 
 	pool.Shutdown()
 
@@ -135,7 +135,7 @@ func TestPool_Enqueue_shouldBlockWhenFull(t *testing.T) {
 	tmpPath, _ := createTempUploadFile(t)
 
 	for i := 0; i < 10; i++ {
-		pool.Enqueue("batch-5", "user-1", "photo.jpg", 1024, tmpPath, nil)
+		pool.Enqueue("batch-5", "user-1", "photo.jpg", 1024, tmpPath, nil, false)
 	}
 
 	batch := pool.GetBatch("batch-5")
@@ -325,7 +325,7 @@ func TestPool_WorkerRecovery_poolShouldNotDie(t *testing.T) {
 			t.Fatalf("write temp file: %v", err)
 		}
 		info, _ := os.Stat(path)
-		pool.Enqueue("batch-recovery", u.ID, fmt.Sprintf("file_%d.bin", i), info.Size(), path, nil)
+		pool.Enqueue("batch-recovery", u.ID, fmt.Sprintf("file_%d.bin", i), info.Size(), path, nil, false)
 	}
 
 	time.Sleep(200 * time.Millisecond)
@@ -385,7 +385,7 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 	}
 
 	info, _ := os.Stat(tmpPath)
-	job := pool.Enqueue("batch-files", u.ID, "document.pdf", info.Size(), tmpPath, nil)
+	job := pool.Enqueue("batch-files", u.ID, "document.pdf", info.Size(), tmpPath, nil, false)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}
@@ -424,7 +424,7 @@ func TestPool_SubscribeUser_shouldReceiveUpdates(t *testing.T) {
 		t.Fatal("expected channel, got nil")
 	}
 
-	job := pool.Enqueue("batch-global", "user-global", "photo.jpg", 1024, tmpPath, nil)
+	job := pool.Enqueue("batch-global", "user-global", "photo.jpg", 1024, tmpPath, nil, false)
 
 	select {
 	case update := <-ch:
@@ -469,7 +469,7 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 	}
 
 	info, _ := os.Stat(tmpPath)
-	job := pool.Enqueue("batch-skip", u.ID, "document.pdf", info.Size(), tmpPath, nil)
+	job := pool.Enqueue("batch-skip", u.ID, "document.pdf", info.Size(), tmpPath, nil, false)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}
@@ -495,5 +495,71 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 				t.Errorf("expected no thumbnails for non-media file %q at size %s, got %+v", f.OriginalName, size, thumb)
 			}
 		}
+	}
+}
+
+func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+	cfg.Media.AutoOrganize = true
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, err := us.Create("skipdedup_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	existing := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/dup.jpg",
+		OriginalName: "dup.jpg",
+		Path:         "2024/07",
+		SizeBytes:    512,
+		MimeType:     "image/jpeg",
+		SHA256:       "abcdef_skipdedup_test",
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(existing); err != nil {
+		t.Fatalf("create existing file: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil)
+
+	content := make([]byte, 512)
+	rand.Read(content)
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "dup.jpg")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	job := pool.Enqueue("batch-dedup-skip", u.ID, "dup.jpg", info.Size(), tmpPath, nil, true)
+	if job == nil {
+		t.Fatal("expected job, got nil")
+	}
+
+	pool.Shutdown()
+
+	files, _, _, err := fs.List(store.FileListOptions{UserID: u.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("list files: %v", err)
+	}
+
+	count := 0
+	for _, f := range files {
+		if f.OriginalName == "dup.jpg" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 2 files named dup.jpg (existing + new upload with dedup skipped), got %d", count)
 	}
 }

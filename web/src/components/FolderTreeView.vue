@@ -13,13 +13,16 @@
           {{ currentFolderName || 'Root' }}
         </h3>
       </div>
-      <button
-        @click="showCreate = true"
-        class="px-3 py-1 rounded text-sm text-white"
-        style="background: var(--accent)"
-      >
-        + New Folder
-      </button>
+      <div class="flex items-center gap-2">
+        <InlineUpload :folderId="currentFolderId" label="Upload" />
+        <button
+          @click="showCreate = true"
+          class="px-3 py-1 rounded text-sm text-white"
+          style="background: var(--accent)"
+        >
+          + New Folder
+        </button>
+      </div>
     </div>
 
     <div v-if="showCreate" class="flex items-center gap-2 mb-4">
@@ -97,6 +100,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import api from '../api/client'
 import ThumbnailCard from './ThumbnailCard.vue'
+import InlineUpload from './InlineUpload.vue'
 
 interface FileItem {
   id: string

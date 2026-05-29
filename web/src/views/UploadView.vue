@@ -55,7 +55,7 @@
       </button>
     </div>
 
-    <div v-if="jobs.length > 0" class="mt-6" style="background: var(--bg-surface); border-radius: 0.5rem; padding: 1rem">
+    <div v-if="upload.jobs.length > 0" class="mt-6" style="background: var(--bg-surface); border-radius: 0.5rem; padding: 1rem">
       <h3 class="text-sm font-semibold mb-3 text-[var(--text-primary)]">Upload Queue</h3>
       <div v-for="job in sortedJobs" :key="job.job_id" class="flex items-center gap-3 py-2 text-sm" data-testid="upload-queue-item">
         <span class="truncate flex-1 text-[var(--text-primary)]">{{ job.filename }}</span>
@@ -64,8 +64,7 @@
         </div>
         <span class="text-xs w-16 text-right" :class="statusClass(job.status)">{{ statusLabel(job) }}</span>
         <div v-if="job.status === 'failed'" class="flex gap-1">
-          <button @click="retryJob(job)" class="px-1.5 py-0.5 rounded text-xs bg-[var(--accent)] text-white">Retry</button>
-          <button @click="skipJob(job)" class="px-1.5 py-0.5 rounded text-xs border" style="border-color: var(--border-color); color: var(--text-secondary)">Skip</button>
+          <button @click="upload.removeJob(job.job_id)" class="px-1.5 py-0.5 rounded text-xs border" style="border-color: var(--border-color); color: var(--text-secondary)">Remove</button>
         </div>
       </div>
     </div>
@@ -81,21 +80,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useAuthStore } from '../stores/auth'
+import { ref, computed, onMounted } from 'vue'
+import { useUploadStore } from '../stores/upload'
 import api from '../api/client'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
-
-interface Job {
-  job_id: string
-  filename: string
-  status: string
-  file_id?: string
-  progress?: number
-  stage?: string
-  size?: number
-  uploaded?: number
-}
 
 interface FolderInfo {
   id: string
@@ -103,19 +91,16 @@ interface FolderInfo {
   parent_id: string | null
 }
 
-const auth = useAuthStore()
+const upload = useUploadStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
-const jobs = ref<Job[]>([])
 const targetFolderId = ref<string | null>(null)
 const recentFolders = ref<FolderInfo[]>([])
 const showFolderPicker = ref(false)
 
-let globalWs: WebSocket | null = null
-
 const sortedJobs = computed(() => {
   const order: Record<string, number> = { uploading: 0, processing: 1, queued: 2, completed: 3, skipped: 4, failed: 5 }
-  return [...jobs.value].sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5))
+  return [...upload.jobs].sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5))
 })
 
 function triggerFileInput() {
@@ -129,34 +114,10 @@ function statusClass(status: string) {
   return 'text-[var(--text-secondary)]'
 }
 
-function statusLabel(job: Job) {
+function statusLabel(job: { status: string; progress?: number; stage?: string }) {
   if (job.status === 'uploading' && job.progress !== undefined) return `${Math.round(job.progress * 100)}%`
   if (job.status === 'processing' && job.stage) return job.stage
   return job.status
-}
-
-function connectGlobalWS() {
-  const token = auth.accessToken
-  if (!token) return
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  globalWs = new WebSocket(`${protocol}//${window.location.host}/api/v1/upload/ws?token=${token}`)
-
-  globalWs.onmessage = (event) => {
-    const update = JSON.parse(event.data) as Job
-    const idx = jobs.value.findIndex(j => j.job_id === update.job_id)
-    if (idx >= 0) {
-      jobs.value[idx] = { ...jobs.value[idx], ...update }
-    }
-  }
-
-  globalWs.onerror = () => {
-    console.error('WebSocket error')
-  }
-
-  globalWs.onclose = () => {
-    globalWs = null
-  }
 }
 
 async function loadFolders() {
@@ -175,134 +136,20 @@ async function loadFolders() {
 }
 
 onMounted(() => {
-  connectGlobalWS()
   loadFolders()
 })
 
-onUnmounted(() => {
-  if (globalWs) {
-    globalWs.close()
-    globalWs = null
-  }
-})
-
-async function uploadFiles(fileList: FileList | File[]) {
-  const allFiles = Array.from(fileList)
-  const fileMap = new Map<string, File>()
-  const uploadJobs: Job[] = []
-
-  for (let i = 0; i < allFiles.length; i++) {
-    const file = allFiles[i]
-    const jobId = `upload-${i}`
-    fileMap.set(jobId, file)
-    uploadJobs.push({
-      job_id: jobId,
-      filename: file.name,
-      status: 'uploading',
-      progress: 0,
-      stage: 'uploading',
-      size: file.size,
-      uploaded: 0,
-    })
-  }
-  jobs.value = [...uploadJobs, ...jobs.value]
-
-  const checkPayload = allFiles.map(f => ({ filename: f.name, size: f.size }))
-  try {
-    const checkRes = await api.post('/upload/check', checkPayload)
-    const duplicates: Set<string> = new Set(
-      (checkRes.data.duplicates || []).map((d: { filename: string; file_id: string }) => d.filename)
-    )
-
-    for (const job of uploadJobs) {
-      if (duplicates.has(job.filename)) {
-        const dupInfo = checkRes.data.duplicates.find((d: { filename: string; file_id: string }) => d.filename === job.filename)
-        const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
-        if (idx >= 0) {
-          jobs.value[idx] = {
-            ...jobs.value[idx],
-            status: 'skipped',
-            progress: 1,
-            file_id: dupInfo?.file_id,
-            stage: undefined,
-          }
-        }
-      }
-    }
-  } catch {
-  }
-
-  const uploadPromises = uploadJobs
-    .filter(job => {
-      const current = jobs.value.find(j => j.job_id === job.job_id)
-      return current?.status === 'uploading'
-    })
-    .map(async (job) => {
-      const file = fileMap.get(job.job_id)
-      if (!file) return
-
-      const form = new FormData()
-      form.append('files', file)
-      if (targetFolderId.value) {
-        form.append('folder_id', targetFolderId.value)
-      }
-
-      try {
-        const res = await api.post('/upload', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (progressEvent) => {
-            if (!progressEvent.total) return
-            const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
-            const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
-            if (idx >= 0) {
-              jobs.value[idx] = {
-                ...jobs.value[idx],
-                progress: Math.round(progress * 100) / 100,
-                uploaded: Math.round(progress * (job.size || 1)),
-              }
-            }
-          },
-        })
-
-        const realJobs: Job[] = res.data.jobs.map((j: any) => ({ ...j, progress: 0 }))
-        for (const realJob of realJobs) {
-          const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
-          if (idx >= 0) {
-            jobs.value[idx] = { ...jobs.value[idx], ...realJob, progress: 0 }
-          }
-        }
-      } catch {
-        const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
-        if (idx >= 0) {
-          jobs.value[idx] = {
-            ...jobs.value[idx],
-            status: 'failed',
-            stage: undefined,
-          }
-        }
-      }
-    })
-
-  await Promise.allSettled(uploadPromises)
-}
-
 function handleDrop(e: DragEvent) {
   dragOver.value = false
-  if (e.dataTransfer?.files) uploadFiles(e.dataTransfer.files)
+  if (e.dataTransfer?.files) {
+    upload.uploadFiles(e.dataTransfer.files, targetFolderId.value, false)
+  }
 }
 
 function handleFileSelect(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files) uploadFiles(input.files)
-}
-
-function skipJob(job: Job) {
-  jobs.value = jobs.value.filter(j => j.job_id !== job.job_id)
-}
-
-function retryJob(job: Job) {
-  job.status = 'queued'
-  job.progress = 0
-  skipJob(job)
+  if (input.files) {
+    upload.uploadFiles(input.files, targetFolderId.value, false)
+  }
 }
 </script>

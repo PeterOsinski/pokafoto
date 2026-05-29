@@ -75,7 +75,9 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		file.Close()
 		tempFile.Seek(0, 0)
 
-		job := s.workerPool.Enqueue(batchID, userID, fh.Filename, fh.Size, tempFile.Name(), folderIDFromForm(r))
+		skipDedup := r.FormValue("skip_name_size_dedup") == "true"
+
+		job := s.workerPool.Enqueue(batchID, userID, fh.Filename, fh.Size, tempFile.Name(), folderIDFromForm(r), skipDedup)
 
 		tempFile.Close()
 

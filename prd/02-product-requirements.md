@@ -11,8 +11,8 @@
 | U-04 | As a user, I can see upload progress with per-file status (queued, uploading, processing, done, error) | P1 |
 
 **U-04 Implementation note:** Upload progress has two phases: (1) HTTP transfer progress (tracked via axios `onUploadProgress` — bytes sent / total), shown as `uploading` status with percentage; (2) server-side processing progress (WebSocket-driven — `hashing` → `dedup` → `exif` → `storing` → `thumbnails`), shown as `processing` status with stage name. Files appear in the queue immediately upon selection with `uploading` status. After the HTTP POST completes, they transition to `queued` and then `processing` as the worker pool handles them.
-| U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped | P1 |
-| U-05a | As a user, when uploading to the photos folder, files with the same name and size as an existing file are silently skipped (ignored) without re-uploading | P0 |
+| U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped (applies globally to all uploads) | P1 |
+| U-05a | As a user, when uploading via the dedicated Upload tab, files with the same name and size as an existing file are silently skipped (ignored) without re-uploading. Inline folder uploads (uploading directly from gallery/folder view) skip this name+size check — only content hash dedup applies. | P0 |
 | U-06 | As a user, I can upload from mobile devices with the same responsive UI | P1 |
 
 ### Gallery & Browsing
@@ -72,6 +72,9 @@
 | FO-05 | As a user, I can switch to a folder tree view to browse files by folder | P0 |
 | FO-06 | As a user, I can navigate into a folder to see its files and subfolders | P0 |
 | FO-07 | As a user, I can upload files directly into a chosen folder | P1 |
+| FO-08 | As a user, I can upload files directly into the folder I'm currently browsing, without leaving the gallery/folder view | P1 |
+| FO-09 | As a user, I can see a floating upload tracker showing progress of all current uploads, regardless of which page I'm on | P1 |
+| FO-10 | As a user, uploads run asynchronously — I can start uploads in Folder A, then navigate to Folder B and start more uploads while Folder A's uploads continue | P1 |
 
 ### File Backup
 | ID | User Story | Priority |
@@ -102,7 +105,7 @@
 
 ### FR-01: Media Processing Pipeline
 Upon upload, every image and video goes through:
-1. **Name+Size dedup check (photos folder only)** — If a file with the same `original_name` AND `size_bytes` already exists, skip the upload entirely (silently ignored, no DB update). This is a fast pre-check before any processing.
+1. **Name+Size dedup check (Upload tab only)** — If a file with the same `original_name` AND `size_bytes` already exists, skip the upload entirely (silently ignored, no DB update). This is a fast pre-check before any processing. Inline folder uploads (from gallery/folder view) skip this check — only content hash dedup applies to those.
 2. **Hash computation** — SHA-256 of file content for content-level deduplication (catches renamed duplicates). Content-hash duplicates return `409 Conflict`.
 3. **EXIF extraction** — Parse all EXIF/XMP tags using `goexif` (JPEG/PNG/TIFF) with `exiftool` subprocess fallback (HEIC/AVIF). Non-media files skip EXIF entirely.
 4. **Thumbnail generation** — Four sizes per image:

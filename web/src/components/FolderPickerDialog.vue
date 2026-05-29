@@ -120,7 +120,7 @@ function selectFolder(id: string | null) {
 async function createFolder() {
   if (!newFolderName.value.trim()) return
   try {
-    await api.post('/folders', { name: newFolderName.value.trim(), parent_id: null })
+    await api.post('/folders', { name: newFolderName.value.trim(), parent_id: selectedFolderId.value })
     newFolderName.value = ''
     await loadFolders()
   } catch (e) {
