@@ -14,6 +14,7 @@ function makeFile(id: string, overrides: Record<string, any> = {}) {
       sm: { url: `/thumb/${id}-sm.jpg`, width: 60, height: 60 },
       lg: { url: `/thumb/${id}-lg.jpg`, width: 300, height: 300 },
       md: { url: `/thumb/${id}-md.jpg`, width: 600, height: 600 },
+      preview: { url: `/thumb/${id}-preview.webp`, width: 720, height: 720 },
     },
     ...overrides,
   }
@@ -33,7 +34,7 @@ describe('GalleryTileView', () => {
     const wrapper = mount(GalleryTileView, { props: { files, thumbSize: 'sm', selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const img = wrapper.find('img')
-    expect(img.attributes('src')).toBe('/thumb/1-lg.jpg')
+    expect(img.attributes('src')).toBe('/thumb/1-preview.webp')
   })
 
   it('emits open with correct index on click', async () => {

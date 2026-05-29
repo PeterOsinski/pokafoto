@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/drive/drive/internal/config"
@@ -98,6 +99,7 @@ type Pool struct {
 	thumbnailService *service.ThumbnailService
 	storageService   *service.StorageService
 	jobChan          chan *UploadJob
+	totalWorkers     int
 	wg               sync.WaitGroup
 	batches          map[string]*Batch
 	batchesMu        sync.RWMutex
@@ -105,6 +107,11 @@ type Pool struct {
 	subMu            sync.RWMutex
 	userSubscribers  map[string]map[string]chan *UploadJob
 	userSubMu        sync.RWMutex
+	processingJobs   map[string]*UploadJob
+	processingMu     sync.RWMutex
+	completedTotal   atomic.Int64
+	failedTotal      atomic.Int64
+	skippedTotal     atomic.Int64
 }
 
 type Batch struct {
@@ -117,6 +124,24 @@ type UploadInput struct {
 	BatchID string
 	UserID  string
 	Job     *UploadJob
+}
+
+type PoolStats struct {
+	QueueLength    int       `json:"queue_length"`
+	ActiveWorkers  int       `json:"active_workers"`
+	TotalWorkers   int       `json:"total_workers"`
+	ProcessingJobs []JobInfo `json:"processing_jobs"`
+	CompletedTotal int64     `json:"completed_total"`
+	FailedTotal    int64     `json:"failed_total"`
+	SkippedTotal   int64     `json:"skipped_total"`
+}
+
+type JobInfo struct {
+	JobID    string  `json:"job_id"`
+	Filename string  `json:"filename"`
+	Status   string  `json:"status"`
+	Stage    string  `json:"stage,omitempty"`
+	Progress float64 `json:"progress"`
 }
 
 func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService) *Pool {
@@ -133,9 +158,11 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir()),
 		storageService:   storageService,
 		jobChan:          make(chan *UploadJob, workers*2),
+		totalWorkers:     workers,
 		batches:          make(map[string]*Batch),
 		subscribers:      make(map[string]map[string]chan *UploadJob),
 		userSubscribers:  make(map[string]map[string]chan *UploadJob),
+		processingJobs:   make(map[string]*UploadJob),
 	}
 
 	for i := 0; i < workers; i++ {
@@ -249,6 +276,35 @@ func (p *Pool) UnsubscribeUser(userID, listenerID string) {
 	}
 }
 
+func (p *Pool) Stats() PoolStats {
+	queueLen := len(p.jobChan)
+
+	p.processingMu.RLock()
+	processing := make([]JobInfo, 0, len(p.processingJobs))
+	for _, j := range p.processingJobs {
+		j.mu.Lock()
+		processing = append(processing, JobInfo{
+			JobID:    j.JobID,
+			Filename: j.Filename,
+			Status:   string(j.Status),
+			Stage:    string(j.Stage),
+			Progress: j.Progress,
+		})
+		j.mu.Unlock()
+	}
+	p.processingMu.RUnlock()
+
+	return PoolStats{
+		QueueLength:    queueLen,
+		ActiveWorkers:  len(processing),
+		TotalWorkers:   p.totalWorkers,
+		ProcessingJobs: processing,
+		CompletedTotal: p.completedTotal.Load(),
+		FailedTotal:    p.failedTotal.Load(),
+		SkippedTotal:   p.skippedTotal.Load(),
+	}
+}
+
 func (p *Pool) Shutdown() {
 	close(p.jobChan)
 	p.wg.Wait()
@@ -273,6 +329,24 @@ func (p *Pool) worker(id int) {
 func (p *Pool) processJob(job *UploadJob) {
 	job.Status = JobProcessing
 	p.notifySubscribers(job)
+
+	p.processingMu.Lock()
+	p.processingJobs[job.JobID] = job
+	p.processingMu.Unlock()
+
+	defer func() {
+		p.processingMu.Lock()
+		delete(p.processingJobs, job.JobID)
+		p.processingMu.Unlock()
+		switch job.Status {
+		case JobCompleted:
+			p.completedTotal.Add(1)
+		case JobSkipped:
+			p.skippedTotal.Add(1)
+		case JobFailed:
+			p.failedTotal.Add(1)
+		}
+	}()
 
 	f, err := os.Open(job.TempPath)
 	if err != nil {

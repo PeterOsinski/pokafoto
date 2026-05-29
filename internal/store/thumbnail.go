@@ -27,6 +27,12 @@ func (s *ThumbnailStore) Create(t *model.Thumbnail) error {
 	return nil
 }
 
+func (s *ThumbnailStore) TotalSize() (int64, error) {
+	var size int64
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM thumbnails`).Scan(&size)
+	return size, err
+}
+
 func (s *ThumbnailStore) FindByFileIDAndSize(fileID string, size model.ThumbnailSize) (*model.Thumbnail, error) {
 	t := &model.Thumbnail{}
 	var s3Key *string

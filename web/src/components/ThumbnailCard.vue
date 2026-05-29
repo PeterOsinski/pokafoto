@@ -105,17 +105,11 @@ const fileExtension = computed(() => {
   return ext ? `.${ext.toLowerCase()}` : ''
 })
 
-const sizeKey = computed<'sm' | 'lg' | 'md'>(() => {
-  if (props.thumbSize === 'lg') return 'md'
-  if (!props.thumbSize || props.thumbSize === 'md' || props.thumbSize === 'sm') return 'lg'
-  return 'sm'
-})
-
 const imgSrc = computed(() => {
   const t = props.file.thumbnails
   if (!t) return ''
-  const primary = t[sizeKey.value]
-  const fallback = t.md || t.sm || t.videoStill || t.preview
+  const primary = t.preview
+  const fallback = t.md || t.sm || t.videoStill
   const base = primary?.url || fallback?.url || ''
   if (!base) return ''
   return retryCounter.value > 0 ? `${base}#t=${retryCounter.value}` : base

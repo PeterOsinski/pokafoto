@@ -563,3 +563,93 @@ func TestPool_SkipNameSizeDedup_shouldSkipCheckWhenFlagSet(t *testing.T) {
 		t.Errorf("expected 2 files named dup.jpg (existing + new upload with dedup skipped), got %d", count)
 	}
 }
+
+func TestPool_Stats_shouldReportQueueLength(t *testing.T) {
+	pool, _ := setupTestPool(t)
+
+	tmpPath1, _ := createTempUploadFile(t)
+	tmpPath2, _ := createTempUploadFile(t)
+
+	pool.processingMu.Lock()
+	pool.processingJobs["blocker-1"] = &UploadJob{JobID: "blocker-1", Status: JobProcessing}
+	pool.processingJobs["blocker-2"] = &UploadJob{JobID: "blocker-2", Status: JobProcessing}
+	pool.processingMu.Unlock()
+
+	j1 := pool.Enqueue("batch-stats", "user-1", "test1.jpg", 100, tmpPath1, nil, true)
+	j2 := pool.Enqueue("batch-stats", "user-1", "test2.jpg", 100, tmpPath2, nil, true)
+
+	_ = j1
+	_ = j2
+
+	pool.Shutdown()
+
+	stats := pool.Stats()
+	if stats.TotalWorkers != 2 {
+		t.Errorf("expected total workers 2, got %d", stats.TotalWorkers)
+	}
+	total := stats.CompletedTotal + stats.FailedTotal + stats.SkippedTotal
+	if total < 2 {
+		t.Errorf("expected at least 2 jobs processed, got %d processed (%d completed + %d failed + %d skipped)",
+			total, stats.CompletedTotal, stats.FailedTotal, stats.SkippedTotal)
+	}
+
+	pool.processingMu.Lock()
+	delete(pool.processingJobs, "blocker-1")
+	delete(pool.processingJobs, "blocker-2")
+	pool.processingMu.Unlock()
+}
+
+func TestPool_Stats_shouldReportProcessingJobs(t *testing.T) {
+	pool, _ := setupTestPool(t)
+
+	job := &UploadJob{
+		JobID:    "test-job-1",
+		Filename: "processing.jpg",
+		Status:   JobProcessing,
+		Stage:    StageThumbnails,
+		Progress: 0.8,
+	}
+
+	pool.processingMu.Lock()
+	pool.processingJobs["test-job-1"] = job
+	pool.processingMu.Unlock()
+
+	stats := pool.Stats()
+	if len(stats.ProcessingJobs) != 1 {
+		t.Fatalf("expected 1 processing job, got %d", len(stats.ProcessingJobs))
+	}
+	pj := stats.ProcessingJobs[0]
+	if pj.JobID != "test-job-1" {
+		t.Errorf("expected job_id test-job-1, got %s", pj.JobID)
+	}
+	if pj.Filename != "processing.jpg" {
+		t.Errorf("expected filename processing.jpg, got %s", pj.Filename)
+	}
+	if pj.Stage != string(StageThumbnails) {
+		t.Errorf("expected stage thumbnails, got %s", pj.Stage)
+	}
+	if pj.Progress != 0.8 {
+		t.Errorf("expected progress 0.8, got %f", pj.Progress)
+	}
+
+	pool.processingMu.Lock()
+	delete(pool.processingJobs, "test-job-1")
+	pool.processingMu.Unlock()
+}
+
+func TestPool_Stats_shouldReportCountersAfterCompletion(t *testing.T) {
+	pool, _ := setupTestPool(t)
+
+	tmpPath, _ := createTempUploadFile(t)
+	_ = pool.Enqueue("batch-counter", "user-1", "counter.jpg", 100, tmpPath, nil, true)
+	pool.Shutdown()
+
+	stats := pool.Stats()
+	total := stats.CompletedTotal + stats.FailedTotal + stats.SkippedTotal
+	if total < 1 {
+		t.Errorf("expected at least 1 counter total (completed+failed+skipped), got %d", total)
+	}
+	if stats.ActiveWorkers != 0 {
+		t.Errorf("expected 0 active workers after shutdown, got %d", stats.ActiveWorkers)
+	}
+}

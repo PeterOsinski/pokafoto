@@ -20,40 +20,21 @@ function makeFile(overrides: Record<string, any> = {}) {
 
 describe('ThumbnailCard', () => {
   describe('rendering', () => {
-    it('renders image with correct src when thumbnail exists', () => {
+    it('renders preview.webp as thumbnail for all sizes', () => {
       const file = makeFile()
       const wrapper = mount(ThumbnailCard, { props: { file } })
 
       const img = wrapper.find('img')
       expect(img.exists()).toBe(true)
-      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
+      expect(img.attributes('src')).toBe('/thumb/preview.webp')
     })
 
-    it('renders lg thumbnail when thumbSize is sm', () => {
+    it('renders preview.webp regardless of thumbSize prop', () => {
       const file = makeFile()
-      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'sm' } })
-
-      const img = wrapper.find('img')
-      expect(img.exists()).toBe(true)
-      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
-    })
-
-    it('renders md thumbnail when thumbSize is lg', () => {
-      const file = makeFile()
-      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'lg' } })
-
-      const img = wrapper.find('img')
-      expect(img.exists()).toBe(true)
-      expect(img.attributes('src')).toBe('/thumb/md.jpg')
-    })
-
-    it('renders lg thumbnail when thumbSize is md', () => {
-      const file = makeFile()
-      const wrapper = mount(ThumbnailCard, { props: { file, thumbSize: 'md' } })
-
-      const img = wrapper.find('img')
-      expect(img.exists()).toBe(true)
-      expect(img.attributes('src')).toBe('/thumb/lg.jpg')
+      for (const thumbSize of ['sm', 'md', 'lg'] as const) {
+        const wrapper = mount(ThumbnailCard, { props: { file, thumbSize } })
+        expect(wrapper.find('img').attributes('src')).toBe('/thumb/preview.webp')
+      }
     })
 
     it('falls back to md when requested size is missing', () => {

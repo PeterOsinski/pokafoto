@@ -91,12 +91,13 @@ describe('GalleryGroupedView', () => {
           sm: { url: '/thumb/1-sm.jpg', width: 60, height: 60 },
           lg: { url: '/thumb/1-lg.jpg', width: 300, height: 300 },
           md: { url: '/thumb/1-md.jpg', width: 600, height: 600 },
+          preview: { url: '/thumb/1-preview.webp', width: 720, height: 720 },
         },
       }),
     ]
     const wrapper = mount(GalleryGroupedView, { props: { files, thumbSize: 'sm', selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const img = wrapper.find('img')
-    expect(img.attributes('src')).toBe('/thumb/1-lg.jpg')
+    expect(img.attributes('src')).toBe('/thumb/1-preview.webp')
   })
 })

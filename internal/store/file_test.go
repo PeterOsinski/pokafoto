@@ -456,3 +456,99 @@ func TestFileStore_FindByNameAndSizeBatch_shouldReturnNilOnEmptyInput(t *testing
 		t.Error("expected nil for empty input")
 	}
 }
+
+func TestFileStore_AdminFileBreakdown_shouldReturnAggregates(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	createTestFile(t, fs, user.ID, "photo.jpg")
+
+	vf := &model.File{
+		UserID:       user.ID,
+		Filename:     "2024/07/video.mp4",
+		OriginalName: "video.mp4",
+		Path:         "2024/07",
+		SizeBytes:    8192,
+		MimeType:     "video/mp4",
+		SHA256:       makeSHA256("video_breakdown"),
+		MediaType:    model.MediaTypeVideo,
+	}
+	if err := fs.Create(vf); err != nil {
+		t.Fatalf("create video file: %v", err)
+	}
+
+	df := &model.File{
+		UserID:       user.ID,
+		Filename:     "2024/07/doc.pdf",
+		OriginalName: "doc.pdf",
+		Path:         "2024/07",
+		SizeBytes:    2048,
+		MimeType:     "application/pdf",
+		SHA256:       makeSHA256("pdf_breakdown"),
+		MediaType:    model.MediaTypeFile,
+	}
+	if err := fs.Create(df); err != nil {
+		t.Fatalf("create doc file: %v", err)
+	}
+
+	b, err := fs.AdminFileBreakdown()
+	if err != nil {
+		t.Fatalf("admin file breakdown: %v", err)
+	}
+
+	if len(b.MediaTypes) != 3 {
+		t.Errorf("expected 3 media types, got %d", len(b.MediaTypes))
+	}
+
+	photoFound := false
+	videoFound := false
+	fileFound := false
+	for _, mt := range b.MediaTypes {
+		switch mt.MediaType {
+		case "photo":
+			photoFound = true
+			if mt.Count < 1 {
+				t.Error("expected photo count >= 1")
+			}
+		case "video":
+			videoFound = true
+			if mt.Count != 1 {
+				t.Errorf("expected 1 video, got %d", mt.Count)
+			}
+			if mt.SizeBytes != 8192 {
+				t.Errorf("expected 8192 video bytes, got %d", mt.SizeBytes)
+			}
+		case "file":
+			fileFound = true
+			if mt.Count != 1 {
+				t.Errorf("expected 1 file, got %d", mt.Count)
+			}
+		}
+	}
+	if !photoFound || !videoFound || !fileFound {
+		t.Error("expected all three media types")
+	}
+
+	if len(b.Extensions) < 3 {
+		t.Errorf("expected at least 3 extensions, got %d", len(b.Extensions))
+	}
+
+	extMap := map[string]bool{"jpeg": false, "mp4": false, "pdf": false}
+	for _, e := range b.Extensions {
+		if _, ok := extMap[e.Extension]; ok {
+			extMap[e.Extension] = true
+		}
+	}
+	for ext, found := range extMap {
+		if !found {
+			t.Errorf("expected extension %s in breakdown", ext)
+		}
+	}
+
+	expectedTotal := int64(1024 + 8192 + 2048)
+	if b.TotalSize != expectedTotal {
+		t.Errorf("expected total size %d, got %d", expectedTotal, b.TotalSize)
+	}
+}

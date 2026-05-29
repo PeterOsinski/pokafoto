@@ -547,6 +547,68 @@ func (s *FileStore) BatchMove(userID string, ids []string, folderID *string) err
 	return nil
 }
 
+type AdminFileBreakdown struct {
+	MediaTypes []MediaTypeBreakdown `json:"media_types"`
+	Extensions []ExtensionBreakdown `json:"extensions"`
+	TotalSize  int64                `json:"total_size"`
+}
+
+type MediaTypeBreakdown struct {
+	MediaType string `json:"media_type"`
+	Count     int64  `json:"count"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type ExtensionBreakdown struct {
+	Extension string `json:"extension"`
+	Count     int64  `json:"count"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+func (s *FileStore) AdminFileBreakdown() (*AdminFileBreakdown, error) {
+	b := &AdminFileBreakdown{}
+
+	rows, err := s.db.Query(`SELECT media_type, COUNT(*), COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0 GROUP BY media_type ORDER BY media_type`)
+	if err != nil {
+		return nil, fmt.Errorf("media type breakdown: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var mt MediaTypeBreakdown
+		if err := rows.Scan(&mt.MediaType, &mt.Count, &mt.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan media type: %w", err)
+		}
+		b.MediaTypes = append(b.MediaTypes, mt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows media type: %w", err)
+	}
+
+	xrows, err := s.db.Query(`SELECT LOWER(SUBSTR(mime_type, INSTR(mime_type, '/') + 1)) as ext, COUNT(*) as cnt, COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0 GROUP BY ext ORDER BY cnt DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("extension breakdown: %w", err)
+	}
+	defer xrows.Close()
+
+	for xrows.Next() {
+		var eb ExtensionBreakdown
+		if err := xrows.Scan(&eb.Extension, &eb.Count, &eb.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan extension: %w", err)
+		}
+		b.Extensions = append(b.Extensions, eb)
+	}
+	if err := xrows.Err(); err != nil {
+		return nil, fmt.Errorf("rows extension: %w", err)
+	}
+
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0`).Scan(&b.TotalSize); err != nil {
+		return nil, fmt.Errorf("total size: %w", err)
+	}
+
+	return b, nil
+}
+
 func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]*model.File, error) {
 	if len(ids) == 0 {
 		return nil, nil

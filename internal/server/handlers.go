@@ -11,6 +11,7 @@ import (
 
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/store"
+	"golang.org/x/sys/unix"
 )
 
 func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
@@ -531,6 +532,78 @@ func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+}
+
+func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request) {
+	breakdown, err := s.fileStore.AdminFileBreakdown()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file breakdown")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, breakdown)
+}
+
+func (s *Server) handleAdminWorkers(w http.ResponseWriter, r *http.Request) {
+	stats := s.workerPool.Stats()
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	users, err := s.userStore.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list users")
+		return
+	}
+
+	totalFiles := int64(0)
+	totalSize := int64(0)
+	userStats := make([]map[string]interface{}, 0, len(users))
+
+	for _, u := range users {
+		stats, err := s.fileStore.Stats(u.ID)
+		if err != nil {
+			continue
+		}
+		totalFiles += stats.TotalFiles
+		totalSize += stats.TotalSize
+		userStats = append(userStats, map[string]interface{}{
+			"id":               u.ID,
+			"username":         u.Username,
+			"role":             string(u.Role),
+			"file_count":       stats.TotalFiles,
+			"total_size_bytes": stats.TotalSize,
+		})
+	}
+
+	cacheSize, _ := s.thumbnailStore.TotalSize()
+	diskTotal, diskFree, diskUsed := diskUsage(s.cfg.Storage.Local.Path)
+	diskPct := float64(0)
+	if diskTotal > 0 {
+		diskPct = float64(diskUsed) / float64(diskTotal) * 100
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"total_files":         totalFiles,
+		"total_size_bytes":    totalSize,
+		"cache_size_bytes":    cacheSize,
+		"disk_total_bytes":    diskTotal,
+		"disk_free_bytes":     diskFree,
+		"disk_used_bytes":     diskUsed,
+		"disk_utilization_pct": diskPct,
+		"users":               userStats,
+	})
+}
+
+func diskUsage(path string) (total, free, used uint64) {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(path, &stat); err != nil {
+		return 0, 0, 0
+	}
+	total = stat.Blocks * uint64(stat.Bsize)
+	free = stat.Bavail * uint64(stat.Bsize)
+	used = total - free
+	return
 }
 
 type fileResponse struct {
