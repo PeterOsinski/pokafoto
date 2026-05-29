@@ -49,7 +49,7 @@
     </div>
 
     <div class="flex items-center gap-2 mb-6 flex-wrap">
-      <select :modelValue="sortBy" @change="sortBy = ($event.target as HTMLSelectElement).value" class="px-3 py-1 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)">
+      <select :modelValue="settings.sortBy.value" @change="settings.sortBy.value = ($event.target as HTMLSelectElement).value" class="px-3 py-1 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)">
         <option value="taken_at">Date Taken</option>
         <option value="created_at">Date Uploaded</option>
         <option value="filename">File Name</option>
@@ -61,22 +61,23 @@
           :key="opt.value"
           :title="opt.label"
           class="p-1.5 rounded-md transition-colors"
-          :class="opt.value === layout ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
-          @click="layout = opt.value"
+          :class="opt.value === settings.layout.value ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
+          @click="settings.layout.value = opt.value"
           v-html="opt.icon"
         />
       </div>
 
-      <div class="flex items-center gap-1 rounded-lg p-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
-        <button
-          v-for="opt in sizeOptions"
-          :key="opt.value"
-          :title="opt.label"
-          class="p-1.5 rounded-md transition-colors"
-          :class="opt.value === thumbSize ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
-          @click="thumbSize = opt.value as 'sm' | 'md' | 'lg'"
-          v-html="opt.icon"
+      <div class="flex items-center gap-2 px-3 py-1 rounded" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
+        <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 300">S</span>
+        <input
+          type="range"
+          :value="settings.thumbLevel.value"
+          min="0"
+          max="9"
+          class="thumb-slider"
+          @input="settings.thumbLevel.value = Number(($event.target as HTMLInputElement).value)"
         />
+        <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 700">L</span>
       </div>
     </div>
 
@@ -119,9 +120,9 @@
       </div>
 
       <GalleryTileView
-        v-else-if="layout === 'tiles'"
+        v-else-if="settings.layout.value === 'tiles'"
         :files="files"
-        :thumbSize="thumbSize"
+        :thumbSizePx="settings.thumbSizePx.value"
         :selectedIds="selectedIds"
         :selectionEnabled="selectionEnabled"
         @select="toggleSelect"
@@ -129,7 +130,7 @@
         @open="(i: number) => handleFileClick(i)"
       />
       <GalleryListView
-        v-else-if="layout === 'list'"
+        v-else-if="settings.layout.value === 'list'"
         :files="files"
         :selectedIds="selectedIds"
         :selectionEnabled="selectionEnabled"
@@ -138,7 +139,7 @@
         @open="(i: number) => handleFileClick(i)"
       />
       <GalleryTableView
-        v-else-if="layout === 'table'"
+        v-else-if="settings.layout.value === 'table'"
         :files="files"
         :selectedIds="selectedIds"
         :selectionEnabled="selectionEnabled"
@@ -206,6 +207,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useRouteQuery } from '../composables/useRouteQuery'
+import { useLocalSettings } from '../composables/useLocalSettings'
 import Lightbox from '../components/Lightbox.vue'
 import FileViewer from '../components/FileViewer.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
@@ -255,10 +257,9 @@ const newFolderName = ref('')
 const createInput = ref<HTMLInputElement | null>(null)
 
 const folderIdQuery = useRouteQuery('folder_id', '')
-const layoutQuery = useRouteQuery('layout', 'tiles')
-const sortQuery = useRouteQuery('sort', 'taken_at')
-const thumbQuery = useRouteQuery('thumb', 'md')
 const photoQuery = useRouteQuery('photo', '')
+
+const settings = useLocalSettings()
 
 const currentFolderId = computed(() => folderIdQuery.value || null)
 
@@ -286,21 +287,6 @@ const subfolders = computed(() => {
     return []
   }
   return find(folders.value.children ?? [])
-})
-
-const layout = computed({
-  get: () => layoutQuery.value,
-  set: (v: string) => { layoutQuery.value = v === 'tiles' ? '' : v },
-})
-
-const sortBy = computed({
-  get: () => sortQuery.value,
-  set: (v: string) => { sortQuery.value = v === 'taken_at' ? '' : v },
-})
-
-const thumbSize = computed({
-  get: () => (thumbQuery.value || 'md') as 'sm' | 'md' | 'lg',
-  set: (v: 'sm' | 'md' | 'lg') => { thumbQuery.value = v === 'md' ? '' : v },
 })
 
 const selectedIds = ref(new Set<string>())
@@ -344,7 +330,7 @@ async function loadFolders() {
 async function loadFiles() {
   loading.value = true
   try {
-    const params: any = { sort: sortBy.value, order: 'desc', limit: 100 }
+    const params: any = { sort: settings.sortBy.value, order: 'desc', limit: 100 }
     if (currentFolderId.value) {
       params.folder_id = currentFolderId.value
     }
@@ -579,10 +565,37 @@ const layoutOptions = [
   { value: 'list', label: 'List', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>' },
   { value: 'table', label: 'Table', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>' },
 ]
-
-const sizeOptions = [
-  { value: 'sm', label: 'Small', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5" rx=".5"/><rect x="10" y="3" width="5" height="5" rx=".5"/><rect x="17" y="3" width="5" height="5" rx=".5"/><rect x="3" y="10" width="5" height="5" rx=".5"/><rect x="10" y="10" width="5" height="5" rx=".5"/><rect x="17" y="10" width="5" height="5" rx=".5"/></svg>' },
-  { value: 'md', label: 'Medium', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>' },
-  { value: 'lg', label: 'Large', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="8" rx="1"/><rect x="3" y="13" width="18" height="8" rx="1"/></svg>' },
-]
 </script>
+
+<style scoped>
+.thumb-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+  outline: none;
+  cursor: pointer;
+}
+
+.thumb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.thumb-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+</style>

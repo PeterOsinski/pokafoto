@@ -84,7 +84,6 @@ interface FileItem {
 
 const props = defineProps<{
   file: FileItem
-  thumbSize?: 'sm' | 'md' | 'lg'
   selected?: boolean
   selectable?: boolean
   anySelected?: boolean

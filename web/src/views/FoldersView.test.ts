@@ -187,6 +187,6 @@ describe('FoldersView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await nextTick()
 
-    expect(wrapper.html()).toContain('grid-cols')
+    expect(wrapper.html()).toContain('grid-template-columns')
   })
 })

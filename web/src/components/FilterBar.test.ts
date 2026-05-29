@@ -5,16 +5,17 @@ import FilterBar from './FilterBar.vue'
 describe('FilterBar', () => {
   function mountFilter(props = {}) {
     return mount(FilterBar, {
-      props: { mediaType: '', sortBy: 'taken_at', layout: 'tiles', thumbSize: 'md', includeAllFolders: false, ...props },
+      props: { mediaType: '', sortBy: 'taken_at', layout: 'tiles', thumbLevel: 5, includeAllFolders: false, ...props },
     })
   }
 
-  it('renders sort select and icon button groups', () => {
+  it('renders sort select, icon button groups, and slider', () => {
     const wrapper = mountFilter()
 
     expect(wrapper.find('select').exists()).toBe(true)
     const buttonGroups = wrapper.findAll('.rounded-lg')
-    expect(buttonGroups.length).toBe(3)
+    expect(buttonGroups.length).toBe(2)
+    expect(wrapper.find('input[type="range"]').exists()).toBe(true)
   })
 
   it('emits update:mediaType on media type button click', async () => {
@@ -48,19 +49,28 @@ describe('FilterBar', () => {
     expect(wrapper.emitted('update:layout')![0]).toEqual(['list'])
   })
 
-  it('emits update:thumbSize on thumb size button click', async () => {
+  it('emits update:thumbLevel on slider input', async () => {
     const wrapper = mountFilter()
 
-    const buttonGroups = wrapper.findAll('.rounded-lg')
-    const sizeButtons = buttonGroups[2].findAll('button')
-    await sizeButtons[2].trigger('click')
+    const slider = wrapper.find('input[type="range"]')
+    await slider.setValue(3)
 
-    expect(wrapper.emitted('update:thumbSize')).toBeTruthy()
-    expect(wrapper.emitted('update:thumbSize')![0]).toEqual(['lg'])
+    expect(wrapper.emitted('update:thumbLevel')).toBeTruthy()
+    expect(wrapper.emitted('update:thumbLevel')![0]).toEqual([3])
   })
 
-  it('applies active class to selected button', () => {
-    const wrapper = mountFilter({ mediaType: 'photo', layout: 'list', thumbSize: 'sm' })
+  it('slider has min=0, max=9 and renders S/L labels', () => {
+    const wrapper = mountFilter()
+
+    const slider = wrapper.find('input[type="range"]')
+    expect(slider.attributes('min')).toBe('0')
+    expect(slider.attributes('max')).toBe('9')
+    expect(wrapper.text()).toContain('S')
+    expect(wrapper.text()).toContain('L')
+  })
+
+  it('applies active class to selected media and layout buttons', () => {
+    const wrapper = mountFilter({ mediaType: 'photo', layout: 'list' })
 
     const buttonGroups = wrapper.findAll('.rounded-lg')
 
@@ -69,8 +79,5 @@ describe('FilterBar', () => {
 
     const layoutButtons = buttonGroups[1].findAll('button')
     expect(layoutButtons[1].classes()).toContain('bg-[var(--accent)]')
-
-    const sizeButtons = buttonGroups[2].findAll('button')
-    expect(sizeButtons[0].classes()).toContain('bg-[var(--accent)]')
   })
 })

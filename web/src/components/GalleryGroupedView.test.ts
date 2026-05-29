@@ -17,6 +17,18 @@ function makeFile(id: string, overrides: Record<string, any> = {}) {
   }
 }
 
+function mountView(files: any[], overrides: Record<string, any> = {}) {
+  return mount(GalleryGroupedView, {
+    props: {
+      files,
+      thumbSizePx: 200,
+      selectedIds: new Set<string>(),
+      selectionEnabled: true,
+      ...overrides,
+    },
+  })
+}
+
 describe('GalleryGroupedView', () => {
   it('groups files by day correctly', () => {
     const files = [
@@ -24,7 +36,7 @@ describe('GalleryGroupedView', () => {
       makeFile('2', { takenAt: '2024-03-15T14:00:00Z' }),
       makeFile('3', { takenAt: '2024-03-16T09:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView(files)
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -37,7 +49,7 @@ describe('GalleryGroupedView', () => {
       makeFile('1', { takenAt: '2024-01-15T10:00:00Z' }),
       makeFile('2', { takenAt: '2024-03-20T10:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView(files)
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -51,7 +63,7 @@ describe('GalleryGroupedView', () => {
       makeFile('2', { takenAt: undefined }),
       makeFile('3', { takenAt: undefined }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView(files)
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -66,7 +78,7 @@ describe('GalleryGroupedView', () => {
       makeFile('1', { takenAt: '2024-03-15T10:00:00Z' }),
       makeFile('2', { takenAt: '2024-03-16T10:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView(files)
 
     const grids = wrapper.findAll('.grid')
     const firstGroup = grids[0]
@@ -77,13 +89,13 @@ describe('GalleryGroupedView', () => {
   })
 
   it('handles empty files array', () => {
-    const wrapper = mount(GalleryGroupedView, { props: { files: [], selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView([])
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(0)
   })
 
-  it('passes thumbSize prop to thumbnail cards', () => {
+  it('sets grid columns from thumbSizePx', () => {
     const files = [
       makeFile('1', {
         takenAt: '2024-03-15T10:00:00Z',
@@ -95,9 +107,12 @@ describe('GalleryGroupedView', () => {
         },
       }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, thumbSize: 'sm', selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mountView(files, { thumbSizePx: 120 })
 
     const img = wrapper.find('img')
     expect(img.attributes('src')).toBe('/thumb/1-preview.webp')
+
+    const grid = wrapper.find('.grid')
+    expect(grid.attributes('style')).toContain('minmax(120px')
   })
 })

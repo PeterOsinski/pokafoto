@@ -5,11 +5,10 @@
         {{ group.label }}
         <span class="font-normal text-xs">· {{ group.files.length }} {{ group.files.length === 1 ? 'photo' : 'photos' }}</span>
       </h3>
-      <div class="grid gap-2" :class="gridClass">
+      <div class="grid gap-2" :style="gridStyle">
         <div v-for="item in group.files" :key="item.file.id">
           <ThumbnailCard
             :file="item.file"
-            :thumbSize="thumbSize"
             :selected="selectedIds.has(item.file.id)"
             :selectable="selectionEnabled"
             :anySelected="selectedIds.size > 0"
@@ -59,7 +58,7 @@ interface DayGroup {
 
 const props = defineProps<{
   files: FileItem[]
-  thumbSize?: 'sm' | 'md' | 'lg'
+  thumbSizePx: number
   selectedIds: Set<string>
   selectionEnabled: boolean
 }>()
@@ -70,11 +69,9 @@ defineEmits<{
   open: [index: number]
 }>()
 
-const gridClass = computed(() => {
-  if (props.thumbSize === 'sm') return 'grid-cols-5 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12'
-  if (props.thumbSize === 'lg') return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
-  return 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8'
-})
+const gridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(auto-fill, minmax(${props.thumbSizePx}px, 1fr))`,
+}))
 
 const groups = computed<DayGroup[]>(() => {
   const map = new Map<string, GroupedItem[]>()

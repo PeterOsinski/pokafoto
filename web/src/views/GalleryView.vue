@@ -10,9 +10,9 @@
 
     <FilterBar
       v-model:mediaType="mediaType"
-      v-model:sortBy="sortBy"
-      v-model:layout="layout"
-      v-model:thumbSize="thumbSize"
+      v-model:sortBy="settings.sortBy.value"
+      v-model:layout="settings.layout.value"
+      v-model:thumbLevel="settings.thumbLevel.value"
       v-model:includeAllFolders="includeAllFolders"
       @update:mediaType="loadFiles()"
       @update:sortBy="loadFiles()"
@@ -34,7 +34,7 @@
     <GalleryTileView
       v-else-if="layout === 'tiles'"
       :files="files"
-      :thumbSize="thumbSize"
+      :thumbSizePx="settings.thumbSizePx.value"
       :selectedIds="selectedIds"
       :selectionEnabled="selectionEnabled"
       @select="toggleSelect"
@@ -53,7 +53,7 @@
     <GalleryGroupedView
       v-else-if="layout === 'grouped'"
       :files="files"
-      :thumbSize="thumbSize"
+      :thumbSizePx="settings.thumbSizePx.value"
       :selectedIds="selectedIds"
       :selectionEnabled="selectionEnabled"
       @select="toggleSelect"
@@ -118,6 +118,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useRouteQuery } from '../composables/useRouteQuery'
+import { useLocalSettings } from '../composables/useLocalSettings'
 import Lightbox from '../components/Lightbox.vue'
 import FileViewer from '../components/FileViewer.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
@@ -155,29 +156,18 @@ const nextCursor = ref('')
 const loading = ref(false)
 
 const pathQuery = useRouteQuery('path', '')
-const layoutQuery = useRouteQuery('layout', 'tiles')
-const sortQuery = useRouteQuery('sort', 'taken_at')
 const mediaQuery = useRouteQuery('media', '')
-const thumbQuery = useRouteQuery('thumb', 'md')
 const allFoldersQuery = useRouteQuery('all_folders', '')
 const photoQuery = useRouteQuery('photo', '')
 
+const settings = useLocalSettings()
+
 const currentPath = computed(() => pathQuery.value || null)
-const layout = computed({
-  get: () => layoutQuery.value,
-  set: (v: string) => { layoutQuery.value = v === 'tiles' ? '' : v },
-})
-const sortBy = computed({
-  get: () => sortQuery.value,
-  set: (v: string) => { sortQuery.value = v === 'taken_at' ? '' : v },
-})
+const layout = computed(() => settings.layout.value)
+const sortBy = computed(() => settings.sortBy.value)
 const mediaType = computed({
   get: () => mediaQuery.value,
   set: (v: string) => { mediaQuery.value = v || null },
-})
-const thumbSize = computed<'sm' | 'md' | 'lg'>({
-  get: () => (thumbQuery.value as 'sm' | 'md' | 'lg') || 'md',
-  set: (v: string) => { thumbQuery.value = v === 'md' ? '' : v },
 })
 
 const includeAllFolders = computed({

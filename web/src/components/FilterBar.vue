@@ -30,16 +30,17 @@
       />
     </div>
 
-    <div class="flex items-center gap-1 rounded-lg p-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
-      <button
-        v-for="opt in sizeOptions"
-        :key="opt.value"
-        :title="opt.label"
-        class="p-1.5 rounded-md transition-colors"
-        :class="opt.value === thumbSize ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
-        @click="$emit('update:thumbSize', opt.value)"
-        v-html="opt.icon"
+    <div class="flex items-center gap-2 px-3 py-1 rounded" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
+      <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 300">S</span>
+      <input
+        type="range"
+        :value="thumbLevel"
+        min="0"
+        max="9"
+        class="thumb-slider"
+        @input="$emit('update:thumbLevel', Number(($event.target as HTMLInputElement).value))"
       />
+      <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 700">L</span>
     </div>
 
     <label class="flex items-center gap-2 px-3 py-1 rounded text-sm cursor-pointer select-none" style="background: var(--bg-elevated); border: 1px solid var(--border-color)" :class="includeAllFolders ? 'border-[var(--accent)]' : 'border-[var(--border-color)]'">
@@ -55,12 +56,12 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ mediaType: string; sortBy: string; layout: string; thumbSize: string; includeAllFolders: boolean }>()
+defineProps<{ mediaType: string; sortBy: string; layout: string; thumbLevel: number; includeAllFolders: boolean }>()
 const emit = defineEmits<{
   'update:mediaType': [value: string]
   'update:sortBy': [value: string]
   'update:layout': [value: string]
-  'update:thumbSize': [value: string]
+  'update:thumbLevel': [value: number]
   'update:includeAllFolders': [value: boolean]
 }>()
 
@@ -76,10 +77,37 @@ const layoutOptions = [
   { value: 'list', label: 'List', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>' },
   { value: 'grouped', label: 'Groups by Day', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
 ]
-
-const sizeOptions = [
-  { value: 'sm', label: 'Small', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5" rx=".5"/><rect x="10" y="3" width="5" height="5" rx=".5"/><rect x="17" y="3" width="5" height="5" rx=".5"/><rect x="3" y="10" width="5" height="5" rx=".5"/><rect x="10" y="10" width="5" height="5" rx=".5"/><rect x="17" y="10" width="5" height="5" rx=".5"/></svg>' },
-  { value: 'md', label: 'Medium', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>' },
-  { value: 'lg', label: 'Large', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="8" rx="1"/><rect x="3" y="13" width="18" height="8" rx="1"/></svg>' },
-]
 </script>
+
+<style scoped>
+.thumb-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+  outline: none;
+  cursor: pointer;
+}
+
+.thumb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.thumb-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+</style>
