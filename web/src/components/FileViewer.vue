@@ -76,7 +76,7 @@ const loading = ref(true)
 const error = ref('')
 const blobUrl = ref<string | null>(null)
 const textContent = ref('')
-const viewerType = ref<ViewerType>('text')
+const viewerType = ref<ViewerType | null>(null)
 const rawBlob = ref<Blob | null>(null)
 
 let destroyed = false
@@ -91,6 +91,12 @@ watch(() => props.file, async (f) => {
   error.value = ''
   viewerType.value = detectViewerType(f.originalName, f.mimeType)
   nextTick(() => viewerEl.value?.focus())
+
+  if (!viewerType.value) {
+    loading.value = false
+    error.value = `No preview available for .${f.originalName.split('.').pop()} files.`
+    return
+  }
 
   try {
     const res = await api.get(`/download/${f.id}`, { responseType: 'blob' })
@@ -124,13 +130,14 @@ function cleanup() {
   textContent.value = ''
 }
 
-function detectViewerType(name: string, mime: string): ViewerType {
+function detectViewerType(name: string, mime: string): ViewerType | null {
   const ext = name.split('.').pop()?.toLowerCase() || ''
   if (ext === 'pdf' || mime === 'application/pdf') return 'pdf'
   if (ext === 'json' || mime === 'application/json') return 'json'
   if (ext === 'md' || ext === 'markdown' || mime === 'text/markdown') return 'markdown'
   if (ext === 'csv' || mime === 'text/csv') return 'csv'
-  return 'text'
+  if (ext === 'txt' || mime === 'text/plain') return 'text'
+  return null
 }
 
 function formatSize(bytes: number): string {

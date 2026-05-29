@@ -108,11 +108,11 @@ describe('FileViewer', () => {
       expect(wrapper.find('table').exists()).toBe(true)
     })
 
-    it('falls back to text viewer for unknown types', async () => {
-      mockApiGet.mockResolvedValue({ data: new Blob(['plain text']) })
-      const wrapper = mountViewer({ file: makeFile({ originalName: 'file.xyz', mimeType: 'application/octet-stream' }) })
+    it('shows unsupported preview message for unknown file types', async () => {
+      const wrapper = mountViewer({ file: makeFile({ originalName: 'archive.zip', mimeType: 'application/zip' }) })
       await flushPromises()
-      expect(wrapper.text()).toContain('plain text')
+      expect(wrapper.text()).toContain('No preview available for .zip files')
+      expect(wrapper.text()).toContain('Download raw file')
     })
   })
 
