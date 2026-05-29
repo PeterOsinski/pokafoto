@@ -93,7 +93,7 @@ describe('ThumbnailCard', () => {
 
     it('does not show duration badge for photos', () => {
       const file = makeFile({ durationSec: 30 })
-      const wrapper = mount(ThumbnailCard, { props: { file } })
+      const wrapper = mount(ThumbnailCard, { props: { file, selectable: false } })
 
       expect(wrapper.text()).not.toContain(':')
     })

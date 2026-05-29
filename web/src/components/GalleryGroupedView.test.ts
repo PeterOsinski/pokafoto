@@ -24,7 +24,7 @@ describe('GalleryGroupedView', () => {
       makeFile('2', { takenAt: '2024-03-15T14:00:00Z' }),
       makeFile('3', { takenAt: '2024-03-16T09:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files } })
+    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -37,7 +37,7 @@ describe('GalleryGroupedView', () => {
       makeFile('1', { takenAt: '2024-01-15T10:00:00Z' }),
       makeFile('2', { takenAt: '2024-03-20T10:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files } })
+    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -51,7 +51,7 @@ describe('GalleryGroupedView', () => {
       makeFile('2', { takenAt: undefined }),
       makeFile('3', { takenAt: undefined }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files } })
+    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(2)
@@ -66,18 +66,18 @@ describe('GalleryGroupedView', () => {
       makeFile('1', { takenAt: '2024-03-15T10:00:00Z' }),
       makeFile('2', { takenAt: '2024-03-16T10:00:00Z' }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files } })
+    const wrapper = mount(GalleryGroupedView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const grids = wrapper.findAll('.grid')
-    const firstGroupCards = grids[0].findAll('.grid > div')
-    await firstGroupCards[0].trigger('click')
+    const firstGroup = grids[0]
+    await firstGroup.find('.cursor-pointer').trigger('click')
 
     expect(wrapper.emitted('open')).toBeTruthy()
     expect(wrapper.emitted('open')![0]).toEqual([1])
   })
 
   it('handles empty files array', () => {
-    const wrapper = mount(GalleryGroupedView, { props: { files: [] } })
+    const wrapper = mount(GalleryGroupedView, { props: { files: [], selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const headers = wrapper.findAll('h3')
     expect(headers.length).toBe(0)
@@ -94,7 +94,7 @@ describe('GalleryGroupedView', () => {
         },
       }),
     ]
-    const wrapper = mount(GalleryGroupedView, { props: { files, thumbSize: 'sm' } })
+    const wrapper = mount(GalleryGroupedView, { props: { files, thumbSize: 'sm', selectedIds: new Set<string>(), selectionEnabled: true } })
 
     const img = wrapper.find('img')
     expect(img.attributes('src')).toBe('/thumb/1-lg.jpg')

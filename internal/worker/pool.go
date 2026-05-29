@@ -46,6 +46,7 @@ type UploadJob struct {
 	OriginalName  string
 	Size          int64
 	TempPath      string
+	FolderID      *string
 	Status        JobStatus
 	Stage         JobStage
 	Progress      float64
@@ -144,7 +145,7 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 	return p
 }
 
-func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, tempPath string) *UploadJob {
+func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, tempPath string, folderID *string) *UploadJob {
 	job := &UploadJob{
 		JobID:        uuid.New().String(),
 		BatchID:      batchID,
@@ -153,6 +154,7 @@ func (p *Pool) Enqueue(batchID, userID string, originalName string, size int64, 
 		OriginalName: originalName,
 		Size:         size,
 		TempPath:     tempPath,
+		FolderID:     folderID,
 		Status:       JobQueued,
 	}
 
@@ -402,6 +404,7 @@ func (p *Pool) processJob(job *UploadJob) {
 		SHA256:       sha256Hash,
 		MediaType:    mediaType,
 		TakenAt:      takenAt,
+		FolderID:     job.FolderID,
 	}
 
 	if err := p.fileStore.Create(fileRecord); err != nil {

@@ -49,7 +49,7 @@ func TestPool_Enqueue_shouldReturnJob(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	job := pool.Enqueue("batch-1", "user-1", "photo.jpg", 1024, tmpPath)
+	job := pool.Enqueue("batch-1", "user-1", "photo.jpg", 1024, tmpPath, nil)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}
@@ -66,8 +66,8 @@ func TestPool_GetBatch_shouldReturnBatch(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	pool.Enqueue("batch-2", "user-1", "photo.jpg", 1024, tmpPath)
-	pool.Enqueue("batch-2", "user-1", "photo2.jpg", 2048, tmpPath)
+	pool.Enqueue("batch-2", "user-1", "photo.jpg", 1024, tmpPath, nil)
+	pool.Enqueue("batch-2", "user-1", "photo2.jpg", 2048, tmpPath, nil)
 
 	batch := pool.GetBatch("batch-2")
 	if batch == nil {
@@ -92,7 +92,7 @@ func TestPool_Subscribe_shouldReceiveUpdates(t *testing.T) {
 		t.Fatal("expected channel, got nil")
 	}
 
-	job := pool.Enqueue("batch-3", "user-1", "photo.jpg", 1024, tmpPath)
+	job := pool.Enqueue("batch-3", "user-1", "photo.jpg", 1024, tmpPath, nil)
 
 	select {
 	case update := <-ch:
@@ -113,7 +113,7 @@ func TestPool_Shutdown_shouldNotPanic(t *testing.T) {
 
 	tmpPath, _ := createTempUploadFile(t)
 
-	pool.Enqueue("batch-4", "user-1", "photo.jpg", 1024, tmpPath)
+	pool.Enqueue("batch-4", "user-1", "photo.jpg", 1024, tmpPath, nil)
 
 	pool.Shutdown()
 
@@ -135,7 +135,7 @@ func TestPool_Enqueue_shouldBlockWhenFull(t *testing.T) {
 	tmpPath, _ := createTempUploadFile(t)
 
 	for i := 0; i < 10; i++ {
-		pool.Enqueue("batch-5", "user-1", "photo.jpg", 1024, tmpPath)
+		pool.Enqueue("batch-5", "user-1", "photo.jpg", 1024, tmpPath, nil)
 	}
 
 	batch := pool.GetBatch("batch-5")
@@ -325,7 +325,7 @@ func TestPool_WorkerRecovery_poolShouldNotDie(t *testing.T) {
 			t.Fatalf("write temp file: %v", err)
 		}
 		info, _ := os.Stat(path)
-		pool.Enqueue("batch-recovery", u.ID, fmt.Sprintf("file_%d.bin", i), info.Size(), path)
+		pool.Enqueue("batch-recovery", u.ID, fmt.Sprintf("file_%d.bin", i), info.Size(), path, nil)
 	}
 
 	time.Sleep(200 * time.Millisecond)
@@ -385,7 +385,7 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 	}
 
 	info, _ := os.Stat(tmpPath)
-	job := pool.Enqueue("batch-files", u.ID, "document.pdf", info.Size(), tmpPath)
+	job := pool.Enqueue("batch-files", u.ID, "document.pdf", info.Size(), tmpPath, nil)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}
@@ -424,7 +424,7 @@ func TestPool_SubscribeUser_shouldReceiveUpdates(t *testing.T) {
 		t.Fatal("expected channel, got nil")
 	}
 
-	job := pool.Enqueue("batch-global", "user-global", "photo.jpg", 1024, tmpPath)
+	job := pool.Enqueue("batch-global", "user-global", "photo.jpg", 1024, tmpPath, nil)
 
 	select {
 	case update := <-ch:
@@ -469,7 +469,7 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 	}
 
 	info, _ := os.Stat(tmpPath)
-	job := pool.Enqueue("batch-skip", u.ID, "document.pdf", info.Size(), tmpPath)
+	job := pool.Enqueue("batch-skip", u.ID, "document.pdf", info.Size(), tmpPath, nil)
 	if job == nil {
 		t.Fatal("expected job, got nil")
 	}

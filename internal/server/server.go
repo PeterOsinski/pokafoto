@@ -20,6 +20,7 @@ type Server struct {
 	userStore      *store.UserStore
 	sessStore      *store.SessionStore
 	fileStore      *store.FileStore
+	folderStore    *store.FolderStore
 	exifStore      *store.ExifStore
 	thumbnailStore *store.ThumbnailStore
 	geoStore       *store.GeoStore
@@ -34,6 +35,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		userStore:      store.NewUserStore(db),
 		sessStore:      store.NewSessionStore(db),
 		fileStore:      store.NewFileStore(db),
+		folderStore:    store.NewFolderStore(db),
 		exifStore:      store.NewExifStore(db),
 		thumbnailStore: store.NewThumbnailStore(db),
 		geoStore:       store.NewGeoStore(db),
@@ -114,8 +116,16 @@ func (s *Server) registerRoutes(r *chi.Mux) {
 			r.Get("/files/{id}", s.handleGetFile)
 			r.Delete("/files/{id}", s.handleSoftDeleteFile)
 			r.Delete("/files/{id}/permanent", s.handlePermanentDeleteFile)
+			r.Post("/files/batch-delete", s.handleBatchSoftDelete)
+			r.Post("/files/batch-move", s.handleBatchMove)
+			r.Post("/files/batch-copy", s.handleBatchCopy)
 
 			r.Get("/dirs", s.handleListDirs)
+
+			r.Get("/folders", s.handleListFolders)
+			r.Post("/folders", s.handleCreateFolder)
+			r.Put("/folders/{id}", s.handleRenameFolder)
+			r.Delete("/folders/{id}", s.handleDeleteFolder)
 
 			r.Get("/search", s.handleSearch)
 

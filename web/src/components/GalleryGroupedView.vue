@@ -6,8 +6,17 @@
         <span class="font-normal text-xs">· {{ group.files.length }} {{ group.files.length === 1 ? 'photo' : 'photos' }}</span>
       </h3>
       <div class="grid gap-2" :class="gridClass">
-        <div v-for="item in group.files" :key="item.file.id" @click="$emit('open', item.index)">
-          <ThumbnailCard :file="item.file" :thumbSize="thumbSize" />
+        <div v-for="item in group.files" :key="item.file.id">
+          <ThumbnailCard
+            :file="item.file"
+            :thumbSize="thumbSize"
+            :selected="selectedIds.has(item.file.id)"
+            :selectable="selectionEnabled"
+            :anySelected="selectedIds.size > 0"
+            @select="$emit('select', item.file.id)"
+            @deselect="$emit('deselect', item.file.id)"
+            @open="$emit('open', item.index)"
+          />
         </div>
       </div>
     </div>
@@ -27,6 +36,7 @@ interface FileItem {
   mediaType: string
   durationSec?: number
   takenAt?: string
+  folder_id?: string | null
   thumbnails?: {
     sm?: { url: string; width: number; height: number }
     lg?: { url: string; width: number; height: number }
@@ -50,9 +60,13 @@ interface DayGroup {
 const props = defineProps<{
   files: FileItem[]
   thumbSize?: 'sm' | 'md' | 'lg'
+  selectedIds: Set<string>
+  selectionEnabled: boolean
 }>()
 
 defineEmits<{
+  select: [id: string]
+  deselect: [id: string]
   open: [index: number]
 }>()
 

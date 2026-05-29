@@ -1,6 +1,38 @@
 <template>
   <div>
     <h2 class="text-xl font-bold mb-6 text-[var(--text-primary)]">Upload</h2>
+
+    <div class="mb-4">
+      <label class="block text-sm text-[var(--text-secondary)] mb-2">Target folder</label>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button
+          @click="targetFolderId = null"
+          class="px-3 py-1.5 rounded text-sm transition-colors"
+          :class="targetFolderId === null ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
+          :style="targetFolderId === null ? { background: 'var(--accent)' } : { background: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }"
+        >
+          Auto-organize by date
+        </button>
+        <button
+          v-for="f in recentFolders"
+          :key="f.id"
+          @click="targetFolderId = f.id"
+          class="px-3 py-1.5 rounded text-sm transition-colors"
+          :class="targetFolderId === f.id ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
+          :style="targetFolderId === f.id ? { background: 'var(--accent)' } : { background: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }"
+        >
+          {{ f.name }}
+        </button>
+        <button
+          @click="showFolderPicker = true"
+          class="px-3 py-1.5 rounded text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          style="background: var(--bg-elevated); border: 1px solid var(--border-color)"
+        >
+          Browse...
+        </button>
+      </div>
+    </div>
+
     <div
       class="border-2 border-dashed rounded-xl p-12 text-center transition-colors"
       :class="dragOver ? 'border-[var(--accent)]' : 'border-[var(--border-color)]'"
@@ -25,7 +57,7 @@
 
     <div v-if="jobs.length > 0" class="mt-6" style="background: var(--bg-surface); border-radius: 0.5rem; padding: 1rem">
       <h3 class="text-sm font-semibold mb-3 text-[var(--text-primary)]">Upload Queue</h3>
-      <div v-for="job in sortedJobs" :key="job.job_id" class="flex items-center gap-3 py-2 text-sm">
+      <div v-for="job in sortedJobs" :key="job.job_id" class="flex items-center gap-3 py-2 text-sm" data-testid="upload-queue-item">
         <span class="truncate flex-1 text-[var(--text-primary)]">{{ job.filename }}</span>
         <div v-if="(job.status === 'processing' || job.status === 'uploading') && job.progress !== undefined" class="w-24 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-elevated)">
           <div class="h-full rounded-full transition-all" style="background: var(--accent)" :style="{ width: (job.progress * 100) + '%' }"></div>
@@ -37,6 +69,14 @@
         </div>
       </div>
     </div>
+
+    <FolderPickerDialog
+      :open="showFolderPicker"
+      title="Select target folder"
+      actionLabel="Select"
+      @close="showFolderPicker = false"
+      @confirm="(folderId) => { targetFolderId = folderId; showFolderPicker = false }"
+    />
   </div>
 </template>
 
@@ -44,6 +84,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
+import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 
 interface Job {
   job_id: string
@@ -56,10 +97,19 @@ interface Job {
   uploaded?: number
 }
 
+interface FolderInfo {
+  id: string
+  name: string
+  parent_id: string | null
+}
+
 const auth = useAuthStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 const jobs = ref<Job[]>([])
+const targetFolderId = ref<string | null>(null)
+const recentFolders = ref<FolderInfo[]>([])
+const showFolderPicker = ref(false)
 
 let globalWs: WebSocket | null = null
 
@@ -109,8 +159,24 @@ function connectGlobalWS() {
   }
 }
 
+async function loadFolders() {
+  try {
+    const res = await api.get('/folders')
+    const flatten = (nodes: any[]): FolderInfo[] => {
+      let result: FolderInfo[] = []
+      for (const n of nodes) {
+        result.push({ id: n.folder.id, name: n.folder.name, parent_id: n.folder.parent_id })
+        result = result.concat(flatten(n.children || []))
+      }
+      return result
+    }
+    recentFolders.value = flatten(res.data.children || []).slice(0, 6)
+  } catch {}
+}
+
 onMounted(() => {
   connectGlobalWS()
+  loadFolders()
 })
 
 onUnmounted(() => {
@@ -177,6 +243,9 @@ async function uploadFiles(fileList: FileList | File[]) {
 
       const form = new FormData()
       form.append('files', file)
+      if (targetFolderId.value) {
+        form.append('folder_id', targetFolderId.value)
+      }
 
       try {
         const res = await api.post('/upload', form, {

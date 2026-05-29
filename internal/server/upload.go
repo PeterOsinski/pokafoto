@@ -75,7 +75,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		file.Close()
 		tempFile.Seek(0, 0)
 
-		job := s.workerPool.Enqueue(batchID, userID, fh.Filename, fh.Size, tempFile.Name())
+		job := s.workerPool.Enqueue(batchID, userID, fh.Filename, fh.Size, tempFile.Name(), folderIDFromForm(r))
 
 		tempFile.Close()
 
@@ -90,6 +90,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		"batch_id": batchID,
 		"jobs":     jobs,
 	})
+}
+
+func folderIDFromForm(r *http.Request) *string {
+	folderID := r.FormValue("folder_id")
+	if folderID == "" {
+		return nil
+	}
+	return &folderID
 }
 
 func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {

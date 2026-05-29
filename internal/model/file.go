@@ -24,6 +24,7 @@ type File struct {
 	Height       *int      `json:"height,omitempty" db:"height"`
 	DurationSec  *float64  `json:"duration_sec,omitempty" db:"duration_sec"`
 	TakenAt      *string   `json:"taken_at,omitempty" db:"taken_at"`
+	FolderID     *string   `json:"folder_id,omitempty" db:"folder_id"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	IsDeleted    bool      `json:"is_deleted" db:"is_deleted"`

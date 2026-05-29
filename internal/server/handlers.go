@@ -24,6 +24,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	opts := store.FileListOptions{
 		UserID:    userID,
 		Path:      r.URL.Query().Get("path"),
+		FolderID:  folderIDFromQuery(r),
 		Cursor:    r.URL.Query().Get("cursor"),
 		Limit:     limit,
 		Sort:      r.URL.Query().Get("sort"),
@@ -61,6 +62,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 			Height:       f.Height,
 			DurationSec:  f.DurationSec,
 			TakenAt:      f.TakenAt,
+			FolderID:     f.FolderID,
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
 			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
 		}
@@ -100,6 +102,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 		Height:       file.Height,
 		DurationSec:  file.DurationSec,
 		TakenAt:      file.TakenAt,
+		FolderID:     file.FolderID,
 		CreatedAt:    file.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:    file.UpdatedAt.Format(timeRFC3339),
 		Thumbnails:   buildThumbnailSet(file.ID, file.MediaType),
@@ -125,6 +128,71 @@ func (s *Server) handleSoftDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchSoftDelete(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty ids array")
+		return
+	}
+
+	if err := s.fileStore.BatchSoftDelete(userID, req.IDs); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete files")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchMove(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		IDs      []string `json:"ids"`
+		FolderID *string  `json:"folder_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty ids array")
+		return
+	}
+
+	if err := s.fileStore.BatchMove(userID, req.IDs, req.FolderID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move files")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchCopy(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		IDs      []string `json:"ids"`
+		FolderID *string  `json:"folder_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty ids array")
+		return
+	}
+
+	copies, err := s.fileStore.BatchCopy(userID, req.IDs, req.FolderID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to copy files")
+		return
+	}
+
+	copyIDs := make([]string, len(copies))
+	for i, c := range copies {
+		copyIDs[i] = c.ID
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count": len(copies),
+		"ids":   copyIDs,
+	})
 }
 
 func (s *Server) handlePermanentDeleteFile(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +290,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			Height:       f.Height,
 			DurationSec:  f.DurationSec,
 			TakenAt:      f.TakenAt,
+			FolderID:     f.FolderID,
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
 			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
 		}
@@ -478,6 +547,7 @@ type fileResponse struct {
 	Height       *int                  `json:"height,omitempty"`
 	DurationSec  *float64              `json:"durationSec,omitempty"`
 	TakenAt      *string               `json:"takenAt,omitempty"`
+	FolderID     *string               `json:"folder_id,omitempty"`
 	CreatedAt    string                `json:"createdAt"`
 	UpdatedAt    string                `json:"updatedAt,omitempty"`
 	Thumbnails   *thumbnailSetResponse `json:"thumbnails,omitempty"`
@@ -536,3 +606,17 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 }
 
 var timeRFC3339 = "2006-01-02T15:04:05Z07:00"
+
+func folderIDFromQuery(r *http.Request) *string {
+	v := r.URL.Query().Get("folder_id")
+	if v == "" {
+		return nil
+	}
+	s := new(string)
+	if v == "root" {
+		*s = ""
+	} else {
+		*s = v
+	}
+	return s
+}

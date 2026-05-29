@@ -83,7 +83,7 @@ describe('UploadView', () => {
     input.trigger('change')
     await wrapper.vm.$nextTick()
 
-    const items = wrapper.findAll('.flex.items-center')
+    const items = wrapper.findAll('[data-testid="upload-queue-item"]')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('test.jpg')
     expect(items[0].text()).toContain('0%')
@@ -115,7 +115,7 @@ describe('UploadView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await wrapper.vm.$nextTick()
 
-    const items = wrapper.findAll('.flex.items-center')
+    const items = wrapper.findAll('[data-testid="upload-queue-item"]')
     expect(items.length).toBe(2)
 
     const skippedItem = items.find((el) => el.text().includes('existing.jpg'))
@@ -193,7 +193,7 @@ describe('UploadView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await wrapper.vm.$nextTick()
 
-    const items = wrapper.findAll('.flex.items-center')
+    const items = wrapper.findAll('[data-testid="upload-queue-item"]')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('queued')
   })
@@ -220,7 +220,7 @@ describe('UploadView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await wrapper.vm.$nextTick()
 
-    const items = wrapper.findAll('.flex.items-center')
+    const items = wrapper.findAll('[data-testid="upload-queue-item"]')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('failed')
   })
@@ -288,7 +288,7 @@ describe('UploadView', () => {
 
     await wrapper.vm.$nextTick()
 
-    const items = wrapper.findAll('.flex.items-center')
+    const items = wrapper.findAll('[data-testid="upload-queue-item"]')
     expect(items[0].text()).toContain('hashing')
   })
 })
