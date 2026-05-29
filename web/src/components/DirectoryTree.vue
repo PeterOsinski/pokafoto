@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 
@@ -63,12 +63,24 @@ function toggle(path: string) {
   openPaths.value = new Set(openPaths.value)
 }
 
-onMounted(async () => {
+async function loadDirs() {
   try {
-    const res = await api.get('/dirs')
+    const params: any = {}
+    if (route.query.all_folders === 'true') {
+      params.all_folders = 'true'
+    }
+    const res = await api.get('/dirs', { params })
     root.value = res.data
   } catch (e) {
     console.error('Failed to load dirs', e)
   }
+}
+
+onMounted(() => {
+  loadDirs()
+})
+
+watch(() => route.query.all_folders, () => {
+  loadDirs()
 })
 </script>

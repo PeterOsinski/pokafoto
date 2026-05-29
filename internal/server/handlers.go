@@ -246,8 +246,9 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListDirs(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
+	allFolders := r.URL.Query().Get("all_folders") == "true"
 
-	root, err := s.fileStore.ListDirs(userID)
+	root, err := s.fileStore.ListDirs(userID, allFolders)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list directories")
 		return

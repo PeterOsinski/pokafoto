@@ -226,8 +226,13 @@ type DirEntry struct {
 	Children  []*DirEntry `json:"children,omitempty"`
 }
 
-func (s *FileStore) ListDirs(userID string) (*DirEntry, error) {
-	rows, err := s.db.Query(`SELECT path FROM files WHERE user_id = ? AND is_deleted = 0`, userID)
+func (s *FileStore) ListDirs(userID string, allFolders bool) (*DirEntry, error) {
+	query := `SELECT path FROM files WHERE user_id = ? AND is_deleted = 0`
+	args := []interface{}{userID}
+	if !allFolders {
+		query += ` AND folder_id IS NULL`
+	}
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query dirs: %w", err)
 	}

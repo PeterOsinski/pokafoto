@@ -214,6 +214,7 @@ List files with pagination, sorting, and filtering.
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `folder_id` | string | — | Filter by folder UUID. `folders` layout passes `folder_id=uuid`. Root view omits this param (filters `folder_id IS NULL`). Value `root` also means root. |
+| `all_folders` | string | `""` | When `"true"`, includes files from all user folders (no `folder_id` filter). When empty/false, only root-level files (`folder_id IS NULL`). |
 | `path` | string | `""` | Directory path to list (empty = root) |
 | `cursor` | string | — | Pagination cursor (file ID) |
 | `limit` | int | 100 | Items per page (max 500) |
@@ -472,8 +473,7 @@ Get directory tree structure.
 **Query Parameters:**
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `path` | string | `""` | Root path to start from |
-| `depth` | int | `1` | How many levels deep |
+| `all_folders` | string | `""` | When `"true"`, includes directories from files in all user folders. When empty/false, only includes files at root (`folder_id IS NULL`). |
 
 **Response:** `200 OK`
 ```json

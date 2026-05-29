@@ -325,7 +325,7 @@ func TestFileStore_ListDirs_shouldBuildTree(t *testing.T) {
 	user := createTestUser(t, us)
 	createTestFile(t, fs, user.ID, "img1.jpg")
 
-	root, err := fs.ListDirs(user.ID)
+	root, err := fs.ListDirs(user.ID, false)
 	if err != nil {
 		t.Fatalf("list dirs: %v", err)
 	}
