@@ -9,6 +9,7 @@ func OpenTestDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 
 	if err := db.RunMigrations(); err != nil {
