@@ -33,6 +33,7 @@ type Pool struct {
 	totalWorkers     int
 	wg               sync.WaitGroup
 	stopCh           chan struct{}
+	jobCh            chan *model.UploadJob
 	subscribers      map[string]map[string]chan *model.UploadJob
 	subMu            sync.RWMutex
 	userSubscribers  map[string]map[string]chan *model.UploadJob
@@ -78,6 +79,7 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		uploadJobStore:   uploadJobStore,
 		totalWorkers:     workers,
 		stopCh:           make(chan struct{}),
+		jobCh:            make(chan *model.UploadJob, workers*2),
 		subscribers:      make(map[string]map[string]chan *model.UploadJob),
 		userSubscribers:  make(map[string]map[string]chan *model.UploadJob),
 		processingJobs:   make(map[string]*model.UploadJob),
@@ -89,6 +91,9 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		p.wg.Add(1)
 		go p.worker(i)
 	}
+
+	p.wg.Add(1)
+	go p.claimer()
 
 	return p
 }
@@ -111,7 +116,7 @@ func (p *Pool) recoverStuckJobs() {
 	}
 }
 
-func (p *Pool) worker(id int) {
+func (p *Pool) claimer() {
 	defer p.wg.Done()
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -123,11 +128,33 @@ func (p *Pool) worker(id int) {
 		case <-ticker.C:
 			job, err := p.uploadJobStore.Claim()
 			if err != nil {
-				slog.Warn("worker claim failed", "worker_id", id, "error", err)
+				slog.Warn("claimer claim failed", "error", err)
 				continue
 			}
 			if job == nil {
 				continue
+			}
+			select {
+			case p.jobCh <- job:
+			default:
+				p.uploadJobStore.Fail(job.ID, "worker_at_capacity")
+				p.notifySubscribers(job)
+				p.failedTotal.Add(1)
+			}
+		}
+	}
+}
+
+func (p *Pool) worker(id int) {
+	defer p.wg.Done()
+
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case job, ok := <-p.jobCh:
+			if !ok {
+				return
 			}
 
 			if _, err := os.Stat(job.TempPath); os.IsNotExist(err) {
@@ -314,6 +341,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	}
 
 	if err := p.fileStore.Create(fileRecord); err != nil {
+		os.Remove(job.TempPath)
 		os.Remove(destPath)
 		p.uploadJobStore.Fail(job.ID, "db_error")
 		p.notifySubscribers(job)

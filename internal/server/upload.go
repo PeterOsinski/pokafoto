@@ -48,7 +48,18 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		tempFile, err := os.CreateTemp("", "drive-upload-*")
+		tempDir := s.cfg.StoragePath("tmp")
+		if err := os.MkdirAll(tempDir, 0755); err != nil {
+			file.Close()
+			jobs = append(jobs, map[string]interface{}{
+				"job_id":   uuid.New().String(),
+				"filename": fh.Filename,
+				"status":   "failed",
+				"reason":   "temp_file_error",
+			})
+			continue
+		}
+		tempFile, err := os.CreateTemp(tempDir, "drive-upload-*")
 		if err != nil {
 			file.Close()
 			jobs = append(jobs, map[string]interface{}{
