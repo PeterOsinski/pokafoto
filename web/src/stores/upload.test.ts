@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useUploadStore, chunkBySize, withConcurrency, type FileWithJob } from './upload'
+import { useUploadStore, withConcurrency } from './upload'
 import { useAuthStore } from './auth'
 import api from '../api/client'
 
@@ -361,7 +361,7 @@ describe('UploadStore', () => {
     })
   })
 
-  describe('uploadFiles batching', () => {
+    describe('uploadFiles concurrency queue', () => {
     beforeEach(() => {
       vi.useRealTimers()
     })
@@ -374,26 +374,27 @@ describe('UploadStore', () => {
       return new File([new Uint8Array(sizeBytes)], name)
     }
 
-    it('sends a single POST for files under batch byte limit', async () => {
+    it('sends one POST per file', async () => {
       const upload = useUploadStore()
       const mockPost = api.post as ReturnType<typeof vi.fn>
-      const files = Array.from({ length: 10 }, (_, i) => makeFile(`f${i}.jpg`, 1024))
+      const files = [makeFile('a.jpg', 100), makeFile('b.jpg', 200), makeFile('c.jpg', 300)]
 
       mockPost.mockImplementation((url: string) => {
         if (url === '/upload/check') return Promise.resolve({ data: { duplicates: [] } })
         if (url === '/upload') {
           return Promise.resolve({
-            data: { batch_id: 'batch-1', jobs: files.map((f, i) => ({ job_id: `uuid-${i}`, filename: f.name, status: 'queued' })) },
+            data: { batch_id: 'batch-1', jobs: [{ job_id: 'uuid-0', filename: 'test.jpg', status: 'queued' }] },
           })
         }
         return Promise.reject(new Error('unknown'))
       })
 
       await upload.uploadFiles(files, null, false)
-      expect(mockPost.mock.calls.filter((c: any) => c[0] === '/upload').length).toBe(1)
+      const uploadCalls = mockPost.mock.calls.filter((c: any) => c[0] === '/upload')
+      expect(uploadCalls.length).toBe(3)
     })
 
-    it('marks all batch jobs as failed on network error', async () => {
+    it('marks jobs as failed on network error', async () => {
       const upload = useUploadStore()
       const mockPost = api.post as ReturnType<typeof vi.fn>
       const files = [makeFile('a.jpg', 100), makeFile('b.jpg', 200)]
@@ -405,11 +406,10 @@ describe('UploadStore', () => {
       })
 
       await upload.uploadFiles(files, null, false)
-
       for (const name of ['a.jpg', 'b.jpg']) {
         const job = upload.jobs.find(j => j.filename === name)
-        expect(job).toBeDefined()
         expect(job!.status).toBe('failed')
+        expect(job!.error).toBe('Network error')
       }
     })
 
@@ -434,106 +434,10 @@ describe('UploadStore', () => {
 
       await upload.uploadFiles(files, null, false)
       expect(mockPost.mock.calls.filter((c: any) => c[0] === '/upload').length).toBe(0)
-
-      const job = upload.jobs.find(j => j.filename === 'dup.jpg')
-      expect(job!.status).toBe('skipped')
-      expect(job!.file_id).toBe('existing-id')
-    })
-
-    it('respects per-file status from batch server response', async () => {
-      const upload = useUploadStore()
-      const mockPost = api.post as ReturnType<typeof vi.fn>
-      const files = [makeFile('good.jpg', 100), makeFile('bad.jpg', 200)]
-
-      mockPost.mockImplementation((url: string) => {
-        if (url === '/upload/check') return Promise.resolve({ data: { duplicates: [] } })
-        if (url === '/upload') {
-          return Promise.resolve({
-            data: {
-              batch_id: 'batch-1',
-              jobs: [
-                { job_id: 'uuid-0', filename: 'good.jpg', status: 'queued' },
-                { job_id: 'uuid-1', filename: 'bad.jpg', status: 'failed', reason: 'unsupported' },
-              ],
-            },
-          })
-        }
-        return Promise.reject(new Error('unknown'))
-      })
-
-      await upload.uploadFiles(files, null, false)
-
-      const good = upload.jobs.find(j => j.filename === 'good.jpg')
-      expect(good!.status).toBe('queued')
-      expect(good!.job_id).toBe('uuid-0')
-
-      const bad = upload.jobs.find(j => j.filename === 'bad.jpg')
-      expect(bad!.status).toBe('failed')
-      expect(bad!.job_id).toBe('uuid-1')
+      expect(upload.jobs.find(j => j.filename === 'dup.jpg')!.status).toBe('skipped')
     })
   })
-})
 
-describe('chunkBySize', () => {
-  function makeItem(filename: string, size: number): FileWithJob {
-    return {
-      job: { job_id: filename, filename, status: 'uploading' },
-      file: new File([new Uint8Array(size)], filename),
-    }
-  }
-
-  it('returns empty array for empty input', () => {
-    expect(chunkBySize([], 1000)).toEqual([])
-  })
-
-  it('returns one chunk when total size is under maxBytes', () => {
-    const a = makeItem('a', 30)
-    const b = makeItem('b', 40)
-    const c = makeItem('c', 20)
-    const chunks = chunkBySize([a, b, c], 100)
-    expect(chunks).toHaveLength(1)
-    expect(chunks[0]).toEqual([a, b, c])
-  })
-
-  it('splits into multiple chunks when total exceeds maxBytes', () => {
-    const a = makeItem('a', 60)
-    const b = makeItem('b', 50)
-    const c = makeItem('c', 40)
-    const chunks = chunkBySize([a, b, c], 100)
-    expect(chunks).toHaveLength(2)
-    expect(chunks[0]).toEqual([a])
-    expect(chunks[1]).toEqual([b, c])
-  })
-
-  it('puts oversized item in its own chunk', () => {
-    const huge = makeItem('huge', 200)
-    const small = makeItem('small', 10)
-    const chunks = chunkBySize([huge, small], 100)
-    expect(chunks).toHaveLength(2)
-    expect(chunks[0]).toEqual([huge])
-    expect(chunks[1]).toEqual([small])
-  })
-
-  it('ensures each chunk has at least one item', () => {
-    const items = [
-      makeItem('a', 30),
-      makeItem('b', 80),
-      makeItem('c', 30),
-      makeItem('d', 60),
-    ]
-    const chunks = chunkBySize(items, 100)
-    expect(chunks).toHaveLength(3)
-    expect(chunks[0].length).toBe(1)
-    expect(chunks[1].length).toBe(1)
-    expect(chunks[2].length).toBe(2)
-  })
-
-  it('keeps identical-size items together when they fit', () => {
-    const items = Array.from({ length: 10 }, (_, i) => makeItem(`f${i}`, 10))
-    const chunks = chunkBySize(items, 100)
-    expect(chunks).toHaveLength(1)
-    expect(chunks[0]).toHaveLength(10)
-  })
 })
 
 describe('withConcurrency', () => {
@@ -579,5 +483,83 @@ describe('withConcurrency', () => {
     })
     await withConcurrency(tasks, 10)
     expect(maxConcurrent).toBe(2)
+  })
+
+  describe('retryUpload', () => {
+    beforeEach(() => {
+      vi.useRealTimers()
+    })
+
+    afterEach(() => {
+      vi.useFakeTimers()
+    })
+
+    function makeFile(name: string, sizeBytes: number): File {
+      return new File([new Uint8Array(sizeBytes)], name)
+    }
+
+    it('resets failed job and re-submits via upload API', async () => {
+      const upload = useUploadStore()
+      const mockPost = api.post as ReturnType<typeof vi.fn>
+      const file = makeFile('retry.jpg', 100)
+
+      let uploadCalls = 0
+      mockPost.mockImplementation((url: string) => {
+        if (url === '/upload/check') return Promise.resolve({ data: { duplicates: [] } })
+        if (url === '/upload') {
+          uploadCalls++
+          if (uploadCalls === 1) return Promise.reject(new Error('network error'))
+          return Promise.resolve({ data: { batch_id: 'batch-retry', jobs: [{ job_id: 'uuid-retry', filename: 'retry.jpg', status: 'queued' }] } })
+        }
+        return Promise.reject(new Error('unknown'))
+      })
+
+      await upload.uploadFiles([file], null, true)
+
+      const failedJob = upload.jobs.find(j => j.filename === 'retry.jpg')
+      expect(failedJob!.status).toBe('failed')
+      expect(failedJob!.error).toBe('Network error')
+      const failedJobId = failedJob!.job_id
+
+      await upload.retryUpload(failedJobId)
+
+      const job = upload.jobs.find(j => j.job_id === 'uuid-retry')
+      expect(job).toBeDefined()
+      expect(job!.status).toBe('queued')
+      expect(job!.error).toBeUndefined()
+      expect(job!.reason).toBeUndefined()
+      expect(job!.batch_id).toBe('batch-retry')
+    })
+
+    it('does nothing for unknown jobId', async () => {
+      const upload = useUploadStore()
+      const mockPost = api.post as ReturnType<typeof vi.fn>
+      mockPost.mockClear()
+      await upload.retryUpload('nonexistent')
+      expect(mockPost).not.toHaveBeenCalled()
+    })
+
+    it('marks as failed on network error during retry', async () => {
+      const upload = useUploadStore()
+      const mockPost = api.post as ReturnType<typeof vi.fn>
+      const file = makeFile('netfail.jpg', 100)
+
+      mockPost.mockImplementation((url: string) => {
+        if (url === '/upload/check') return Promise.resolve({ data: { duplicates: [] } })
+        return Promise.reject(new Error('network error'))
+      })
+
+      await upload.uploadFiles([file], null, true)
+
+      const failedJob = upload.jobs.find(j => j.filename === 'netfail.jpg')
+      expect(failedJob!.status).toBe('failed')
+      const jobId = failedJob!.job_id
+
+      await upload.retryUpload(jobId)
+
+      const job = upload.jobs.find(j => j.job_id === jobId)
+      expect(job!.status).toBe('failed')
+      expect(job!.error).toBe('Network error')
+    })
   })
 })

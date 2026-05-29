@@ -3,35 +3,7 @@ import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
 import api from '../api/client'
 
-const MAX_BATCH_BYTES = 100 * 1024 * 1024
-const MAX_CONCURRENT_UPLOADS = 3
-
-interface FileWithJob {
-  job: UploadJob
-  file: File
-}
-
-function chunkBySize(items: FileWithJob[], maxBytes: number): FileWithJob[][] {
-  const chunks: FileWithJob[][] = []
-  let current: FileWithJob[] = []
-  let currentBytes = 0
-
-  for (const item of items) {
-    if (currentBytes + item.file.size > maxBytes && current.length > 0) {
-      chunks.push(current)
-      current = []
-      currentBytes = 0
-    }
-    current.push(item)
-    currentBytes += item.file.size
-  }
-
-  if (current.length > 0) {
-    chunks.push(current)
-  }
-
-  return chunks
-}
+const MAX_CONCURRENT_UPLOADS = 5
 
 async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = new Array(tasks.length)
@@ -50,6 +22,7 @@ async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): P
   return results
 }
 
+
 export interface UploadJob {
   job_id: string
   batch_id?: string
@@ -63,6 +36,8 @@ export interface UploadJob {
   reason?: string
   error?: string
   folder_id?: string | null
+  targetFolderId?: string | null
+  skipNameSizeDedup?: boolean
 }
 
 export interface CompletedJob {
@@ -81,6 +56,7 @@ export const useUploadStore = defineStore('upload', () => {
   let wsManualClose = false
 
   const pendingUpdates = new Map<string, Partial<UploadJob>>()
+  const retryFiles = new Map<string, File>()
 
   const activeJobs = computed(() => jobs.value.filter(j => j.status !== 'completed' && j.status !== 'skipped' && j.status !== 'failed'))
   const completedCount = computed(() => jobs.value.filter(j => j.status === 'completed').length)
@@ -159,6 +135,7 @@ export const useUploadStore = defineStore('upload', () => {
   function removeJob(jobId: string) {
     jobs.value = jobs.value.filter(j => j.job_id !== jobId)
     pendingUpdates.delete(jobId)
+    retryFiles.delete(jobId)
   }
 
   function clearCompleted() {
@@ -182,7 +159,10 @@ export const useUploadStore = defineStore('upload', () => {
         stage: 'uploading',
         size: file.size,
         uploaded: 0,
+        targetFolderId: targetFolderId,
+        skipNameSizeDedup: skipNameSizeDedup,
       })
+      retryFiles.set(jobId, file)
     }
     jobs.value = [...uploadJobs, ...jobs.value]
 
@@ -214,95 +194,185 @@ export const useUploadStore = defineStore('upload', () => {
       }
     }
 
-    const remaining: FileWithJob[] = []
-    for (const job of uploadJobs) {
-      const current = jobs.value.find(j => j.job_id === job.job_id)
-      if (current?.status === 'uploading') {
+    const uploadTasks = uploadJobs
+      .filter(job => {
+        const current = jobs.value.find(j => j.job_id === job.job_id)
+        return current?.status === 'uploading'
+      })
+      .map(job => {
         const file = fileMap.get(job.job_id)
-        if (file) {
-          remaining.push({ job, file })
-        }
-      }
-    }
+        if (!file) return null
 
-    if (remaining.length === 0) return
+        return async () => {
+          const currentIdx = jobs.value.findIndex(j => j.job_id === job.job_id)
+          if (currentIdx < 0) return
 
-    const batches = chunkBySize(remaining, MAX_BATCH_BYTES)
+          const form = new FormData()
+          form.append('files', file)
+          if (targetFolderId) {
+            form.append('folder_id', targetFolderId)
+          }
+          if (skipNameSizeDedup) {
+            form.append('skip_name_size_dedup', 'true')
+          }
 
-    const tasks = batches.map((batch) => async () => {
-      const form = new FormData()
-      for (const item of batch) {
-        form.append('files', item.file)
-      }
-      if (targetFolderId) {
-        form.append('folder_id', targetFolderId)
-      }
-      if (skipNameSizeDedup) {
-        form.append('skip_name_size_dedup', 'true')
-      }
+          try {
+            const res = await api.post('/upload', form, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+              onUploadProgress: (progressEvent: any) => {
+                if (!progressEvent.total) return
+                const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
+                const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+                if (idx >= 0) {
+                  jobs.value[idx] = {
+                    ...jobs.value[idx],
+                    progress: Math.round(progress * 100) / 100,
+                    uploaded: Math.round(progress * (job.size || 1)),
+                  }
+                }
+              },
+            })
 
-      try {
-        const res = await api.post('/upload', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (progressEvent: any) => {
-            if (!progressEvent.total) return
-            const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
-            for (const item of batch) {
-              const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
+            const batchId = res.data.batch_id as string
+            const realJobs: any[] = res.data.jobs || []
+            if (realJobs.length > 0) {
+              const realJob = realJobs[0]
+              const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
               if (idx >= 0) {
-                jobs.value[idx] = {
-                  ...jobs.value[idx],
-                  progress: Math.round(progress * 100) / 100,
-                  uploaded: Math.round(progress * (item.job.size || 1)),
+                const oldJobId = jobs.value[idx].job_id
+                const pending = pendingUpdates.get(realJob.job_id)
+                if (pending) {
+                  pendingUpdates.delete(realJob.job_id)
+                  jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0, ...pending }
+                } else {
+                  jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0 }
+                }
+                if (oldJobId !== realJob.job_id) {
+                  const f = retryFiles.get(oldJobId)
+                  if (f) {
+                    retryFiles.delete(oldJobId)
+                    retryFiles.set(realJob.job_id, f)
+                  }
                 }
               }
             }
-          },
-        })
-
-        const batchId = res.data.batch_id as string
-        const realJobs: any[] = res.data.jobs || []
-
-        for (let i = 0; i < batch.length && i < realJobs.length; i++) {
-          const item = batch[i]
-          const realJob = realJobs[i]
-          const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
-          if (idx >= 0) {
-            const pending = pendingUpdates.get(realJob.job_id)
-            if (pending) {
-              pendingUpdates.delete(realJob.job_id)
-              jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0, ...pending }
-            } else {
-              jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0 }
+          } catch {
+            const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+            if (idx >= 0) {
+              jobs.value[idx] = {
+                ...jobs.value[idx],
+                status: 'failed',
+                error: 'Network error',
+                stage: undefined,
+              }
             }
           }
         }
+      })
+      .filter(Boolean) as (() => Promise<void>)[]
 
-        for (let i = batch.length; i < realJobs.length; i++) {
-          addJob({
-            job_id: realJobs[i].job_id,
-            batch_id: batchId,
-            filename: realJobs[i].filename,
-            status: realJobs[i].status,
-            file_id: realJobs[i].file_id,
-            progress: 0,
-          })
+    await withConcurrency(uploadTasks, MAX_CONCURRENT_UPLOADS)
+  }
+
+  async function retryUpload(jobId: string) {
+    const idx = jobs.value.findIndex(j => j.job_id === jobId)
+    const file = retryFiles.get(jobId)
+    if (idx < 0 || !file) return
+
+    const job = jobs.value[idx]
+    const targetFolderId = job.targetFolderId ?? null
+    const skipNameSizeDedup = job.skipNameSizeDedup ?? true
+
+    jobs.value[idx] = {
+      ...job,
+      status: 'uploading',
+      progress: 0,
+      stage: 'uploading',
+      uploaded: 0,
+      error: undefined,
+      reason: undefined,
+      file_id: undefined,
+      batch_id: undefined,
+    }
+
+    if (!skipNameSizeDedup) {
+      try {
+        const checkRes = await api.post('/upload/check', [{ filename: file.name, size: file.size }])
+        const duplicate = (checkRes.data.duplicates || []).find((d: { filename: string; file_id: string }) => d.filename === file.name)
+        if (duplicate) {
+          jobs.value[idx] = {
+            ...jobs.value[idx],
+            status: 'skipped',
+            progress: 1,
+            file_id: duplicate.file_id,
+            stage: undefined,
+          }
+          return
         }
       } catch {
-        for (const item of batch) {
-          const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
-          if (idx >= 0) {
-            jobs.value[idx] = {
-              ...jobs.value[idx],
-              status: 'failed',
-              stage: undefined,
-            }
+        // continue with upload even if dedup check fails
+      }
+    }
+
+    const form = new FormData()
+    form.append('files', file)
+    if (targetFolderId) form.append('folder_id', targetFolderId)
+    if (skipNameSizeDedup) form.append('skip_name_size_dedup', 'true')
+
+    try {
+      const res = await api.post('/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent: any) => {
+          if (!progressEvent.total) return
+          const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
+          jobs.value[idx] = {
+            ...jobs.value[idx],
+            progress: Math.round(progress * 100) / 100,
+            uploaded: Math.round(progress * (job.size || 1)),
+          }
+        },
+      })
+
+      const batchId = res.data.batch_id as string
+      const realJobs: any[] = res.data.jobs || []
+
+      if (realJobs.length > 0) {
+        const realJob = realJobs[0]
+        const oldRetryJobId = jobs.value[idx].job_id
+        const pending = pendingUpdates.get(realJob.job_id)
+        if (pending) {
+          pendingUpdates.delete(realJob.job_id)
+          jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0, uploaded: 0, ...pending }
+        } else {
+          jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0, uploaded: 0 }
+        }
+        if (oldRetryJobId !== realJob.job_id) {
+          const rf = retryFiles.get(oldRetryJobId)
+          if (rf) {
+            retryFiles.delete(oldRetryJobId)
+            retryFiles.set(realJob.job_id, rf)
           }
         }
       }
-    })
 
-    await withConcurrency(tasks, MAX_CONCURRENT_UPLOADS)
+      for (let i = 1; i < realJobs.length; i++) {
+        addJob({
+          job_id: realJobs[i].job_id,
+          batch_id: batchId,
+          filename: realJobs[i].filename,
+          status: realJobs[i].status,
+          file_id: realJobs[i].file_id,
+          progress: 0,
+        })
+      }
+    } catch {
+      jobs.value[idx] = {
+        ...jobs.value[idx],
+        status: 'failed',
+        error: 'Network error',
+        stage: undefined,
+      }
+    }
   }
 
   function consumeCompletedJobs(): CompletedJob[] {
@@ -373,8 +443,9 @@ export const useUploadStore = defineStore('upload', () => {
     clearCompleted,
     consumeCompletedJobs,
     uploadFiles,
+    retryUpload,
   }
 })
 
-export { chunkBySize, withConcurrency, MAX_BATCH_BYTES, MAX_CONCURRENT_UPLOADS }
-export type { FileWithJob }
+export { withConcurrency, MAX_CONCURRENT_UPLOADS }
+

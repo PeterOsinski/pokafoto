@@ -26,30 +26,43 @@
       <div
         v-for="job in sortedJobs"
         :key="job.job_id"
-        class="flex items-center gap-3 py-1.5 text-sm"
+        class="py-1.5 text-sm"
       >
-        <span class="truncate flex-1 text-[var(--text-primary)] text-xs">{{ job.filename }}</span>
-        <div
-          v-if="(job.status === 'processing' || job.status === 'uploading') && job.progress !== undefined"
-          class="w-16 h-1 rounded-full overflow-hidden"
-          style="background: var(--bg-elevated)"
-        >
+        <div class="flex items-center gap-3">
+          <span class="truncate flex-1 text-[var(--text-primary)] text-xs">{{ job.filename }}</span>
           <div
-            class="h-full rounded-full transition-all"
-            style="background: var(--accent)"
-            :style="{ width: (job.progress * 100) + '%' }"
-          ></div>
+            v-if="(job.status === 'processing' || job.status === 'uploading') && job.progress !== undefined"
+            class="w-16 h-1 rounded-full overflow-hidden"
+            style="background: var(--bg-elevated)"
+          >
+            <div
+              class="h-full rounded-full transition-all"
+              style="background: var(--accent)"
+              :style="{ width: (job.progress * 100) + '%' }"
+            ></div>
+          </div>
+          <span class="text-xs w-14 text-right" :class="statusClass(job.status)">
+            {{ statusLabel(job) }}
+          </span>
+          <button
+            v-if="job.status === 'failed'"
+            @click="upload.retryUpload(job.job_id)"
+            class="text-xs px-1.5 py-0.5 rounded hover:bg-[var(--accent)] hover:text-white shrink-0"
+            style="color: var(--accent); border: 1px solid var(--accent)"
+          >
+            Retry
+          </button>
+          <button
+            v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'completed'"
+            @click="upload.removeJob(job.job_id)"
+            class="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            &#x2715;
+          </button>
         </div>
-        <span class="text-xs w-14 text-right" :class="statusClass(job.status)">
-          {{ statusLabel(job) }}
-        </span>
-        <button
-          v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'completed'"
-          @click="upload.removeJob(job.job_id)"
-          class="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        >
-          &#x2715;
-        </button>
+        <div v-if="job.status === 'failed' && (job.error || job.reason)" class="text-xs mt-0.5 truncate" :class="'text-[var(--error)]'" :title="job.error || job.reason">
+          {{ job.error || job.reason }}
+        </div>
       </div>
 
       <button

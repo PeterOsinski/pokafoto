@@ -272,6 +272,9 @@ func workerJobToMsg(job *model.UploadJob) map[string]interface{} {
 	if job.Error != nil {
 		msg["error"] = *job.Error
 	}
+	if job.Reason != nil {
+		msg["reason"] = *job.Reason
+	}
 	if job.Stage != nil {
 		msg["stage"] = *job.Stage
 	}
