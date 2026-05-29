@@ -123,6 +123,31 @@
 ```
 [📷 Photos] [🎬 Videos] [📄 All Files]  |  [Sort: Date ↓] [🔍 Search...]
 ```
+Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
+
+**Selection & Batch Operations:**
+- Checkboxes appear on thumbnails when navigating the gallery (always visible when any file is selected, hover-only otherwise)
+- Click to select/deselect individual files
+- Shift+click selects a range between two click positions
+- Selected files show a blue accent border with checkmark
+- **Action Bar** (sticky, appears when files are selected):
+  ```
+  [N selected]  [Delete] [Move] [Copy]  [Clear]
+  ```
+- Delete key triggers batch delete confirmation dialog
+- Move/Copy buttons open a **Folder Picker Dialog** — modal with folder tree and inline "New Folder" creation
+- Delete confirmation: modal warning about soft-delete (files go to trash, recoverable)
+
+**Folder Tree View (Folders layout):**
+- Replaces the thumbnail grid with a folder browser
+- Top-level shows folder cards with name, file count, folder icon
+- Click a folder card to navigate into it (URL updates: `?layout=folders&folder_id=uuid`)
+- "Back" button navigates up to parent
+- "+ New Folder" button in the header creates a folder in the current context
+- Inline creation: text input + Create/Cancel buttons
+- When inside a folder, show its immediate subfolders as cards and files as thumbnails below
+- Root-level folders have no parent; nested folders use `parent_id` self-reference
+- File counts aggregate recursively (parent shows total including children)
 
 ### 6.3.2 Lightbox / Photo Detail
 

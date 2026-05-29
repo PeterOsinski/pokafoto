@@ -54,6 +54,22 @@
 │ min_lon (REAL)       │
 │ max_lon (REAL)       │
 └──────────────────────┘
+
+┌──────────────────────┐       ┌──────────────────────┐
+│       folders         │       │        files          │
+├──────────────────────┤       │ (folder_id FK)       │
+│ id (TEXT PK)         │──┐    └──────────┬───────────┘
+│ user_id (TEXT FK)    │  │               │
+│ name (TEXT)          │  │    (N:1)       │
+│ parent_id (TEXT FK)  │◀─┘               │
+│ created_at (TEXT)    │                   │
+│ updated_at (TEXT)    │                   │
+└──────────────────────┘                   │
+      │ (self-ref)                         │
+      └───────────────────────────────────┘
+                                           (N:1)
+    folders.parent_id → folders.id (NULL = root)
+    files.folder_id → folders.id (NULL = root, ON DELETE SET NULL)
 ```
 
 ## 4.2 SQL Schema
@@ -210,6 +226,28 @@ CREATE TRIGGER files_au AFTER UPDATE ON files BEGIN
 END;
 ```
 
+```sql
+-- migrations/003_folders.sql
+-- User-created folder hierarchy for file organization
+
+CREATE TABLE IF NOT EXISTS folders (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    parent_id   TEXT REFERENCES folders(id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_folders_user ON folders(user_id);
+CREATE INDEX idx_folders_parent ON folders(parent_id);
+CREATE UNIQUE INDEX idx_folders_name_parent ON folders(user_id, name, COALESCE(parent_id, ''));
+
+ALTER TABLE files ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_files_folder ON files(folder_id);
+```
+
 ## 4.3 Go Models
 
 ```go
@@ -271,9 +309,30 @@ type File struct {
     Height       *int      `json:"height,omitempty" db:"height"`
     DurationSec  *float64  `json:"duration_sec,omitempty" db:"duration_sec"`
     TakenAt      *string   `json:"taken_at,omitempty" db:"taken_at"`
+    FolderID     *string   `json:"folder_id,omitempty" db:"folder_id"`
     CreatedAt    time.Time `json:"created_at" db:"created_at"`
     UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
     IsDeleted    bool      `json:"is_deleted" db:"is_deleted"`
+}
+
+// internal/model/folder.go
+package model
+
+import "time"
+
+type Folder struct {
+    ID        string    `json:"id" db:"id"`
+    UserID    string    `json:"user_id" db:"user_id"`
+    Name      string    `json:"name" db:"name"`
+    ParentID  *string   `json:"parent_id,omitempty" db:"parent_id"`
+    CreatedAt time.Time `json:"created_at" db:"created_at"`
+    UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type FolderTreeNode struct {
+    Folder    *Folder           `json:"folder"`
+    FileCount int64             `json:"fileCount"`
+    Children  []*FolderTreeNode `json:"children,omitempty"`
 }
 
 // internal/model/exif.go
@@ -344,11 +403,25 @@ interface FileItem {
   height?: number;
   durationSec?: number;
   takenAt?: string;       // ISO 8601
+  folder_id?: string;     // UUID of parent folder, null = root
   createdAt: string;
   updatedAt: string;
   // Joined on read:
   exif?: ExifData;
   thumbnails?: ThumbnailSet;
+}
+
+interface FolderNode {
+  folder: {
+    id: string;
+    name: string;
+    parent_id: string | null;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
+  };
+  fileCount: number;
+  children: FolderNode[];
 }
 
 interface ExifData {

@@ -52,13 +52,33 @@
 | E-03 | As a user, I can search/filter photos by EXIF metadata (camera model, lens, date range) | P2 |
 | E-04 | As a user, EXIF data is preserved in original files and never modified | P0 |
 
+### File Management
+| ID | User Story | Priority |
+|---|---|---|
+| FM-01 | As a user, I can delete individual files with a confirmation step (soft-delete with trash) | P0 |
+| FM-02 | As a user, I can select multiple files using checkboxes with Shift+click range selection | P0 |
+| FM-03 | As a user, I can batch delete multiple selected files at once | P0 |
+| FM-04 | As a user, I can move files between folders (including back to root) | P1 |
+| FM-05 | As a user, I can copy files to other folders | P1 |
+| FM-06 | As a user, I can press the Delete key to delete selected files | P1 |
+
+### Folder Organization
+| ID | User Story | Priority |
+|---|---|---|
+| FO-01 | As a user, I can create custom folders with a name | P0 |
+| FO-02 | As a user, I can create nested folders (hierarchical, arbitrary depth) | P1 |
+| FO-03 | As a user, I can rename folders | P1 |
+| FO-04 | As a user, I can delete folders (files inside revert to root) | P1 |
+| FO-05 | As a user, I can switch to a folder tree view to browse files by folder | P0 |
+| FO-06 | As a user, I can navigate into a folder to see its files and subfolders | P0 |
+| FO-07 | As a user, I can upload files directly into a chosen folder | P1 |
+
 ### File Backup
 | ID | User Story | Priority |
 |---|---|---|
 | F-01 | As a user, I can upload any file type (documents, archives, etc.) — not just media | P1 |
 | F-02 | As a user, non-media files show appropriate file type icons in the gallery | P1 |
 | F-03 | As a user, I can download original files individually or as a zip bundle | P1 |
-| F-04 | As a user, I can delete files with a confirmation step (soft-delete with trash) | P2 |
 
 ### Authentication & User Management
 | ID | User Story | Priority |
@@ -118,7 +138,23 @@ Tier 2 — S3-Compatible Object Storage (durable, scalable)
 
 Cache eviction policy: LRU (least recently used), configurable max cache size (default: 50GB). Eviction runs as a scheduled background goroutine every 5 minutes. Thumbnails are regenerated on cache miss from stored originals (or S3 if enabled).
 
-### FR-03: Auto-Organization
+### FR-03: File Actions & Batch Operations
+- Files can be selected individually or in ranges (Shift+click)
+- Batch actions: delete (soft-delete with trash), move (to folder or root), copy (to folder or root)
+- Delete key shortcut triggers batch delete when files are selected
+- Action bar appears when files are selected, showing selected count and action buttons
+- All batch operations are user-scoped (row-level security enforced per query)
+
+### FR-03b: Folder Organization
+- Folders are user-created, user-scoped, and support arbitrary nesting via `parent_id` self-reference
+- Folder tree displayed in sidebar and as a dedicated folder browser layout
+- Inline folder creation within the folder tree and folder picker dialogs
+- Moving a file to a folder sets `folder_id`; moving to root sets `folder_id = NULL`
+- Copying a file creates a new file record (new UUID, same storage path) with the target `folder_id`
+- Deleting a folder cascades: files inside revert to root via `ON DELETE SET NULL` FK
+- Upload destination can target a specific folder via `folder_id` multipart field; default is root (auto-organized by date)
+
+### FR-04: Auto-Organization
 - Photos are organized by **date taken** (from EXIF `DateTimeOriginal`), falling back to file modification date
 - Directory structure: `{root}/{YYYY}/{MM}/{filename}`
 - Videos follow the same structure using `CreateDate` or file date

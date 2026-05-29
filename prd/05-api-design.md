@@ -118,6 +118,7 @@ Upload one or more files. Multipart form data. Requires authentication.
 Content-Type: multipart/form-data
 
 files: [binary] (multiple, required)
+folder_id: string (optional) — UUID of target folder. If omitted or empty, files go to root (auto-organized by date)
 path: string (optional) — target directory path, defaults to auto-organization
 relative_path: string (optional per file) — webkitRelativePath from folder picker for recursive directory preservation
 ```
@@ -208,6 +209,7 @@ List files with pagination, sorting, and filtering.
 **Query Parameters:**
 | Param | Type | Default | Description |
 |---|---|---|---|
+| `folder_id` | string | — | Filter by folder UUID. `folders` layout passes `folder_id=uuid`. Root view omits this param (filters `folder_id IS NULL`). Value `root` also means root. |
 | `path` | string | `""` | Directory path to list (empty = root) |
 | `cursor` | string | — | Pagination cursor (file ID) |
 | `limit` | int | 100 | Items per page (max 500) |
@@ -300,6 +302,33 @@ Soft-delete a file (moves to trash).
 Permanently delete a file and all thumbnails from S3 and local cache.
 
 **Response:** `204 No Content`
+
+#### `POST /api/v1/files/batch-delete`
+Soft-delete multiple files in a single operation. User-scoped.
+
+**Request:**
+```json
+{ "ids": ["uuid-1", "uuid-2", "uuid-3"] }
+```
+**Response:** `204 No Content`
+
+#### `POST /api/v1/files/batch-move`
+Move multiple files to a target folder. Set `folder_id` to `null` to move back to root.
+
+**Request:**
+```json
+{ "ids": ["uuid-1", "uuid-2"], "folder_id": "folder-uuid" }
+```
+**Response:** `204 No Content`
+
+#### `POST /api/v1/files/batch-copy`
+Copy files to a folder. Creates new file records (fresh UUIDs, same storage paths).
+
+**Request:**
+```json
+{ "ids": ["uuid-1"], "folder_id": "folder-uuid" }
+```
+**Response:** `200 OK` — `{ "count": 1, "ids": ["new-uuid"] }`
 
 ---
 
@@ -465,6 +494,69 @@ Get directory tree structure.
   ]
 }
 ```
+
+---
+
+### 5.1.6a Folders
+
+#### `GET /api/v1/folders`
+Get the user's folder tree with file counts.
+
+**Response:** `200 OK`
+```json
+{
+  "children": [
+    {
+      "folder": {
+        "id": "uuid-v7",
+        "name": "Vacation 2024",
+        "parent_id": null,
+        "user_id": "uuid-v7",
+        "created_at": "2024-07-15T14:30:00Z",
+        "updated_at": "2024-07-15T14:30:00Z"
+      },
+      "fileCount": 156,
+      "children": [
+        {
+          "folder": {
+            "id": "uuid-v7",
+            "name": "Paris",
+            "parent_id": "uuid-v7",
+            "user_id": "uuid-v7",
+            "created_at": "2024-07-16T10:00:00Z",
+            "updated_at": "2024-07-16T10:00:00Z"
+          },
+          "fileCount": 42,
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/folders`
+Create a new folder. Can be nested under a parent.
+
+**Request:**
+```json
+{ "name": "Vacation 2024", "parent_id": null }
+```
+**Response:** `201 Created` — returns the created `Folder` object.
+
+#### `PUT /api/v1/folders/{id}`
+Rename a folder.
+
+**Request:**
+```json
+{ "name": "Summer Trip 2024" }
+```
+**Response:** `204 No Content`
+
+#### `DELETE /api/v1/folders/{id}`
+Delete a folder. Files inside revert to root via `ON DELETE SET NULL` FK. Nested subfolders cascade-delete via `ON DELETE CASCADE` on `parent_id`.
+
+**Response:** `204 No Content`
 
 ---
 
