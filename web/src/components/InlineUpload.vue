@@ -7,13 +7,14 @@
     >
       {{ label }}
     </button>
-    <input
-      ref="fileInput"
-      type="file"
-      multiple
-      class="hidden"
-      @change="handleChange"
-    />
+      <input
+        ref="fileInput"
+        type="file"
+        multiple
+        :accept="accept"
+        class="hidden"
+        @change="handleChange"
+      />
   </div>
 </template>
 
@@ -25,10 +26,12 @@ const props = withDefaults(defineProps<{
   folderId?: string | null
   label?: string
   skipNameSizeDedup?: boolean
+  accept?: string
 }>(), {
   folderId: null,
   label: 'Upload here',
   skipNameSizeDedup: true,
+  accept: '*',
 })
 
 const upload = useUploadStore()

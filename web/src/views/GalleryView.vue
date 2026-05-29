@@ -13,18 +13,22 @@
       v-model:sortBy="sortBy"
       v-model:layout="layout"
       v-model:thumbSize="thumbSize"
+      v-model:includeAllFolders="includeAllFolders"
       @update:mediaType="loadFiles()"
       @update:sortBy="loadFiles()"
+      @update:includeAllFolders="loadFiles()"
     />
 
     <div class="flex items-center gap-2 mb-4">
-      <InlineUpload label="Upload" :skipNameSizeDedup="false" />
+      <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
     </div>
 
     <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
       <p class="text-lg">No photos yet.</p>
       <p class="mt-2">Upload your first photo to get started.</p>
-      <router-link to="/upload" class="mt-4 inline-block px-6 py-2 rounded-md text-white" style="background: var(--accent)">Upload</router-link>
+      <div class="mt-4 flex justify-center">
+        <InlineUpload label="Upload Photos" :skipNameSizeDedup="false" accept="image/*,video/*" />
+      </div>
     </div>
 
     <GalleryTileView
@@ -155,6 +159,7 @@ const layoutQuery = useRouteQuery('layout', 'tiles')
 const sortQuery = useRouteQuery('sort', 'taken_at')
 const mediaQuery = useRouteQuery('media', '')
 const thumbQuery = useRouteQuery('thumb', 'md')
+const allFoldersQuery = useRouteQuery('all_folders', '')
 const photoQuery = useRouteQuery('photo', '')
 
 const currentPath = computed(() => pathQuery.value || null)
@@ -173,6 +178,11 @@ const mediaType = computed({
 const thumbSize = computed<'sm' | 'md' | 'lg'>({
   get: () => (thumbQuery.value as 'sm' | 'md' | 'lg') || 'md',
   set: (v: string) => { thumbQuery.value = v === 'md' ? '' : v },
+})
+
+const includeAllFolders = computed({
+  get: () => allFoldersQuery.value === 'true',
+  set: (v: boolean) => { allFoldersQuery.value = v ? 'true' : '' },
 })
 
 const selectedIds = ref(new Set<string>())
@@ -211,6 +221,7 @@ async function loadFiles(reset = true) {
     if (route.query.date_from) params.date_from = route.query.date_from
     if (route.query.date_to) params.date_to = route.query.date_to
     if (currentPath.value) params.path = currentPath.value
+    if (includeAllFolders.value) params.all_folders = 'true'
     const res = await api.get('/files', { params })
     files.value = reset ? res.data.items : [...files.value, ...res.data.items]
     total.value = res.data.total

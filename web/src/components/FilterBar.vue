@@ -41,16 +41,27 @@
         v-html="opt.icon"
       />
     </div>
+
+    <label class="flex items-center gap-2 px-3 py-1 rounded text-sm cursor-pointer select-none" style="background: var(--bg-elevated); border: 1px solid var(--border-color)" :class="includeAllFolders ? 'border-[var(--accent)]' : 'border-[var(--border-color)]'">
+      <input
+        type="checkbox"
+        :checked="includeAllFolders"
+        @change="$emit('update:includeAllFolders', ($event.target as HTMLInputElement).checked)"
+        class="accent-[var(--accent)]"
+      />
+      <span :class="includeAllFolders ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'">All folders</span>
+    </label>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{ mediaType: string; sortBy: string; layout: string; thumbSize: string }>()
+defineProps<{ mediaType: string; sortBy: string; layout: string; thumbSize: string; includeAllFolders: boolean }>()
 const emit = defineEmits<{
   'update:mediaType': [value: string]
   'update:sortBy': [value: string]
   'update:layout': [value: string]
   'update:thumbSize': [value: string]
+  'update:includeAllFolders': [value: boolean]
 }>()
 
 const mediaOptions = [

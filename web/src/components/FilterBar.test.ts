@@ -5,7 +5,7 @@ import FilterBar from './FilterBar.vue'
 describe('FilterBar', () => {
   function mountFilter(props = {}) {
     return mount(FilterBar, {
-      props: { mediaType: '', sortBy: 'taken_at', layout: 'tiles', thumbSize: 'md', ...props },
+      props: { mediaType: '', sortBy: 'taken_at', layout: 'tiles', thumbSize: 'md', includeAllFolders: false, ...props },
     })
   }
 

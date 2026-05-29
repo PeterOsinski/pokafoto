@@ -56,17 +56,18 @@ func (s *FileStore) FindByNameAndSize(name string, size int64) (*model.File, err
 }
 
 type FileListOptions struct {
-	UserID    string
-	Path      string
-	FolderID  *string
-	Cursor    string
-	Limit     int
-	Sort      string
-	Order     string
-	MediaType string
-	DateFrom  string
-	DateTo    string
-	Camera    string
+	UserID     string
+	Path       string
+	FolderID   *string
+	AllFolders bool
+	Cursor     string
+	Limit      int
+	Sort       string
+	Order      string
+	MediaType  string
+	DateFrom   string
+	DateTo     string
+	Camera     string
 }
 
 func (s *FileStore) List(opts FileListOptions) ([]*model.File, string, int, error) {
@@ -95,7 +96,7 @@ func (s *FileStore) List(opts FileListOptions) ([]*model.File, string, int, erro
 			conditions = append(conditions, "folder_id = ?")
 			args = append(args, *opts.FolderID)
 		}
-	} else {
+	} else if !opts.AllFolders {
 		conditions = append(conditions, "folder_id IS NULL")
 	}
 

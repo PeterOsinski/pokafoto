@@ -126,11 +126,13 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 
 | Task | Details | Deliverable | Status |
 |---|---|---|---|
-| Upload page | Drag & drop zone, file picker, folder picker | `web/src/views/UploadView.vue` | ✅ |
+| Upload page | Drag & drop zone, file picker, folder picker | `web/src/views/UploadView.vue` | ✅ Replaced by InlineUpload component in gallery/folder views |
 | Upload progress | Per-file progress bars, WebSocket for live updates | `web/src/components/GlobalUploadTracker.vue` | ✅ |
 | WebSocket endpoint | `WS /api/v1/upload/ws` for real-time progress | `internal/handler/upload_ws.go` | ✅ (`internal/server/upload.go`) |
 | Folder auto-refresh | Gallery/folder view listens for WS completion events | GalleryView, FolderTreeView, upload store | ✅ |
 | Responsive layout | Mobile bottom nav, tablet sidebar, desktop full layout | `web/src/App.vue` + CSS | ✅ |
+| Cross-folder gallery filter | "All folders" toggle includes files from all folders (not just root) | FilterBar, GalleryView, backend List API | ✅ |
+| Gallery upload restriction | Gallery InlineUpload restricted to image/video MIME types | InlineUpload, GalleryView | ✅ |
 | PWA manifest | `manifest.json`, service worker for offline caching | `web/public/` | ❌ No manifest.json or service worker |
 | Dark/light theme | CSS variables, theme toggle, persisted preference | `web/src/composables/useTheme.ts` | ❌ CSS variables exist but no toggle; dark-only |
 

@@ -11,7 +11,6 @@
         <router-link to="/folders" class="text-sm" :class="navClass('/folders')">Folders</router-link>
         <router-link to="/timeline" class="text-sm" :class="navClass('/timeline')">Timeline</router-link>
         <router-link to="/map" class="text-sm" :class="navClass('/map')">Map</router-link>
-        <router-link to="/upload" class="text-sm" :class="navClass('/upload')">Upload</router-link>
         <router-link v-if="auth.isAdmin" to="/admin" class="text-sm" :class="navClass('/admin')">Admin</router-link>
       </nav>
       <div class="flex items-center gap-3">
@@ -40,7 +39,6 @@
       <router-link to="/folders" class="flex flex-col items-center text-xs" :class="navClass('/folders')">📁<span>Folders</span></router-link>
       <router-link to="/timeline" class="flex flex-col items-center text-xs" :class="navClass('/timeline')">📅<span>Timeline</span></router-link>
       <router-link to="/map" class="flex flex-col items-center text-xs" :class="navClass('/map')">🗺️<span>Map</span></router-link>
-      <router-link to="/upload" class="flex flex-col items-center text-xs" :class="navClass('/upload')">⬆<span>Upload</span></router-link>
     </nav>
   </div>
 </template>

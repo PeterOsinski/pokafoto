@@ -23,17 +23,18 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := store.FileListOptions{
-		UserID:    userID,
-		Path:      r.URL.Query().Get("path"),
-		FolderID:  folderIDFromQuery(r),
-		Cursor:    r.URL.Query().Get("cursor"),
-		Limit:     limit,
-		Sort:      r.URL.Query().Get("sort"),
-		Order:     r.URL.Query().Get("order"),
-		MediaType: r.URL.Query().Get("media_type"),
-		DateFrom:  r.URL.Query().Get("date_from"),
-		DateTo:    r.URL.Query().Get("date_to"),
-		Camera:    r.URL.Query().Get("camera"),
+		UserID:     userID,
+		Path:       r.URL.Query().Get("path"),
+		FolderID:   folderIDFromQuery(r),
+		AllFolders: r.URL.Query().Get("all_folders") == "true",
+		Cursor:     r.URL.Query().Get("cursor"),
+		Limit:      limit,
+		Sort:       r.URL.Query().Get("sort"),
+		Order:      r.URL.Query().Get("order"),
+		MediaType:  r.URL.Query().Get("media_type"),
+		DateFrom:   r.URL.Query().Get("date_from"),
+		DateTo:     r.URL.Query().Get("date_to"),
+		Camera:     r.URL.Query().Get("camera"),
 	}
 
 	if opts.Sort == "" {

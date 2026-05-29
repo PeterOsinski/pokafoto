@@ -34,7 +34,7 @@
 ### Desktop Layout (≥1024px, authenticated)
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Drive Logo]  [Gallery] [Folders] [Timeline] [Map] [Upload]  [👤]  │
+│  [Drive Logo]  [Gallery] [Folders] [Timeline] [Map]  [👤]  │
 ├──────────┬──────────────────────────────────────────────┤
 │          │                                              │
 │  Dir     │          Main Content Area                   │
@@ -69,7 +69,7 @@
 │  └───┘ └───┘ └───┘ │
 │                     │
 ├─────────────────────┤
-│ [🏠] [📁] [📅] [🗺] [⬆] │  ← Bottom nav (56px)
+│ [🏠] [📁] [📅] [🗺]  │  ← Bottom nav (56px)
 └─────────────────────┘
 ```
 
@@ -109,6 +109,12 @@
 - Lazy loading: Intersection Observer with 200px root margin
 - Skeleton placeholders while loading (pulsing gray rectangles)
 
+**Inline Upload:**
+- An "Upload" button is positioned above the thumbnail grid
+- File picker is restricted to image and video MIME types (`image/*,video/*`)
+- Uploads from the gallery view go to root (auto-organized by date)
+- The dedicated Upload tab has been removed in favor of inline uploads
+
 **Thumbnail Card States:**
 | State | Visual |
 |---|---|
@@ -121,9 +127,11 @@
 
 **Sort/Filter Bar:**
 ```
-[📷 Photos] [🎬 Videos] [📄 All Files]  |  [Sort: Date ↓] [🔍 Search...]
+[📷 Photos] [🎬 Videos] [📄 All Files]  |  [Sort: Date ↓] [🔍 Search...]  |  [☐ All folders]
 ```
 Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
+
+The **"All folders"** toggle, when enabled, includes files from all user-created folders in the gallery listing (not just root-level files). When disabled (default), only files at the root (no folder assignment) are shown. This filter is essential for "Date Taken" sorting to work across the entire library, allowing users to keep photos in organized folders while still browsing a unified timeline.
 
 **Selection & Batch Operations:**
 - Checkboxes appear on thumbnails when navigating the gallery (always visible when any file is selected, hover-only otherwise)
@@ -230,40 +238,25 @@ Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
 - **Heatmap toggle**: Overlays a density heatmap layer.
 - **Timeline scrubber**: Filter map by date range with a dual-handle slider.
 
-### 6.3.5 Upload View
+### 6.3.5 Upload (Inline Component)
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Upload                                                 │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │                                                 │    │
-│  │            📁 Drop files here                   │    │
-│  │          or click to browse                     │    │
-│  │                                                 │    │
-│  │     Supported: JPG, PNG, HEIC, RAW, MP4, ...    │    │
-│  │                                                 │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  Target folder: [Auto-organize by date ↓]               │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Upload Queue                                   │    │
-│  │  ┌──────────────────────────────────────────┐   │    │
-│  │  │ IMG_1234.jpg  ████████████░░░░  75%      │   │    │
-│  │  │ IMG_1235.jpg  ████████████████  100%  ✅ │   │    │
-│  │  │ IMG_1236.jpg  ████░░░░░░░░░░░░  25%      │   │    │
-│  │  │ IMG_1237.jpg  Waiting...                  │   │    │
-│  │  └──────────────────────────────────────────┘   │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-```
+Upload functionality is available via the `InlineUpload` component, used in both Gallery and Folder views. There is no dedicated Upload tab/page.
 
-- **Drag & drop zone**: Large, dashed border, pulses on dragover
-- **Folder picker button**: Uses `webkitdirectory` for folder upload
-- **Per-file progress bars**: With percentage, file size, and status icon
-- **Auto-organize toggle**: When on, files go to `YYYY/MM/`; when off, user picks a folder
-- **Duplicate detection**: Shows "Already exists" with link to existing file
+**Gallery View Upload:**
+- "Upload" button above the thumbnail grid
+- File picker restricted to `image/*,video/*` MIME types
+- Uploads go to root (auto-organized by date); name+size dedup is applied
+- Upload progress is tracked via the global upload tracker (bottom-right floating panel)
+
+**Folder View Upload:**
+- "Upload" button in the folder header bar
+- Accepts all file types (no MIME restriction)
+- Files are uploaded directly into the currently browsed folder; no dedup checks applied
+
+**Global Upload Tracker:**
+- Floating panel in bottom-right corner showing all active, completed, and failed uploads
+- Real-time progress via WebSocket
+- Persists across page navigation
 
 ### 6.3.6 Admin View (admin role only)
 
@@ -339,7 +332,7 @@ Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
 | View | Empty State |
 |---|---|
 | Login | N/A (always shown when unauthenticated) |
-| Gallery | "No photos yet. Upload your first photo to get started." + Upload button |
+| Gallery | "No photos yet. Upload your first photo to get started." + inline Upload button (images/videos only) |
 | Timeline | "No photos with dates found." |
 | Map | "No geo-tagged photos. Photos with GPS data will appear here." |
 | Search | "No results for '{query}'. Try a different search term." |
@@ -364,11 +357,11 @@ Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
 
 | Breakpoint | Width | Columns | Sidebar | Navigation |
 |---|---|---|---|---|
-| Mobile S | <375px | 2 | Hidden | Bottom tabs |
-| Mobile L | 375–767px | 3 | Hidden | Bottom tabs |
-| Tablet | 768–1023px | 4 | Collapsible | Top tabs |
-| Desktop | 1024–1439px | 5-6 | Visible (250px) | Top tabs |
-| Wide | ≥1440px | 6-8 | Visible (300px) | Top tabs |
+| Mobile S | <375px | 2 | Hidden | Bottom tabs (Home, Folders, Timeline, Map) |
+| Mobile L | 375–767px | 3 | Hidden | Bottom tabs (Home, Folders, Timeline, Map) |
+| Tablet | 768–1023px | 4 | Collapsible | Top tabs (Gallery, Folders, Timeline, Map) |
+| Desktop | 1024–1439px | 5-6 | Visible (250px) | Top tabs (Gallery, Folders, Timeline, Map) |
+| Wide | ≥1440px | 6-8 | Visible (300px) | Top tabs (Gallery, Folders, Timeline, Map) |
 
 ---
 

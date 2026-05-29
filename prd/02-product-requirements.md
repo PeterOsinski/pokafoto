@@ -28,6 +28,7 @@
 | G-08 | As a user, I can switch between gallery layouts — tiles (grid), list (table), and grouped by day | P2 |
 | G-09 | As a user, I can choose thumbnail sizes — small, medium, and large — in the gallery view | P2 |
 | G-10 | As a user, the URL updates when I navigate folders, open photo previews, or change view state — enabling browser back/forward, refresh-without-context-loss, and shareable links | P0 |
+| G-11 | As a user, I can toggle a filter to include files from all folders in the gallery view, enabling cross-folder sorting and browsing | P1 |
 
 ### Timeline View
 | ID | User Story | Priority |
@@ -228,8 +229,8 @@ All primary UI states are reflected in the URL as query parameters on the galler
 1. User opens Drive web UI → redirected to login page
 2. User logs in with username + password (or registers if registration enabled)
 3. Lands on Gallery view (most recent first)
-4. Drags photos onto upload zone (or clicks to select files/folder)
-5. Upload progress bar shows per-file status
+4. Clicks the "Upload" button above the thumbnail grid (file picker restricted to images/videos)
+5. Upload progress shown in the global upload tracker
 6. Photos appear in gallery as thumbnails are generated — the file listing auto-refreshes in the current folder view when uploads complete
 7. User switches to Timeline view → scrolls through months
 8. User switches to Map view → sees photo clusters on world map
