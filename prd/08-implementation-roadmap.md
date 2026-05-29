@@ -162,6 +162,19 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Structured logging | `slog` (Go stdlib), JSON format, request IDs | Middleware | ⚠️ Uses slog; no request ID propagation |
 | Health checks | `/health` with DB + S3 connectivity check | `internal/handler/health.go` | ✅ |
 
+### Week 10b: File Viewer (Non-Media Documents) — Frontend-Only Feature
+
+| Task | Details | Deliverable | Status |
+|---|---|---|---|
+| FileViewer modal shell | Modal overlay with header (close + download), footer (file info), content slot | `web/src/components/FileViewer.vue` | ✅ |
+| PdfViewer sub-component | Fetch file blob, create blob URL, render in `<iframe>` | `web/src/components/viewers/PdfViewer.vue` | ✅ |
+| JsonViewer sub-component | Pretty-print JSON with syntax highlighting (keys, strings, numbers, booleans) | `web/src/components/viewers/JsonViewer.vue` | ✅ |
+| MarkdownViewer sub-component | Render markdown to HTML via `marked` library, dark theme CSS | `web/src/components/viewers/MarkdownViewer.vue` | ✅ |
+| CsvViewer sub-component | Parse CSV, render as HTML table with sticky header and scrollable body | `web/src/components/viewers/CsvViewer.vue` | ✅ |
+| TextViewer sub-component | Plain text display in monospace `<pre>` block | `web/src/components/viewers/TextViewer.vue` | ✅ |
+| GalleryView integration | Route `mediaType === 'file'` clicks to FileViewer instead of Lightbox | `web/src/views/GalleryView.vue` | ✅ |
+| Component tests | Vitest tests for FileViewer routing and each sub-viewer | `web/src/components/FileViewer.test.ts` + viewer tests | ✅ |
+
 ### Week 11: Docker & Deployment — ⚠️ Mostly Complete
 
 | Task | Details | Deliverable | Status |

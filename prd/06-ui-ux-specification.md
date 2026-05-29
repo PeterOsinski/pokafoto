@@ -293,6 +293,48 @@ Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
 
 ---
 
+### 6.3.7 File Viewer (Non-Media Files)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  [✕ Close]                          [⬇ Download]        │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  PDF: Browser PDF viewer in iframe                      │
+│  JSON: Formatted, syntax-highlighted code block         │
+│  Markdown: Rendered HTML content (dark theme)           │
+│  CSV: Scrollable data table with sticky header          │
+│  TXT: Plain text in monospace pre block                 │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  filename.txt · 45.2 KB · text/plain                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+**File Type → Viewer Mapping:**
+| Extension | MIME Type | Viewer |
+|---|---|---|
+| `.pdf` | `application/pdf` | PdfViewer — `<iframe>` with blob URL |
+| `.md`, `.markdown` | `text/markdown` | MarkdownViewer — rendered via `marked` |
+| `.json` | `application/json` | JsonViewer — formatted + syntax highlighted |
+| `.csv` | `text/csv` | CsvViewer — parsed as HTML table with sticky header |
+| `.txt`, other `text/*` | `text/plain`, etc. | TextViewer — monospace `<pre>` block |
+
+**Interactions:**
+- **Keyboard**: Esc to close
+- **Download**: Download button in top bar, always available
+- **File info bar**: Bottom bar showing file name, size, and MIME type
+- **Open from gallery**: Clicking a non-media file thumbnail opens the File Viewer modal
+
+**States:**
+| State | Visual |
+|---|---|
+| Loading | Full-area spinner with "Loading..." text |
+| Loaded | Rendered file content |
+| Parse error | "Could not render this file. The file may be malformed. [Download raw]" |
+| Unsupported type | "No preview available for this file type. [Download]" |
+| Download failed | Toast notification "Download failed" |
+
 ### Empty States
 | View | Empty State |
 |---|---|

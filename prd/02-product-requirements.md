@@ -62,6 +62,12 @@
 | FM-04 | As a user, I can move files between folders (including back to root) | P1 |
 | FM-05 | As a user, I can copy files to other folders | P1 |
 | FM-06 | As a user, I can press the Delete key to delete selected files | P1 |
+| FM-07 | As a user, I can view PDF files directly in the browser without downloading | P1 |
+| FM-08 | As a user, I can view text files with proper formatting in a monospace viewer | P1 |
+| FM-09 | As a user, I can view JSON files with syntax highlighting and pretty-print formatting | P1 |
+| FM-10 | As a user, I can view Markdown files rendered as HTML | P1 |
+| FM-11 | As a user, I can view CSV files as a sortable data table | P1 |
+| FM-12 | As a user, I can always download the original raw file from any viewer | P0 |
 
 ### Folder Organization
 | ID | User Story | Priority |

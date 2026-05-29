@@ -71,6 +71,11 @@
       @next="goNext"
     />
 
+    <FileViewer
+      :file="fileViewerFile"
+      @close="closeFileViewer"
+    />
+
     <FolderPickerDialog
       :open="moveDialog.open"
       title="Move to folder"
@@ -110,6 +115,7 @@ import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useRouteQuery } from '../composables/useRouteQuery'
 import Lightbox from '../components/Lightbox.vue'
+import FileViewer from '../components/FileViewer.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
 import GalleryListView from '../components/GalleryListView.vue'
 import GalleryGroupedView from '../components/GalleryGroupedView.vue'
@@ -189,6 +195,8 @@ const lightboxIndex = computed(() => {
   if (!lightboxFile.value) return -1
   return files.value.indexOf(lightboxFile.value)
 })
+
+const fileViewerFile = ref<FileItem | null>(null)
 
 async function loadFiles(reset = true) {
   if (reset) {
@@ -310,8 +318,18 @@ function openLightbox(index: number) {
     selectRange(index)
   } else {
     const file = files.value[index]
-    if (file) photoQuery.value = file.id
+    if (file) {
+      if (file.mediaType === 'file') {
+        fileViewerFile.value = file
+      } else {
+        photoQuery.value = file.id
+      }
+    }
   }
+}
+
+function closeFileViewer() {
+  fileViewerFile.value = null
 }
 
 function closeLightbox() {
