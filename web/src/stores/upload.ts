@@ -3,6 +3,53 @@ import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
 import api from '../api/client'
 
+const MAX_BATCH_BYTES = 100 * 1024 * 1024
+const MAX_CONCURRENT_UPLOADS = 3
+
+interface FileWithJob {
+  job: UploadJob
+  file: File
+}
+
+function chunkBySize(items: FileWithJob[], maxBytes: number): FileWithJob[][] {
+  const chunks: FileWithJob[][] = []
+  let current: FileWithJob[] = []
+  let currentBytes = 0
+
+  for (const item of items) {
+    if (currentBytes + item.file.size > maxBytes && current.length > 0) {
+      chunks.push(current)
+      current = []
+      currentBytes = 0
+    }
+    current.push(item)
+    currentBytes += item.file.size
+  }
+
+  if (current.length > 0) {
+    chunks.push(current)
+  }
+
+  return chunks
+}
+
+async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let index = 0
+
+  async function worker() {
+    while (index < tasks.length) {
+      const currentIndex = index++
+      results[currentIndex] = await tasks[currentIndex]()
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, tasks.length) }, () => worker()),
+  )
+  return results
+}
+
 export interface UploadJob {
   job_id: string
   batch_id?: string
@@ -167,61 +214,83 @@ export const useUploadStore = defineStore('upload', () => {
       }
     }
 
-    const uploadPromises = uploadJobs
-      .filter(job => {
-        const current = jobs.value.find(j => j.job_id === job.job_id)
-        return current?.status === 'uploading'
-      })
-      .map(async (job) => {
+    const remaining: FileWithJob[] = []
+    for (const job of uploadJobs) {
+      const current = jobs.value.find(j => j.job_id === job.job_id)
+      if (current?.status === 'uploading') {
         const file = fileMap.get(job.job_id)
-        if (!file) return
-
-        const form = new FormData()
-        form.append('files', file)
-        if (targetFolderId) {
-          form.append('folder_id', targetFolderId)
+        if (file) {
+          remaining.push({ job, file })
         }
-        if (skipNameSizeDedup) {
-          form.append('skip_name_size_dedup', 'true')
-        }
+      }
+    }
 
-        try {
-          const res = await api.post('/upload', form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            onUploadProgress: (progressEvent) => {
-              if (!progressEvent.total) return
-              const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
-              const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+    if (remaining.length === 0) return
+
+    const batches = chunkBySize(remaining, MAX_BATCH_BYTES)
+
+    const tasks = batches.map((batch) => async () => {
+      const form = new FormData()
+      for (const item of batch) {
+        form.append('files', item.file)
+      }
+      if (targetFolderId) {
+        form.append('folder_id', targetFolderId)
+      }
+      if (skipNameSizeDedup) {
+        form.append('skip_name_size_dedup', 'true')
+      }
+
+      try {
+        const res = await api.post('/upload', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent: any) => {
+            if (!progressEvent.total) return
+            const progress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
+            for (const item of batch) {
+              const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
               if (idx >= 0) {
                 jobs.value[idx] = {
                   ...jobs.value[idx],
                   progress: Math.round(progress * 100) / 100,
-                  uploaded: Math.round(progress * (job.size || 1)),
+                  uploaded: Math.round(progress * (item.job.size || 1)),
                 }
               }
-            },
-          })
+            }
+          },
+        })
 
-          const batchId = res.data.batch_id as string
-          const realJobs: UploadJob[] = res.data.jobs.map((j: any) => ({
-            ...j,
-            batch_id: batchId,
-            progress: 0,
-          }))
-          for (const realJob of realJobs) {
-            const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
-            if (idx >= 0) {
-              const pending = pendingUpdates.get(realJob.job_id)
-              if (pending) {
-                pendingUpdates.delete(realJob.job_id)
-                jobs.value[idx] = { ...jobs.value[idx], ...realJob, ...pending }
-              } else {
-                jobs.value[idx] = { ...jobs.value[idx], ...realJob }
-              }
+        const batchId = res.data.batch_id as string
+        const realJobs: any[] = res.data.jobs || []
+
+        for (let i = 0; i < batch.length && i < realJobs.length; i++) {
+          const item = batch[i]
+          const realJob = realJobs[i]
+          const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
+          if (idx >= 0) {
+            const pending = pendingUpdates.get(realJob.job_id)
+            if (pending) {
+              pendingUpdates.delete(realJob.job_id)
+              jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0, ...pending }
+            } else {
+              jobs.value[idx] = { ...jobs.value[idx], ...realJob, batch_id: batchId, progress: 0 }
             }
           }
-        } catch {
-          const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+        }
+
+        for (let i = batch.length; i < realJobs.length; i++) {
+          addJob({
+            job_id: realJobs[i].job_id,
+            batch_id: batchId,
+            filename: realJobs[i].filename,
+            status: realJobs[i].status,
+            file_id: realJobs[i].file_id,
+            progress: 0,
+          })
+        }
+      } catch {
+        for (const item of batch) {
+          const idx = jobs.value.findIndex(j => j.job_id === item.job.job_id)
           if (idx >= 0) {
             jobs.value[idx] = {
               ...jobs.value[idx],
@@ -230,9 +299,10 @@ export const useUploadStore = defineStore('upload', () => {
             }
           }
         }
-      })
+      }
+    })
 
-    await Promise.allSettled(uploadPromises)
+    await withConcurrency(tasks, MAX_CONCURRENT_UPLOADS)
   }
 
   function consumeCompletedJobs(): CompletedJob[] {
@@ -305,3 +375,6 @@ export const useUploadStore = defineStore('upload', () => {
     uploadFiles,
   }
 })
+
+export { chunkBySize, withConcurrency, MAX_BATCH_BYTES, MAX_CONCURRENT_UPLOADS }
+export type { FileWithJob }
