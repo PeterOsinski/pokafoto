@@ -17,14 +17,28 @@ func NewThumbnailStore(db *DB) *ThumbnailStore {
 
 func (s *ThumbnailStore) Create(t *model.Thumbnail) error {
 	t.CreatedAt = time.Now().UTC()
-	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO thumbnails (file_id, size, width, height, format, local_path, s3_key, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.FileID, t.Size, t.Width, t.Height, t.Format, t.LocalPath, t.S3Key, t.SizeBytes, t.CreatedAt.Format(time.RFC3339),
-	)
-	if err != nil {
-		return fmt.Errorf("insert thumbnail: %w", err)
+	const maxRetries = 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*100) * time.Millisecond)
+		}
+
+		_, err := s.db.Exec(
+			`INSERT OR REPLACE INTO thumbnails (file_id, size, width, height, format, local_path, s3_key, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.FileID, t.Size, t.Width, t.Height, t.Format, t.LocalPath, t.S3Key, t.SizeBytes, t.CreatedAt.Format(time.RFC3339),
+		)
+		if err == nil {
+			return nil
+		}
+		if !isSQLiteBusy(err) {
+			return fmt.Errorf("insert thumbnail: %w", err)
+		}
+		lastErr = err
 	}
-	return nil
+
+	return fmt.Errorf("insert thumbnail after %d retries: %w", maxRetries, lastErr)
 }
 
 func (s *ThumbnailStore) TotalSize() (int64, error) {
