@@ -284,6 +284,53 @@ Upload functionality is available via the `InlineUpload` component, used in both
 - Role change: dropdown in edit modal
 - Registration toggle: enables/disables the public registration endpoint
 
+**Job History Section:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Job History                          [Reconcile Thumbs] │
+│  [All] [Completed] [Failed] [Skipped] [Processing]      │
+│  ┌──────────┬──────────┬────────────┬─────────┬───────┐ │
+│  │ Filename │ Status   │ Error/Reas │ Created │ Action│ │
+│  ├──────────┼──────────┼────────────┼─────────┼───────┤ │
+│  │ DSC01.JPG│ {failed} │ temp_file  │ 17:25   │[Retry]│ │
+│  │ IMG_02   │{complete}│ -          │ 17:22   │       │ │
+│  │ IMG_03   │{skipped} │ dup_cont   │ 17:20   │       │ │
+│  └──────────┴──────────┴────────────┴─────────┴───────┘ │
+│  3 of 200 jobs                        [Prev] [Next]     │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Status badges: completed=green, failed=red, skipped=yellow, processing=blue, queued=gray
+- Status filter tabs with counts (e.g., "Failed 34")
+- "Retry" button on failed jobs calls `POST /admin/jobs/{id}/retry`
+- "Reconcile Thumbnails" button scans for missing thumbnails and creates repair jobs
+- Pagination with Prev/Next buttons
+- Auto-refreshes every 10 seconds
+
+**Job Status Badge Colors:**
+| Status | Color |
+|---|---|
+| Completed | Green (`bg-green-500/20 text-green-400`) |
+| Failed | Red (`bg-red-500/20 text-red-400`) |
+| Skipped | Yellow (`bg-yellow-500/20 text-yellow-400`) |
+| Processing | Blue (`bg-blue-500/20 text-blue-400`) |
+| Queued | Gray (`bg-gray-500/20 text-gray-400`) |
+
+**Worker Pool Section:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Worker Pool                                            │
+│  Workers: 0/2   Queue: 0                                │
+│  Completed: 166   Failed: 34   Skipped: 0               │
+│  Processing: [job.png 45% - thumbnails]                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Shows live worker pool stats via `GET /admin/workers`
+- Processing jobs display filename, progress bar, and current stage
+- Auto-refreshes every 5 seconds
+- All counters (completed, failed, skipped) are lifetime totals for the current process
+
 ---
 
 ### 6.3.7 File Viewer (Non-Media Files)

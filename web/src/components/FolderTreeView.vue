@@ -9,9 +9,7 @@
         >
           &#8592; Back
         </button>
-        <h3 class="text-lg font-semibold text-[var(--text-primary)]">
-          {{ currentFolderName || 'Root' }}
-        </h3>
+        <Breadcrumbs :chain="folderChain" @navigate="(id) => emit('navigate', id)" />
       </div>
       <div class="flex items-center gap-2">
         <InlineUpload :folderId="currentFolderId" label="Upload" />
@@ -100,6 +98,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import api from '../api/client'
 import ThumbnailCard from './ThumbnailCard.vue'
+import Breadcrumbs from './Breadcrumbs.vue'
 import InlineUpload from './InlineUpload.vue'
 import { useUploadStore } from '../stores/upload'
 
@@ -173,17 +172,28 @@ onUnmounted(() => {
 })
 
 const currentFolderId = computed(() => props.folderId)
-const currentFolderName = computed(() => {
-  if (!props.folderId) return ''
-  const find = (nodes: FolderTreeNode[]): string | null => {
+
+const folderChain = computed(() => {
+  const chain: { id: string | null; name: string }[] = [{ id: null, name: 'Root' }]
+  if (!props.folderId) return chain
+
+  const buildPath = (nodes: FolderTreeNode[], target: string, path: { id: string | null; name: string }[]): boolean => {
     for (const n of nodes) {
-      if (n.folder.id === props.folderId) return n.folder.name
-      const found = find(n.children ?? [])
-      if (found) return found
+      if (n.folder.id === target) {
+        path.push({ id: n.folder.id, name: n.folder.name })
+        return true
+      }
+      if (n.children?.length) {
+        path.push({ id: n.folder.id, name: n.folder.name })
+        if (buildPath(n.children, target, path)) return true
+        path.pop()
+      }
     }
-    return null
+    return false
   }
-  return find(folders.value.children ?? [])
+
+  buildPath(folders.value.children ?? [], props.folderId, chain)
+  return chain
 })
 
 const subfolders = computed(() => {

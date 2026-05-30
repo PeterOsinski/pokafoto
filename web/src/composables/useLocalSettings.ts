@@ -33,6 +33,7 @@ function writeString(key: string, value: string) {
 let _layout: Ref<string> | null = null
 let _sortBy: Ref<string> | null = null
 let _thumbLevel: Ref<number> | null = null
+let _highResDownload: Ref<boolean> | null = null
 let _thumbSizePx: ComputedRef<number> | null = null
 
 export function useLocalSettings() {
@@ -40,6 +41,7 @@ export function useLocalSettings() {
     _layout = ref(readString(`${LS_PREFIX}layout`, 'tiles'))
     _sortBy = ref(readString(`${LS_PREFIX}sort`, 'taken_at'))
     _thumbLevel = ref(readNumber(`${LS_PREFIX}thumbLevel`, 5))
+    _highResDownload = ref(readString(`${LS_PREFIX}highResDownload`, 'false') === 'true')
 
     _thumbSizePx = computed(() => {
       const t = _thumbLevel!.value
@@ -51,6 +53,7 @@ export function useLocalSettings() {
     watch(_layout, (v) => writeString(`${LS_PREFIX}layout`, v), { flush: 'sync' })
     watch(_sortBy, (v) => writeString(`${LS_PREFIX}sort`, v), { flush: 'sync' })
     watch(_thumbLevel, (v) => writeString(`${LS_PREFIX}thumbLevel`, String(v)), { flush: 'sync' })
+    watch(_highResDownload!, (v) => writeString(`${LS_PREFIX}highResDownload`, v ? 'true' : 'false'), { flush: 'sync' })
   }
 
   return {
@@ -58,6 +61,7 @@ export function useLocalSettings() {
     sortBy: _sortBy as Ref<string>,
     thumbLevel: _thumbLevel as Ref<number>,
     thumbSizePx: _thumbSizePx as ComputedRef<number>,
+    highResDownload: _highResDownload as Ref<boolean>,
   }
 }
 
@@ -65,5 +69,6 @@ export function _resetSingleton() {
   _layout = null
   _sortBy = null
   _thumbLevel = null
+  _highResDownload = null
   _thumbSizePx = null
 }

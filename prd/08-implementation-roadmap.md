@@ -160,6 +160,10 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Durable upload queue | Persist upload jobs in SQLite `upload_jobs` table. Workers poll DB instead of in-memory Go channel. Crash recovery resets stuck `processing` jobs to `queued`. | `migration_005_upload_jobs.sql`, `internal/store/uploadjob.go`, `internal/worker/pool.go` refactor | ✅ |
 | Graceful degradation | S3 down → serve from cache, show banner | `internal/cache/` | ✅ S3 banner in App.vue |
 | Upload retry | Exponential backoff for failed S3 uploads | Worker | ❌ Not implemented |
+| Upload job history in Admin UI | Paginated job list with status filter, retry capability, summary counts | `GET /admin/jobs`, AdminView section | ✅ |
+| Thumbnail reconciliation | Scan for missing thumbnails, create repair jobs, periodic background reconciler (30min) | `POST /admin/jobs/reconcile`, `RunReconciliation()`, Pool reconciler goroutine | ✅ |
+| On-demand thumbnail fallback | Serve next smaller thumbnail size when requested size is unavailable on disk and S3 | `handleServeThumbnail` fallback chain | ✅ |
+| Thumbnail file write sync | `f.Sync()` + explicit close before `os.Stat` in thumbnail generation; pre-S3 file verification in worker | `internal/service/thumbnail.go`, `internal/worker/pool.go` | ✅ |
 | Corrupt file handling | Detect during processing, quarantine, notify | `internal/service/validator.go` | ❌ Not implemented |
 | Disk space monitoring | Alert when cache disk <10% free | `internal/monitor/disk.go` | ✅ Admin dashboard shows disk utilization |
 | Structured logging | `slog` (Go stdlib), JSON format, request IDs | Middleware | ⚠️ Uses slog; no request ID propagation |

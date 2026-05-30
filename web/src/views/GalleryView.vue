@@ -14,15 +14,13 @@
       v-model:layout="settings.layout.value"
       v-model:thumbLevel="settings.thumbLevel.value"
       v-model:includeAllFolders="includeAllFolders"
-      @update:mediaType="loadFiles()"
-      @update:sortBy="loadFiles()"
-      @update:includeAllFolders="loadFiles()"
     />
 
     <div class="flex items-center gap-2 mb-4">
       <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
     </div>
 
+    <div ref="scrollRef" class="overflow-y-auto" style="flex: 1">
     <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
       <p class="text-lg">No photos yet.</p>
       <p class="mt-2">Upload your first photo to get started.</p>
@@ -62,7 +60,9 @@
     />
 
     <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+    <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
     <div ref="sentinel" class="h-4"></div>
+    </div>
 
     <Lightbox
       :file="lightboxFile"
@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useRouteQuery } from '../composables/useRouteQuery'
@@ -154,6 +154,9 @@ const files = ref<FileItem[]>([])
 const total = ref(0)
 const nextCursor = ref('')
 const loading = ref(false)
+const loadingMore = ref(false)
+const scrollRef = ref<HTMLElement | null>(null)
+const sentinel = ref<HTMLElement | null>(null)
 
 const pathQuery = useRouteQuery('path', '')
 const mediaQuery = useRouteQuery('media', '')
@@ -199,13 +202,16 @@ const lightboxIndex = computed(() => {
 const fileViewerFile = ref<FileItem | null>(null)
 
 async function loadFiles(reset = true) {
+  const savedScroll = scrollRef.value?.scrollTop ?? 0
   if (reset) {
     files.value = []
     nextCursor.value = ''
+    loading.value = true
+  } else {
+    loadingMore.value = true
   }
-  loading.value = true
   try {
-    const params: any = { sort: sortBy.value, order: 'desc', limit: 100 }
+    const params: any = { sort: sortBy.value, order: 'desc', limit: 500 }
     if (mediaType.value) params.media_type = mediaType.value
     if (nextCursor.value) params.cursor = nextCursor.value
     if (route.query.date_from) params.date_from = route.query.date_from
@@ -216,10 +222,15 @@ async function loadFiles(reset = true) {
     files.value = reset ? res.data.items : [...files.value, ...res.data.items]
     total.value = res.data.total
     nextCursor.value = res.data.nextCursor || ''
+    if (!reset) {
+      await nextTick()
+      if (scrollRef.value) scrollRef.value.scrollTop = savedScroll
+    }
   } catch (e) {
     console.error('Failed to load files', e)
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
 
@@ -359,13 +370,39 @@ if (typeof window !== 'undefined') {
   })
 }
 
-watch(() => route.query, () => loadFiles(), { immediate: false })
+watch([() => route.query.path, () => route.query.media, () => route.query.all_folders], () => loadFiles(true), { immediate: false })
+watch([mediaType, sortBy, includeAllFolders], () => loadFiles(true))
 
 onMounted(() => {
-  refreshInterval = setInterval(() => {
+  let observer: IntersectionObserver | null = null
+  if (sentinel.value) {
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && nextCursor.value && !loadingMore.value) {
+          loadFiles(false)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinel.value)
+  }
+  refreshInterval = setInterval(async () => {
     const completed = upload.consumeCompletedJobs()
-    if (completed.length > 0) {
-      loadFiles(true)
+    if (completed.length === 0) return
+    const pathKey = currentPath.value ?? null
+    const relevant = completed.filter(j => (j.folder_id ?? null) === pathKey)
+    for (const job of relevant) {
+      try {
+        const res = await api.get(`/files/${job.file_id}`)
+        const newFile = res.data as FileItem
+        if (sortBy.value === 'taken_at' || sortBy.value === 'created_at') {
+          files.value.unshift(newFile)
+        } else {
+          files.value.push(newFile)
+        }
+      } catch (e) {
+        console.error('Failed to fetch new file', e)
+      }
     }
   }, 2000)
 })

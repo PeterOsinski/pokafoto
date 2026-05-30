@@ -569,3 +569,165 @@ func TestUploadJobStore_ListActiveByUser_shouldReturnEmptyForUnknownUser(t *test
 		t.Errorf("expected 0 jobs, got %d", len(jobs))
 	}
 }
+
+func TestUploadJobStore_ListAll_shouldPaginate(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	for i := 0; i < 5; i++ {
+		job := &model.UploadJob{
+			BatchID:   "batch-list-paginate",
+			UserID:    userID,
+			Filename:  "photo" + string(rune('a'+i)) + ".jpg",
+			SizeBytes: int64(100 + i),
+			TempPath:  tmpPath,
+			Status:    model.JobStatusCompleted,
+		}
+		if err := s.Create(job); err != nil {
+			t.Fatalf("create job: %v", err)
+		}
+	}
+
+	jobs, total, err := s.ListAll(3, 0, "")
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if total != 5 {
+		t.Errorf("expected total 5, got %d", total)
+	}
+	if len(jobs) != 3 {
+		t.Errorf("expected 3 jobs, got %d", len(jobs))
+	}
+}
+
+func TestUploadJobStore_ListAll_shouldFilterByStatus(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	for i := 0; i < 3; i++ {
+		job := &model.UploadJob{
+			BatchID:   "batch-filter-status",
+			UserID:    userID,
+			Filename:  "photo" + string(rune('a'+i)) + ".jpg",
+			SizeBytes: 100,
+			TempPath:  tmpPath,
+			Status:    model.JobStatusCompleted,
+		}
+		if err := s.Create(job); err != nil {
+			t.Fatalf("create job: %v", err)
+		}
+	}
+	failedJob := &model.UploadJob{
+		BatchID:   "batch-filter-failed",
+		UserID:    userID,
+		Filename:  "bad.jpg",
+		SizeBytes: 50,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusFailed,
+	}
+	if err := s.Create(failedJob); err != nil {
+		t.Fatalf("create failed job: %v", err)
+	}
+	s.Fail(failedJob.ID, "test_error")
+
+	jobs, total, err := s.ListAll(10, 0, string(model.JobStatusFailed))
+	if err != nil {
+		t.Fatalf("list all with filter: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("expected total 1 for failed filter, got %d", total)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	if jobs[0].Status != model.JobStatusFailed {
+		t.Errorf("expected failed status, got %s", jobs[0].Status)
+	}
+}
+
+func TestUploadJobStore_CountByStatus_shouldReturnAllStatuses(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	for _, status := range []model.JobStatus{model.JobStatusCompleted, model.JobStatusCompleted, model.JobStatusFailed} {
+		job := &model.UploadJob{
+			BatchID:   "batch-cnt-status",
+			UserID:    userID,
+			Filename:  "file.jpg",
+			SizeBytes: 100,
+			TempPath:  tmpPath,
+			Status:    status,
+		}
+		if err := s.Create(job); err != nil {
+			t.Fatalf("create job: %v", err)
+		}
+	}
+
+	counts, err := s.CountByStatus()
+	if err != nil {
+		t.Fatalf("count by status: %v", err)
+	}
+	if counts["completed"] != 2 {
+		t.Errorf("expected 2 completed, got %d", counts["completed"])
+	}
+	if counts["failed"] != 1 {
+		t.Errorf("expected 1 failed, got %d", counts["failed"])
+	}
+	if counts["queued"] != 0 {
+		t.Errorf("expected 0 queued, got %d", counts["queued"])
+	}
+}
+
+func TestUploadJobStore_Requeue_shouldResetToQueued(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	job := &model.UploadJob{
+		BatchID:   "batch-requeue",
+		UserID:    userID,
+		Filename:  "failed.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusFailed,
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	s.Fail(job.ID, "test_error")
+
+	if err := s.Requeue(job.ID); err != nil {
+		t.Fatalf("requeue failed: %v", err)
+	}
+
+	fetched, err := s.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("find by id: %v", err)
+	}
+	if fetched.Status != model.JobStatusQueued {
+		t.Errorf("expected queued after requeue, got %s", fetched.Status)
+	}
+	if fetched.Error != nil {
+		t.Errorf("expected nil error after requeue, got %v", fetched.Error)
+	}
+}
+
+func TestUploadJobStore_Requeue_shouldFailForNonFailedJob(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	job := &model.UploadJob{
+		BatchID:   "batch-nonretry",
+		UserID:    userID,
+		Filename:  "completed.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusCompleted,
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	if err := s.Requeue(job.ID); err == nil {
+		t.Error("expected error requeueing completed job, got nil")
+	}
+}

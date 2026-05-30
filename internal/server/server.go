@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/service"
@@ -52,7 +53,9 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore)
 	s.storageService = storageService
 
-	go NewCacheEvictor(cfg.ThumbnailsDir()).Start()
+	s.workerPool.StartReconciler(30 * time.Minute)
+
+	go NewCacheEvictor(cfg).Start()
 
 	s.setupRouter()
 	return s
@@ -149,7 +152,11 @@ func (s *Server) registerRoutes(r *chi.Mux) {
 				r.Put("/users/{id}/role", s.handleAdminUpdateRole)
 			r.Get("/stats", s.handleAdminStats)
 			r.Get("/files/breakdown", s.handleAdminFileBreakdown)
+			r.Get("/thumbnails/stats", s.handleAdminThumbnailStats)
 			r.Get("/workers", s.handleAdminWorkers)
+			r.Get("/jobs", s.handleAdminListJobs)
+			r.Post("/jobs/{id}/retry", s.handleAdminRetryJob)
+			r.Post("/jobs/reconcile", s.handleAdminReconcileJobs)
 			})
 		})
 	})

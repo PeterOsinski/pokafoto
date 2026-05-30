@@ -55,6 +55,11 @@ func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType stri
 		thumbs = append(thumbs, md)
 	}
 
+	xl, err := s.generateSize(fileID, img, model.ThumbSizeXL, 2000, "jpeg")
+	if err == nil {
+		thumbs = append(thumbs, xl)
+	}
+
 	preview, err := s.generateMaxDim(fileID, img, model.ThumbSizePreview, 720, "webp")
 	if err == nil {
 		thumbs = append(thumbs, preview)
@@ -78,9 +83,17 @@ func (s *ThumbnailService) generateSize(fileID string, img image.Image, size mod
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	if err := jpeg.Encode(f, resized, &jpeg.Options{Quality: 75}); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := f.Close(); err != nil {
 		return nil, err
 	}
 
@@ -116,16 +129,25 @@ func (s *ThumbnailService) generateMaxDim(fileID string, img image.Image, size m
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	if format == "webp" {
 		if err := webp.Encode(f, resized, &webp.Options{Lossless: false, Quality: 80}); err != nil {
+			f.Close()
 			return nil, err
 		}
 	} else {
 		if err := jpeg.Encode(f, resized, &jpeg.Options{Quality: 80}); err != nil {
+			f.Close()
 			return nil, err
 		}
+	}
+
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := f.Close(); err != nil {
+		return nil, err
 	}
 
 	stat, _ := os.Stat(thumbPath)

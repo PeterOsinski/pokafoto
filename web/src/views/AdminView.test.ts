@@ -80,6 +80,17 @@ const mockBreakdownResponse = {
   total_size: 3350000000,
 }
 
+const mockThumbnailStatsResponse = {
+  breakdown: [
+    { size: 'sm', count: 100, total_size: 5000000 },
+    { size: 'lg', count: 100, total_size: 50000000 },
+    { size: 'md', count: 100, total_size: 80000000 },
+    { size: 'preview', count: 100, total_size: 120000000 },
+  ],
+  total_count: 400,
+  total_size_bytes: 255000000,
+}
+
 describe('AdminView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -102,6 +113,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 
@@ -119,6 +131,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 
@@ -137,6 +150,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 
@@ -154,6 +168,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 
@@ -176,6 +191,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 
@@ -195,6 +211,7 @@ describe('AdminView', () => {
       if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
       if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
       if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
       return Promise.resolve({ data: [] })
     })
 

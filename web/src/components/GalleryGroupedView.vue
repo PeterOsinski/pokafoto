@@ -1,29 +1,39 @@
 <template>
-  <div class="space-y-8">
-    <div v-for="group in groups" :key="group.label">
-      <h3 class="sticky top-0 z-10 text-sm font-semibold text-[var(--text-secondary)] py-2 mb-3 border-b border-[var(--border-color)]" style="background: var(--bg-color)">
-        {{ group.label }}
-        <span class="font-normal text-xs">· {{ group.files.length }} {{ group.files.length === 1 ? 'photo' : 'photos' }}</span>
-      </h3>
-      <div class="grid gap-2" :style="gridStyle">
-        <div v-for="item in group.files" :key="item.file.id">
-          <ThumbnailCard
-            :file="item.file"
-            :selected="selectedIds.has(item.file.id)"
-            :selectable="selectionEnabled"
-            :anySelected="selectedIds.size > 0"
-            @select="$emit('select', item.file.id)"
-            @deselect="$emit('deselect', item.file.id)"
-            @open="$emit('open', item.index)"
-          />
-        </div>
+  <DynamicScroller
+    class="scroller"
+    :items="groupItems"
+    :min-item-size="80"
+    key-field="key"
+    v-slot="{ item, active }"
+    :buffer="300"
+  >
+    <DynamicScrollerItem :item="item" :active="active">
+      <div v-if="item.type === 'header'" class="sticky top-0 z-10 text-sm font-semibold text-[var(--text-secondary)] py-2 border-b border-[var(--border-color)]" style="background: var(--bg-color)">
+        {{ item.label }}
+        <span class="font-normal text-xs">· {{ item.fileCount }} {{ item.fileCount === 1 ? 'photo' : 'photos' }}</span>
       </div>
-    </div>
-  </div>
+      <div v-else-if="item.type === 'row'" class="grid gap-2 mb-2" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)` }">
+        <ThumbnailCard
+          v-for="entry in item.files"
+          :key="entry.file.id"
+          :file="entry.file"
+          :selected="selectedIds.has(entry.file.id)"
+          :selectable="selectionEnabled"
+          :anySelected="selectedIds.size > 0"
+          :thumbSize="effectiveThumbSize"
+          @select="$emit('select', entry.file.id)"
+          @deselect="$emit('deselect', entry.file.id)"
+          @open="$emit('open', entry.index)"
+        />
+      </div>
+    </DynamicScrollerItem>
+  </DynamicScroller>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import ThumbnailCard from './ThumbnailCard.vue'
 
 interface FileItem {
@@ -45,15 +55,17 @@ interface FileItem {
   }
 }
 
-interface GroupedItem {
+interface GroupedEntry {
   file: FileItem
   index: number
 }
 
-interface DayGroup {
-  label: string
-  dateKey: string
-  files: GroupedItem[]
+interface GroupItem {
+  type: 'header' | 'row'
+  key: string
+  label?: string
+  fileCount?: number
+  files?: GroupedEntry[]
 }
 
 const props = defineProps<{
@@ -69,13 +81,17 @@ defineEmits<{
   open: [index: number]
 }>()
 
-const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(auto-fill, minmax(${props.thumbSizePx}px, 1fr))`,
-}))
+const columns = computed(() => Math.max(1, Math.floor(1200 / (props.thumbSizePx + 8))))
 
-const groups = computed<DayGroup[]>(() => {
-  const map = new Map<string, GroupedItem[]>()
-  const unknown: GroupedItem[] = []
+const effectiveThumbSize = computed<'sm' | 'md' | 'lg'>(() => {
+  if (props.thumbSizePx <= 100) return 'sm'
+  if (props.thumbSizePx <= 250) return 'lg'
+  return 'md'
+})
+
+const groupItems = computed<GroupItem[]>(() => {
+  const map = new Map<string, GroupedEntry[]>()
+  const unknown: GroupedEntry[] = []
 
   props.files.forEach((file, index) => {
     if (!file.takenAt) {
@@ -89,21 +105,39 @@ const groups = computed<DayGroup[]>(() => {
 
   const sorted = Array.from(map.entries())
     .sort(([a], [b]) => b.localeCompare(a))
-    .map(([dateKey, entries]) => {
-      const firstDate = new Date(entries[0].file.takenAt!)
-      const label = firstDate.toLocaleDateString(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-      return { label, dateKey, files: entries }
+
+  const items: GroupItem[] = []
+  sorted.forEach(([dateKey, entries]) => {
+    const firstDate = new Date(entries[0].file.takenAt!)
+    const label = firstDate.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     })
+    items.push({ type: 'header', key: `h-${dateKey}`, label, fileCount: entries.length })
+
+    const cols = columns.value
+    for (let i = 0; i < entries.length; i += cols) {
+      items.push({ type: 'row', key: `${dateKey}-r${i}`, files: entries.slice(i, i + cols) })
+    }
+  })
 
   if (unknown.length > 0) {
-    sorted.push({ label: 'Unknown date', dateKey: '__unknown__', files: unknown })
+    items.push({ type: 'header', key: 'h-unknown', label: 'Unknown date', fileCount: unknown.length })
+    const cols = columns.value
+    for (let i = 0; i < unknown.length; i += cols) {
+      items.push({ type: 'row', key: `unknown-r${i}`, files: unknown.slice(i, i + cols) })
+    }
   }
 
-  return sorted
+  return items
 })
 </script>
+
+<style scoped>
+.scroller {
+  height: calc(100vh - 200px);
+  min-height: 400px;
+}
+</style>

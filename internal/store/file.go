@@ -680,3 +680,32 @@ func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]
 
 	return copies, rows.Err()
 }
+
+func (s *FileStore) FindPhotosMissingThumbnails() ([]*model.File, error) {
+	rows, err := s.db.Query(
+		`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.is_deleted FROM files f WHERE f.media_type IN ('photo', 'video') AND f.is_deleted = 0 AND (NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id AND t.size = 'preview') OR NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id)) ORDER BY f.created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find photos missing thumbnails: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*model.File
+	for rows.Next() {
+		f, err := s.scanFile(rows)
+		if err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+
+	return files, rows.Err()
+}
+
+func (s *FileStore) CountPhotosMissingThumbnailPreview() (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM files f WHERE f.media_type IN ('photo', 'video') AND f.is_deleted = 0 AND NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id AND t.size = 'preview')`,
+	).Scan(&count)
+	return count, err
+}

@@ -18,6 +18,13 @@
         @click="downloadFile"
         class="text-white text-sm hover:text-[var(--accent)]"
       >⬇ Download</button>
+      <label
+        v-if="file.id && file.thumbnails?.xl"
+        class="text-white text-xs flex items-center gap-1 cursor-pointer select-none"
+      >
+        <input type="checkbox" v-model="settings.highResDownload" class="cursor-pointer" />
+        2000px
+      </label>
     </div>
 
     <div
@@ -66,6 +73,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import api from '../api/client'
+import { useLocalSettings } from '../composables/useLocalSettings'
 import VideoPlayer from './VideoPlayer.vue'
 
 interface FileItem {
@@ -77,6 +85,7 @@ interface FileItem {
   thumbnails?: {
     sm: { url: string; width: number; height: number }
     md: { url: string; width: number; height: number }
+    xl?: { url: string; width: number; height: number }
     preview: { url: string; width: number; height: number }
   }
 }
@@ -111,6 +120,7 @@ const lightboxEl = ref<HTMLElement | null>(null)
 const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
 const videoLoading = ref(false)
+const settings = useLocalSettings()
 
 let oldVideoURL = ''
 
@@ -184,6 +194,18 @@ function formatSize(bytes: number): string {
 async function downloadFile() {
   if (!props.file?.id) return
   try {
+    if (settings.highResDownload.value && props.file.thumbnails?.xl) {
+      const res = await api.get(props.file.thumbnails.xl.url, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = (props.file.originalName || '').replace(/\.\w+$/, '') + '_2000px.jpg'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      return
+    }
     const res = await api.get(`/download/${props.file.id}`, { responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')

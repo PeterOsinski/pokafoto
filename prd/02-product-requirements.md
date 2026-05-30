@@ -102,6 +102,17 @@
 | A-05 | As an admin, I can manage users (list, delete, change roles) | P1 |
 | A-06 | As an admin, I can enable or disable public registration | P1 |
 
+### Upload Reliability & Self-Healing
+| ID | User Story | Priority |
+|---|---|---|
+| R-01 | As an admin, I can view a paginated history of all upload jobs with status, errors, and timestamps in the Admin Panel | P1 |
+| R-02 | As an admin, I can retry failed upload jobs from the job history view | P1 |
+| R-03 | As an admin, I can trigger thumbnail reconciliation to scan for and regenerate missing thumbnails across all photos | P1 |
+| R-04 | The system periodically self-heals by running thumbnail reconciliation every 30 minutes | P1 |
+| R-05 | When a thumbnail is missing both locally and on S3, the handler falls back to serving the next smaller available size instead of returning 404 | P1 |
+| R-06 | Thumbnail files are explicitly synced to disk after generation to prevent data loss on Docker overlayfs | P0 |
+| R-07 | The worker verifies thumbnail files still exist on disk before attempting S3 upload, logging a warning and skipping if missing | P0 |
+
 ### Sharing (Future / V2)
 | ID | User Story | Priority |
 |---|---|---|

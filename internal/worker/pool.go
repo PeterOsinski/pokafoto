@@ -192,6 +192,11 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		return
 	}
 
+	if job.Reason != nil && *job.Reason == "reconcile" {
+		p.processReconcileJob(job, f)
+		return
+	}
+
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {
 		f.Close()
@@ -378,8 +383,18 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	if p.storageService != nil {
 		if err := p.storageService.PutOriginals(job.UserID, fileRecord.Filename, destPath); err != nil {
 			slog.Warn("s3 upload failed for original", "file_id", fileRecord.ID, "error", err)
+		} else {
+			if err := os.Remove(destPath); err != nil {
+				slog.Warn("failed to remove local original after s3 upload", "file_id", fileRecord.ID, "path", destPath, "error", err)
+			} else {
+				slog.Info("removed local original after s3 upload", "file_id", fileRecord.ID, "path", destPath)
+			}
 		}
 		for _, t := range thumbs {
+			if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
+				slog.Warn("thumbnail file missing before s3 upload, skipping", "file_id", fileRecord.ID, "size", t.Size, "path", t.LocalPath)
+				continue
+			}
 			format := "jpg"
 			if t.Size == model.ThumbSizePreview {
 				format = "webp"
@@ -401,9 +416,158 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	slog.Info("processed upload", "job_id", job.ID, "file_id", fileRecord.ID, "name", job.Filename)
 }
 
+func (p *Pool) processReconcileJob(job *model.UploadJob, f *os.File) {
+	defer f.Close()
+
+	if job.FileID == nil {
+		p.uploadJobStore.Fail(job.ID, "reconcile_missing_file_id")
+		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
+		return
+	}
+
+	fileRecord, err := p.fileStore.FindByID(*job.FileID)
+	if err != nil || fileRecord == nil {
+		p.uploadJobStore.Fail(job.ID, "reconcile_file_not_found")
+		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
+		return
+	}
+
+	f.Seek(0, 0)
+	mimeType := detectMimeTypeFromFile(f, job.Filename)
+	mediaType := detectMediaType(mimeType)
+
+	if mediaType == model.MediaTypeFile {
+		p.uploadJobStore.Complete(job.ID, fileRecord.ID)
+		job.FileID = &fileRecord.ID
+		job.Status = model.JobStatusCompleted
+		job.Progress = 1.0
+		p.notifySubscribers(job)
+		p.completedTotal.Add(1)
+		return
+	}
+
+	stage := model.JobStageThumbnails
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.5)
+	p.notifySubscribers(job)
+
+	thumbs, err := p.thumbnailService.GenerateAll(fileRecord.ID, job.TempPath, mimeType)
+	if err != nil {
+		slog.Warn("reconcile thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
+	} else {
+		for _, t := range thumbs {
+			if err := p.thumbnailStore.Create(t); err != nil {
+				slog.Warn("reconcile failed to store thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
+			}
+		}
+	}
+
+	if p.storageService != nil {
+		for _, t := range thumbs {
+			if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
+				slog.Warn("reconcile thumbnail file missing before s3 upload, skipping", "file_id", fileRecord.ID, "size", t.Size, "path", t.LocalPath)
+				continue
+			}
+			format := "jpg"
+			if t.Size == model.ThumbSizePreview {
+				format = "webp"
+			}
+			if err := p.storageService.PutThumbnail(fileRecord.ID, string(t.Size), format, t.LocalPath); err != nil {
+				slog.Warn("reconcile s3 upload failed for thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
+			}
+		}
+	}
+
+	p.uploadJobStore.Complete(job.ID, fileRecord.ID)
+	job.FileID = &fileRecord.ID
+	job.Status = model.JobStatusCompleted
+	job.Progress = 1.0
+	p.notifySubscribers(job)
+	p.completedTotal.Add(1)
+
+	slog.Info("processed reconcile", "job_id", job.ID, "file_id", fileRecord.ID, "name", job.Filename)
+}
+
 func (p *Pool) Shutdown() {
 	close(p.stopCh)
 	p.wg.Wait()
+}
+
+func (p *Pool) StartReconciler(interval time.Duration) {
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-p.stopCh:
+				return
+			case <-ticker.C:
+				p.RunReconciliation()
+			}
+		}
+	}()
+}
+
+func (p *Pool) RunReconciliation() map[string]interface{} {
+	originalsDir := p.cfg.OriginalsDir()
+	missingAll := 0
+	missingPreview := 0
+	created := 0
+	batchID := "reconcile-" + time.Now().UTC().Format(time.RFC3339)
+
+	files, err := p.fileStore.FindPhotosMissingThumbnails()
+	if err != nil {
+		slog.Warn("reconciler failed to find missing thumbnails", "error", err)
+		return map[string]interface{}{"created": 0, "details": map[string]int{}}
+	}
+
+	for _, f := range files {
+		thumbCount, _ := p.thumbnailStore.CountByFileID(f.ID)
+		if thumbCount == 0 {
+			missingAll++
+		} else {
+			missingPreview++
+		}
+
+		originalPath := filepath.Join(originalsDir, f.UserID, f.Filename)
+		if _, err := os.Stat(originalPath); os.IsNotExist(err) {
+			continue
+		}
+
+		job := &model.UploadJob{
+			BatchID:           batchID,
+			UserID:            f.UserID,
+			Filename:          f.OriginalName,
+			SizeBytes:         f.SizeBytes,
+			TempPath:          originalPath,
+			SkipNameSizeDedup: true,
+			Status:            model.JobStatusQueued,
+			Reason:            &[]string{"reconcile"}[0],
+			FileID:            &f.ID,
+		}
+		if err := p.uploadJobStore.Create(job); err != nil {
+			slog.Warn("reconciler failed to create job", "file_id", f.ID, "error", err)
+			continue
+		}
+		created++
+	}
+
+	if created > 0 {
+		slog.Info("reconciler created jobs", "created", created, "missing_all", missingAll, "missing_preview", missingPreview)
+	}
+
+	return map[string]interface{}{
+		"created": created,
+		"details": map[string]int{
+			"missing_all_thumbnails": missingAll,
+			"missing_preview_only":   missingPreview,
+		},
+	}
 }
 
 func (p *Pool) Subscribe(batchID string, listenerID string) chan *model.UploadJob {

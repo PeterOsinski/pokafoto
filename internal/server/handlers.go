@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,7 +20,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
-		limit = 100
+		limit = 500
 	}
 
 	opts := store.FileListOptions{
@@ -233,7 +234,7 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 		s3Key := fmt.Sprintf("thumbnails/%s/%s", fileID, size)
 		if err := s.storageService.GetObject(s3Key, thumbPath); err != nil {
 			slog.Warn("s3 thumbnail fallback failed", "key", s3Key, "error", err)
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "Thumbnail not found")
+			s.fallbackThumbnail(w, r, fileID, size)
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -241,6 +242,23 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.fallbackThumbnail(w, r, fileID, size)
+}
+
+func (s *Server) fallbackThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
+	fallbackMap := map[string]string{
+		"preview.webp":  "md.jpg",
+		"lg.jpg":        "md.jpg",
+		"md.jpg":        "sm.jpg",
+	}
+	if fallback, ok := fallbackMap[size]; ok {
+		fallbackPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, fallback)
+		if _, err := os.Stat(fallbackPath); err == nil {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			http.ServeFile(w, r, fallbackPath)
+			return
+		}
+	}
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "Thumbnail not found")
 }
 
@@ -467,13 +485,30 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk")
+	if _, err := os.Stat(filePath); err == nil {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
+		http.ServeFile(w, r, filePath)
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
-	http.ServeFile(w, r, filePath)
+	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
+		stream, err := s.storageService.GetObjectStream(s3Key)
+		if err != nil {
+			slog.Warn("s3 download stream failed", "file_id", fileID, "error", err)
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk or in S3")
+			return
+		}
+		defer stream.Close()
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
+		if file.MimeType != "" {
+			w.Header().Set("Content-Type", file.MimeType)
+		}
+		io.Copy(w, stream)
+		return
+	}
+
+	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk")
 }
 
 func (s *Server) handleBatchDownload(w http.ResponseWriter, r *http.Request) {
@@ -546,9 +581,70 @@ func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, breakdown)
 }
 
+func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	statusFilter := r.URL.Query().Get("status")
+
+	jobs, total, err := s.uploadJobStore.ListAll(limit, offset, statusFilter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list jobs")
+		return
+	}
+
+	summary, _ := s.uploadJobStore.CountByStatus()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"jobs":    jobs,
+		"total":   total,
+		"summary": summary,
+	})
+}
+
+func (s *Server) handleAdminRetryJob(w http.ResponseWriter, r *http.Request) {
+	jobID := r.PathValue("id")
+	if err := s.uploadJobStore.Requeue(jobID); err != nil {
+		writeError(w, http.StatusConflict, "RETRY_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+}
+
+func (s *Server) handleAdminReconcileJobs(w http.ResponseWriter, r *http.Request) {
+	result := s.workerPool.RunReconciliation()
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *Server) handleAdminWorkers(w http.ResponseWriter, r *http.Request) {
 	stats := s.workerPool.Stats()
 	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Request) {
+	breakdown, err := s.thumbnailStore.Breakdown()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get thumbnail stats")
+		return
+	}
+	if breakdown == nil {
+		breakdown = []store.ThumbnailBreakdown{}
+	}
+
+	var totalCount int64
+	var totalSizeBytes int64
+	for _, b := range breakdown {
+		totalCount += b.Count
+		totalSizeBytes += b.TotalSize
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"breakdown":        breakdown,
+		"total_count":      totalCount,
+		"total_size_bytes": totalSizeBytes,
+	})
 }
 
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
@@ -585,15 +681,28 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		diskPct = float64(diskUsed) / float64(diskTotal) * 100
 	}
 
+	var originalsSize int64
+	filepath.Walk(s.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			originalsSize += info.Size()
+		}
+		return nil
+	})
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"total_files":         totalFiles,
-		"total_size_bytes":    totalSize,
-		"cache_size_bytes":    cacheSize,
-		"disk_total_bytes":    diskTotal,
-		"disk_free_bytes":     diskFree,
-		"disk_used_bytes":     diskUsed,
+		"total_files":          totalFiles,
+		"total_size_bytes":     totalSize,
+		"cache_size_bytes":     cacheSize,
+		"disk_total_bytes":     diskTotal,
+		"disk_free_bytes":      diskFree,
+		"disk_used_bytes":      diskUsed,
 		"disk_utilization_pct": diskPct,
-		"users":               userStats,
+		"max_disk_usage_pct":   s.cfg.MaxDiskUsagePercent(),
+		"originals_size_bytes": originalsSize,
+		"users":                userStats,
 	})
 }
 
@@ -633,6 +742,7 @@ type thumbnailSetResponse struct {
 	SM         *thumbnailInfoResponse `json:"sm"`
 	LG         *thumbnailInfoResponse `json:"lg"`
 	MD         *thumbnailInfoResponse `json:"md"`
+	XL         *thumbnailInfoResponse `json:"xl,omitempty"`
 	Preview    *thumbnailInfoResponse `json:"preview"`
 	VideoStill *thumbnailInfoResponse `json:"videoStill,omitempty"`
 }
@@ -644,13 +754,17 @@ type thumbnailInfoResponse struct {
 }
 
 func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetResponse {
+	ver := fileID
+	if len(ver) > 8 {
+		ver = ver[:8]
+	}
 	if mediaType == model.MediaTypeFile {
 		return nil
 	}
 	if mediaType == model.MediaTypeVideo {
 		return &thumbnailSetResponse{
 			VideoStill: &thumbnailInfoResponse{
-				URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg", fileID),
+				URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg?v=%s", fileID, ver),
 				Width:  600,
 				Height: 338,
 			},
@@ -658,22 +772,27 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 	}
 	return &thumbnailSetResponse{
 		SM: &thumbnailInfoResponse{
-			URL:    fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", fileID),
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/sm.jpg?v=%s", fileID, ver),
 			Width:  60,
 			Height: 60,
 		},
 		LG: &thumbnailInfoResponse{
-			URL:    fmt.Sprintf("/api/v1/thumb/%s/lg.jpg", fileID),
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/lg.jpg?v=%s", fileID, ver),
 			Width:  300,
 			Height: 300,
 		},
 		MD: &thumbnailInfoResponse{
-			URL:    fmt.Sprintf("/api/v1/thumb/%s/md.jpg", fileID),
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/md.jpg?v=%s", fileID, ver),
 			Width:  600,
 			Height: 600,
 		},
+		XL: &thumbnailInfoResponse{
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/xl.jpg?v=%s", fileID, ver),
+			Width:  2000,
+			Height: 2000,
+		},
 		Preview: &thumbnailInfoResponse{
-			URL:    fmt.Sprintf("/api/v1/thumb/%s/preview.webp", fileID),
+			URL:    fmt.Sprintf("/api/v1/thumb/%s/preview.webp?v=%s", fileID, ver),
 			Width:  1280,
 			Height: 720,
 		},

@@ -65,3 +65,33 @@ func (s *ThumbnailStore) FindByFileIDAndSize(fileID string, size model.Thumbnail
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return t, nil
 }
+
+func (s *ThumbnailStore) CountByFileID(fileID string) (int, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM thumbnails WHERE file_id = ?`, fileID).Scan(&count)
+	return count, err
+}
+
+type ThumbnailBreakdown struct {
+	Size      string `json:"size"`
+	Count     int64  `json:"count"`
+	TotalSize int64  `json:"total_size"`
+}
+
+func (s *ThumbnailStore) Breakdown() ([]ThumbnailBreakdown, error) {
+	rows, err := s.db.Query(`SELECT size, COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM thumbnails GROUP BY size ORDER BY size`)
+	if err != nil {
+		return nil, fmt.Errorf("thumbnail breakdown query: %w", err)
+	}
+	defer rows.Close()
+
+	var result []ThumbnailBreakdown
+	for rows.Next() {
+		var b ThumbnailBreakdown
+		if err := rows.Scan(&b.Size, &b.Count, &b.TotalSize); err != nil {
+			return nil, fmt.Errorf("scan thumbnail breakdown: %w", err)
+		}
+		result = append(result, b)
+	}
+	return result, rows.Err()
+}

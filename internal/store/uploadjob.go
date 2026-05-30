@@ -261,6 +261,91 @@ func (s *UploadJobStore) DeleteByID(id string) error {
 	return err
 }
 
+func (s *UploadJobStore) ListAll(limit, offset int, statusFilter string) ([]*model.UploadJob, int, error) {
+	var total int
+	query := `SELECT COUNT(*) FROM upload_jobs`
+	args := []interface{}{}
+
+	if statusFilter != "" {
+		query += ` WHERE status = ?`
+		args = append(args, statusFilter)
+	}
+
+	if err := s.db.QueryRow(query, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count upload jobs: %w", err)
+	}
+
+	dataQuery := `SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs`
+	dataArgs := []interface{}{}
+
+	if statusFilter != "" {
+		dataQuery += ` WHERE status = ?`
+		dataArgs = append(dataArgs, statusFilter)
+	}
+
+	dataQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.db.Query(dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list upload jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []*model.UploadJob
+	for rows.Next() {
+		job, err := s.scanJob(rows)
+		if err != nil {
+			continue
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, total, rows.Err()
+}
+
+func (s *UploadJobStore) CountByStatus() (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT status, COUNT(*) FROM upload_jobs GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("count by status: %w", err)
+	}
+	defer rows.Close()
+
+	counts := map[string]int{
+		"queued":     0,
+		"processing": 0,
+		"completed":  0,
+		"failed":     0,
+		"skipped":    0,
+	}
+
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			continue
+		}
+		counts[status] = count
+	}
+
+	return counts, rows.Err()
+}
+
+func (s *UploadJobStore) Requeue(id string) error {
+	result, err := s.db.Exec(
+		`UPDATE upload_jobs SET status = 'queued', error = NULL, reason = NULL, progress = 0.0, stage = NULL, updated_at = ? WHERE id = ? AND status IN ('failed', 'skipped')`,
+		time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("requeue job: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("job not found or not in retryable state")
+	}
+	return nil
+}
+
 type scannableRow interface {
 	Scan(dest ...interface{}) error
 }

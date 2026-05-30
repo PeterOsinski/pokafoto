@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="cardRef"
     class="relative rounded-md overflow-hidden group"
     :class="selected ? 'ring-2 ring-[var(--accent)]' : ''"
     style="background: var(--bg-elevated); aspect-ratio: 1"
@@ -22,7 +23,7 @@
 
     <div @click="$emit('open')" class="cursor-pointer w-full h-full">
       <img
-        v-if="imgSrc && !loadError"
+        v-if="isVisible && imgSrc && !loadError"
         :src="imgSrc"
         :alt="file.originalName"
         class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
@@ -40,7 +41,7 @@
           Retry
         </button>
       </div>
-      <div v-else-if="!imgSrc" class="w-full h-full flex flex-col items-center justify-center gap-1 text-[var(--text-secondary)]">
+      <div v-else-if="!isVisible || !imgSrc" class="w-full h-full flex flex-col items-center justify-center gap-1 text-[var(--text-secondary)]">
         <template v-if="file.mediaType === 'video'">
           <span class="text-3xl">&#9654;</span>
         </template>
@@ -63,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 interface FileItem {
   id: string
@@ -87,6 +88,7 @@ const props = defineProps<{
   selected?: boolean
   selectable?: boolean
   anySelected?: boolean
+  thumbSize?: 'sm' | 'md' | 'lg'
 }>()
 
 defineEmits<{
@@ -95,6 +97,8 @@ defineEmits<{
   open: []
 }>()
 
+const isVisible = ref(false)
+const cardRef = ref<HTMLElement | null>(null)
 const loadError = ref(false)
 const retryCounter = ref(0)
 
@@ -107,8 +111,21 @@ const fileExtension = computed(() => {
 const imgSrc = computed(() => {
   const t = props.file.thumbnails
   if (!t) return ''
-  const primary = t.preview
-  const fallback = t.md || t.sm || t.videoStill
+  let primary = t.preview
+  let fallback = t.md || t.sm || t.videoStill
+
+  if (props.thumbSize) {
+    const sizeMap: Record<string, string | undefined> = {
+      sm: t.sm?.url,
+      lg: t.lg?.url,
+      md: t.md?.url,
+    }
+    const sizedUrl = sizeMap[props.thumbSize]
+    if (sizedUrl) {
+      return retryCounter.value > 0 ? `${sizedUrl}#t=${retryCounter.value}` : sizedUrl
+    }
+  }
+
   const base = primary?.url || fallback?.url || ''
   if (!base) return ''
   return retryCounter.value > 0 ? `${base}#t=${retryCounter.value}` : base
@@ -133,4 +150,23 @@ function formatDate(takenAt: string): string {
   const d = new Date(takenAt)
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
+
+onMounted(() => {
+  if (cardRef.value) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          isVisible.value = true
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(cardRef.value)
+  }
+})
+
+onUnmounted(() => {
+  isVisible.value = false
+})
 </script>

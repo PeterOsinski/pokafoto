@@ -126,6 +126,113 @@
     </div>
 
     <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-secondary)]">Thumbnail Stats</h3>
+      <div v-if="thumbnailStats" class="space-y-2">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b" style="border-color: var(--border-color)">
+              <th class="text-left py-1 text-[var(--text-secondary)] font-normal">Size</th>
+              <th class="text-right py-1 text-[var(--text-secondary)] font-normal">Count</th>
+              <th class="text-right py-1 text-[var(--text-secondary)] font-normal">Total Size</th>
+              <th class="text-right py-1 text-[var(--text-secondary)] font-normal">Avg Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in thumbnailStats.breakdown" :key="item.size" class="border-b" style="border-color: var(--border-color)">
+              <td class="py-1 text-[var(--text-primary)] capitalize">{{ item.size }}</td>
+              <td class="py-1 text-right text-[var(--text-primary)]">{{ item.count.toLocaleString() }}</td>
+              <td class="py-1 text-right text-[var(--text-primary)]">{{ formatBytes(item.total_size) }}</td>
+              <td class="py-1 text-right text-[var(--text-primary)]">{{ formatBytes(item.count > 0 ? Math.round(item.total_size / item.count) : 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="flex justify-between text-sm border-t pt-2" style="border-color: var(--border-color)">
+          <span class="text-[var(--text-secondary)]">Total Thumbnails</span>
+          <span class="text-[var(--text-primary)] font-semibold">{{ thumbnailStats?.total_count?.toLocaleString() ?? '0' }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-secondary)]">Total Cache Size</span>
+          <span class="text-[var(--text-primary)] font-semibold">{{ thumbnailStats ? formatBytes(thumbnailStats.total_size_bytes) : '0 B' }}</span>
+        </div>
+      </div>
+      <div v-else class="text-sm text-[var(--text-secondary)]">Loading...</div>
+    </div>
+
+    <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-[var(--text-secondary)]">Job History</h3>
+        <button
+          @click="reconcileThumbnails"
+          class="px-3 py-1 rounded text-xs"
+          style="background: var(--bg-elevated); color: var(--accent); border: 1px solid var(--border-color)"
+          :disabled="reconciling"
+        >{{ reconciling ? 'Reconciling...' : 'Reconcile Thumbnails' }}</button>
+      </div>
+      <div class="flex gap-2 mb-3">
+        <button
+          v-for="tab in jobStatusTabs"
+          :key="tab.value"
+          @click="jobStatusFilter = tab.value; loadJobs()"
+          class="px-2 py-0.5 rounded text-xs border"
+          :style="{
+            background: jobStatusFilter === tab.value ? 'var(--accent)' : 'var(--bg-elevated)',
+            color: jobStatusFilter === tab.value ? '#fff' : 'var(--text-secondary)',
+            borderColor: 'var(--border-color)',
+          }"
+        >{{ tab.label }} <span class="ml-1 opacity-60">{{ jobSummary[tab.value] ?? 0 }}</span></button>
+      </div>
+      <div v-if="jobs.length > 0" class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b" style="border-color: var(--border-color)">
+              <th class="text-left py-1 px-2 text-[var(--text-secondary)] font-normal">Filename</th>
+              <th class="text-left py-1 px-2 text-[var(--text-secondary)] font-normal">Status</th>
+              <th class="text-left py-1 px-2 text-[var(--text-secondary)] font-normal">Error / Reason</th>
+              <th class="text-left py-1 px-2 text-[var(--text-secondary)] font-normal">Created</th>
+              <th class="text-right py-1 px-2 text-[var(--text-secondary)] font-normal">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="job in jobs" :key="job.id" class="border-b" style="border-color: var(--border-color)">
+              <td class="py-1 px-2 text-[var(--text-primary)] max-w-[200px] truncate">{{ job.filename }}</td>
+              <td class="py-1 px-2">
+                <span class="px-1.5 py-0.5 rounded text-xs" :class="statusBadgeClass(job.status)">
+                  {{ job.status }}
+                </span>
+              </td>
+              <td class="py-1 px-2 text-[var(--text-secondary)] text-xs max-w-[200px] truncate">{{ job.error || job.reason || '-' }}</td>
+              <td class="py-1 px-2 text-[var(--text-secondary)] text-xs">{{ formatDate(job.created_at) }}</td>
+              <td class="py-1 px-2 text-right">
+                <button
+                  v-if="job.status === 'failed'"
+                  @click="retryJob(job.id)"
+                  class="px-2 py-0.5 rounded text-xs text-[var(--accent)]"
+                  style="background: var(--bg-elevated)"
+                >Retry</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="flex justify-between items-center mt-2 text-xs text-[var(--text-secondary)]">
+          <span>{{ jobs.length }} of {{ jobTotal }} jobs</span>
+          <div class="flex gap-2">
+            <button
+              :disabled="jobOffset === 0"
+              @click="jobOffset = Math.max(0, jobOffset - 50); loadJobs()"
+              class="px-2 py-0.5 rounded disabled:opacity-30" style="background: var(--bg-elevated)"
+            >Prev</button>
+            <button
+              :disabled="jobOffset + 50 >= jobTotal"
+              @click="jobOffset += 50; loadJobs()"
+              class="px-2 py-0.5 rounded disabled:opacity-30" style="background: var(--bg-elevated)"
+            >Next</button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="text-sm text-[var(--text-secondary)]">No jobs found.</div>
+    </div>
+
+    <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
       <span class="text-sm text-[var(--text-secondary)]">Registration: {{ regEnabled ? 'Enabled' : 'Disabled' }}</span>
     </div>
 
@@ -234,13 +341,59 @@ interface FileBreakdown {
   total_size: number
 }
 
+interface ThumbnailBreakdownItem {
+  size: string
+  count: number
+  total_size: number
+}
+
+interface ThumbnailStats {
+  breakdown: ThumbnailBreakdownItem[]
+  total_count: number
+  total_size_bytes: number
+}
+
+interface JobRecord {
+  id: string
+  batch_id: string
+  user_id: string
+  filename: string
+  size_bytes: number
+  status: string
+  stage?: string
+  progress: number
+  error?: string
+  reason?: string
+  file_id?: string
+  created_at: string
+  updated_at: string
+}
+
 const users = ref<AdminUser[]>([])
 const regEnabled = ref(true)
 const stats = ref<AdminStats | null>(null)
 const workers = ref<WorkerStats | null>(null)
 const breakdown = ref<FileBreakdown | null>(null)
+const jobs = ref<JobRecord[]>([])
+const jobTotal = ref(0)
+const jobOffset = ref(0)
+const jobStatusFilter = ref('')
+const jobSummary = ref<Record<string, number>>({})
+const reconciling = ref(false)
+const thumbnailStats = ref<ThumbnailStats | null>(null)
 let statsTimer: ReturnType<typeof setInterval> | null = null
 let workersTimer: ReturnType<typeof setInterval> | null = null
+let jobsTimer: ReturnType<typeof setInterval> | null = null
+let thumbStatsTimer: ReturnType<typeof setInterval> | null = null
+
+const jobStatusTabs = [
+  { label: 'All', value: '' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Skipped', value: 'skipped' },
+  { label: 'Processing', value: 'processing' },
+  { label: 'Queued', value: 'queued' },
+]
 
 const utilizationClass = computed(() => {
   if (!stats.value) return ''
@@ -309,16 +462,84 @@ async function deleteUser(userId: string) {
   }
 }
 
+async function loadJobs() {
+  try {
+    const params: Record<string, string> = { limit: '50', offset: String(jobOffset) }
+    if (jobStatusFilter.value) params.status = jobStatusFilter.value
+    const res = await api.get('/admin/jobs', { params })
+    jobs.value = res.data.jobs || []
+    jobTotal.value = res.data.total || 0
+    jobSummary.value = res.data.summary || {}
+  } catch (e) {
+    console.error('Failed to load jobs', e)
+  }
+}
+
+async function retryJob(jobId: string) {
+  try {
+    await api.post(`/admin/jobs/${jobId}/retry`)
+    loadJobs()
+  } catch (e) {
+    console.error('Failed to retry job', e)
+  }
+}
+
+async function reconcileThumbnails() {
+  if (!confirm('Scan for missing thumbnails and regenerate them? This may take a while.')) return
+  reconciling.value = true
+  try {
+    const res = await api.post('/admin/jobs/reconcile')
+    alert(`Reconciliation created ${res.data.created} jobs:\n- ${res.data.details?.missing_all_thumbnails ?? 0} files with 0 thumbnails\n- ${res.data.details?.missing_preview_only ?? 0} files missing preview only`)
+    loadJobs()
+  } catch (e) {
+    console.error('Failed to reconcile', e)
+  } finally {
+    reconciling.value = false
+  }
+}
+
+async function loadThumbnailStats() {
+  try {
+    const res = await api.get('/admin/thumbnails/stats')
+    thumbnailStats.value = res.data
+  } catch (e) {
+    console.error('Failed to load thumbnail stats', e)
+  }
+}
+
+function statusBadgeClass(status: string): string {
+  switch (status) {
+    case 'completed': return 'bg-green-500/20 text-green-400'
+    case 'failed': return 'bg-red-500/20 text-red-400'
+    case 'skipped': return 'bg-yellow-500/20 text-yellow-400'
+    case 'processing': return 'bg-blue-500/20 text-blue-400'
+    case 'queued': return 'bg-gray-500/20 text-gray-400'
+    default: return ''
+  }
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleString()
+}
+
 onMounted(() => {
   loadStats()
   loadBreakdown()
   loadWorkers()
+  loadJobs()
+  loadThumbnailStats()
   statsTimer = setInterval(() => { loadStats(); loadBreakdown() }, 10000)
   workersTimer = setInterval(loadWorkers, 5000)
+  jobsTimer = setInterval(loadJobs, 10000)
+  thumbStatsTimer = setInterval(loadThumbnailStats, 30000)
 })
 
 onUnmounted(() => {
   if (statsTimer) clearInterval(statsTimer)
   if (workersTimer) clearInterval(workersTimer)
+  if (jobsTimer) clearInterval(jobsTimer)
+  if (thumbStatsTimer) clearInterval(thumbStatsTimer)
 })
 </script>

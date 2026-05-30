@@ -184,9 +184,10 @@ describe('FoldersView', () => {
 
     const wrapper = await mountView({ folder_id: 'f-1' })
     await nextTick()
-    await new Promise((r) => setTimeout(r, 10))
+    await new Promise((r) => setTimeout(r, 50))
     await nextTick()
 
-    expect(wrapper.html()).toContain('grid-template-columns')
+    const tileView = wrapper.findComponent({ name: 'GalleryTileView' })
+    expect(tileView.exists()).toBe(true)
   })
 })

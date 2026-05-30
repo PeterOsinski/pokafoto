@@ -552,3 +552,58 @@ func TestFileStore_AdminFileBreakdown_shouldReturnAggregates(t *testing.T) {
 		t.Errorf("expected total size %d, got %d", expectedTotal, b.TotalSize)
 	}
 }
+
+func TestFileStore_FindPhotosMissingThumbnails_shouldFindPhotos(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	photo1 := createTestFile(t, fs, user.ID, "photo1.jpg")
+	photo2 := createTestFile(t, fs, user.ID, "photo2.jpg")
+	photo3 := createTestFile(t, fs, user.ID, "photo3.jpg")
+
+	createTestThumb(t, ts, photo1.ID, model.ThumbSizeSmall, 100)
+	createTestThumb(t, ts, photo1.ID, model.ThumbSizeMedium, 100)
+	createTestThumb(t, ts, photo1.ID, model.ThumbSizeLarge, 100)
+	createTestThumb(t, ts, photo1.ID, model.ThumbSizePreview, 100)
+
+	createTestThumb(t, ts, photo2.ID, model.ThumbSizeSmall, 100)
+	createTestThumb(t, ts, photo2.ID, model.ThumbSizeMedium, 100)
+	createTestThumb(t, ts, photo2.ID, model.ThumbSizeLarge, 100)
+
+	files, err := fs.FindPhotosMissingThumbnails()
+	if err != nil {
+		t.Fatalf("FindPhotosMissingThumbnails: %v", err)
+	}
+
+	foundPhoto2 := false
+	foundPhoto3 := false
+	for _, f := range files {
+		if f.ID == photo2.ID {
+			foundPhoto2 = true
+		}
+		if f.ID == photo3.ID {
+			foundPhoto3 = true
+		}
+	}
+	if foundPhoto1 := containsID(files, photo1.ID); foundPhoto1 {
+		t.Error("photo1 has all thumbnails, should not be in results")
+	}
+	if !foundPhoto2 {
+		t.Error("photo2 is missing preview thumbnail, should be in results")
+	}
+	if !foundPhoto3 {
+		t.Error("photo3 has no thumbnails, should be in results")
+	}
+}
+
+func containsID(files []*model.File, id string) bool {
+	for _, f := range files {
+		if f.ID == id {
+			return true
+		}
+	}
+	return false
+}

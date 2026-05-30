@@ -8,6 +8,7 @@ const (
 	ThumbSizeSmall      ThumbnailSize = "sm"
 	ThumbSizeMedium     ThumbnailSize = "md"
 	ThumbSizeLarge      ThumbnailSize = "lg"
+	ThumbSizeXL         ThumbnailSize = "xl"
 	ThumbSizePreview    ThumbnailSize = "preview"
 	ThumbSizeVideoStill ThumbnailSize = "video_still"
 )

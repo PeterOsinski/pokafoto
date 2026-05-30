@@ -21,8 +21,9 @@ type LocalStorageConfig struct {
 }
 
 type StorageConfig struct {
-	S3    S3Config          `yaml:"s3"`
-	Local LocalStorageConfig `yaml:"local"`
+	S3               S3Config          `yaml:"s3"`
+	Local            LocalStorageConfig `yaml:"local"`
+	MaxDiskUsagePct  int                `yaml:"max_disk_usage_pct"`
 }
 
 type DatabaseConfig struct {
@@ -93,6 +94,7 @@ func DefaultConfig() *Config {
 			Local: LocalStorageConfig{
 				Path: "./data",
 			},
+			MaxDiskUsagePct: 70,
 		},
 		Database: DatabaseConfig{
 			Path: "./data/drive.db",
@@ -109,6 +111,7 @@ func DefaultConfig() *Config {
 				"small":       {Width: 60, Quality: 60, Format: "jpeg"},
 				"large":       {Width: 300, Quality: 75, Format: "jpeg"},
 				"medium":      {Width: 600, Quality: 75, Format: "jpeg"},
+				"xl":          {Width: 2000, Quality: 85, Format: "jpeg"},
 				"preview":     {MaxDimension: 720, Quality: 80, Format: "webp"},
 				"video_still": {MaxDimension: 600, Quality: 75, Format: "jpeg"},
 			},
@@ -163,6 +166,11 @@ func Load() *Config {
 			cfg.Server.Port = p
 		}
 	}
+	if v := os.Getenv("DRIVE_MAX_DISK_USAGE_PCT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil && p > 0 && p <= 100 {
+			cfg.Storage.MaxDiskUsagePct = p
+		}
+	}
 
 	return cfg
 }
@@ -205,4 +213,11 @@ func (c *Config) IsAllowedExtension(ext string) bool {
 		}
 	}
 	return false
+}
+
+func (c *Config) MaxDiskUsagePercent() int {
+	if c.Storage.MaxDiskUsagePct > 0 && c.Storage.MaxDiskUsagePct <= 100 {
+		return c.Storage.MaxDiskUsagePct
+	}
+	return 70
 }

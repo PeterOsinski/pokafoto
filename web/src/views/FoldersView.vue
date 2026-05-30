@@ -17,9 +17,7 @@
         >
           &#8592; Back
         </button>
-        <h3 class="text-lg font-semibold text-[var(--text-primary)]">
-          {{ currentFolderName || 'Root' }}
-        </h3>
+        <Breadcrumbs :chain="folderChain" @navigate="navigateTo" />
       </div>
       <div class="flex items-center gap-2">
         <InlineUpload :folderId="currentFolderId" label="Upload" />
@@ -152,6 +150,8 @@
     </div>
 
     <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+    <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
+    <div ref="sentinel" class="h-4"></div>
 
     <Lightbox
       :file="lightboxFile"
@@ -216,6 +216,7 @@ import GalleryTableView from '../components/GalleryTableView.vue'
 import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 import InlineUpload from '../components/InlineUpload.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useUploadStore } from '../stores/upload'
 
 interface FileItem {
@@ -251,10 +252,13 @@ const route = useRoute()
 
 const folders = ref<RootNode>({ children: [] })
 const files = ref<FileItem[]>([])
+const nextCursor = ref('')
 const loading = ref(false)
+const loadingMore = ref(false)
 const showCreate = ref(false)
 const newFolderName = ref('')
 const createInput = ref<HTMLInputElement | null>(null)
+const sentinel = ref<HTMLElement | null>(null)
 
 const folderIdQuery = useRouteQuery('folder_id', '')
 const photoQuery = useRouteQuery('photo', '')
@@ -263,17 +267,27 @@ const settings = useLocalSettings()
 
 const currentFolderId = computed(() => folderIdQuery.value || null)
 
-const currentFolderName = computed(() => {
-  if (!currentFolderId.value) return ''
-  const find = (nodes: FolderTreeNode[]): string | null => {
+const folderChain = computed(() => {
+  const chain: { id: string | null; name: string }[] = [{ id: null, name: 'Root' }]
+  if (!currentFolderId.value) return chain
+
+  const buildPath = (nodes: FolderTreeNode[], target: string, path: { id: string | null; name: string }[]): boolean => {
     for (const n of nodes) {
-      if (n.folder.id === currentFolderId.value) return n.folder.name
-      const found = find(n.children ?? [])
-      if (found) return found
+      if (n.folder.id === target) {
+        path.push({ id: n.folder.id, name: n.folder.name })
+        return true
+      }
+      if (n.children?.length) {
+        path.push({ id: n.folder.id, name: n.folder.name })
+        if (buildPath(n.children, target, path)) return true
+        path.pop()
+      }
     }
-    return null
+    return false
   }
-  return find(folders.value.children ?? [])
+
+  buildPath(folders.value.children ?? [], currentFolderId.value, chain)
+  return chain
 })
 
 const subfolders = computed(() => {
@@ -327,19 +341,28 @@ async function loadFolders() {
   }
 }
 
-async function loadFiles() {
-  loading.value = true
+async function loadFiles(reset = true) {
+  if (reset) {
+    files.value = []
+    nextCursor.value = ''
+    loading.value = true
+  } else {
+    loadingMore.value = true
+  }
   try {
-    const params: any = { sort: settings.sortBy.value, order: 'desc', limit: 100 }
+    const params: any = { sort: settings.sortBy.value, order: 'desc', limit: 500 }
     if (currentFolderId.value) {
       params.folder_id = currentFolderId.value
     }
+    if (nextCursor.value) params.cursor = nextCursor.value
     const res = await api.get('/files', { params })
-    files.value = res.data.items
+    files.value = reset ? res.data.items : [...files.value, ...res.data.items]
+    nextCursor.value = res.data.nextCursor || ''
   } catch (e) {
     console.error('Failed to load files', e)
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
 
@@ -382,7 +405,7 @@ async function executeMove(targetFolderId: string | null) {
     clearSelection()
     moveDialog.value.open = false
     loadFolders()
-    loadFiles()
+    loadFiles(true)
   } catch (e) {
     console.error('Failed to move files', e)
   }
@@ -397,7 +420,7 @@ async function executeCopy(targetFolderId: string | null) {
     clearSelection()
     copyDialog.value.open = false
     loadFolders()
-    loadFiles()
+    loadFiles(true)
   } catch (e) {
     console.error('Failed to copy files', e)
   }
@@ -413,7 +436,7 @@ async function executeDelete() {
     pendingSingleDeleteId.value = null
     showDeleteConfirm.value = false
     loadFolders()
-    loadFiles()
+    loadFiles(true)
   } catch (e) {
     console.error('Failed to delete files', e)
   }
@@ -483,8 +506,8 @@ function goNext() {
   }
 }
 
-function navigateTo(id: string) {
-  folderIdQuery.value = id
+function navigateTo(id: string | null) {
+  folderIdQuery.value = id ?? null
   selectedIds.value = new Set()
 }
 
@@ -531,9 +554,9 @@ if (typeof window !== 'undefined') {
   })
 }
 
-watch(() => route.query, () => {
+watch([() => route.query.folder_id, () => route.query.media, () => route.query.all_folders], () => {
   loadFolders()
-  loadFiles()
+  loadFiles(true)
 }, { immediate: false })
 
 watch(showCreate, (v) => {
@@ -542,15 +565,39 @@ watch(showCreate, (v) => {
 
 onMounted(() => {
   loadFolders()
-  loadFiles()
+  loadFiles(true)
 
-  refreshInterval = setInterval(() => {
+  if (sentinel.value) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && nextCursor.value && !loadingMore.value) {
+          loadFiles(false)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinel.value)
+  }
+
+  refreshInterval = setInterval(async () => {
     const completed = upload.consumeCompletedJobs()
     if (completed.length === 0) return
     const folderKey = currentFolderId.value ?? null
     const relevant = completed.filter(j => (j.folder_id ?? null) === folderKey)
+    for (const job of relevant) {
+      try {
+        const res = await api.get(`/files/${job.file_id}`)
+        const newFile = res.data as FileItem
+        if (settings.sortBy.value === 'taken_at' || settings.sortBy.value === 'created_at') {
+          files.value.unshift(newFile)
+        } else {
+          files.value.push(newFile)
+        }
+      } catch (e) {
+        console.error('Failed to fetch new file', e)
+      }
+    }
     if (relevant.length > 0) {
-      loadFiles()
       loadFolders()
     }
   }, 2000)

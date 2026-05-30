@@ -128,3 +128,29 @@ func TestThumbnailService_GenerateLarge_shouldBe300pxJPEG(t *testing.T) {
 	}
 	t.Fatal("expected large thumbnail, not found")
 }
+
+func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
+	dir := t.TempDir()
+	src := createTestJPEG(t, dir, "test.jpg")
+
+	ts := NewThumbnailService(dir)
+	thumbs, err := ts.GenerateAll("test-file-id", src, "image/jpeg")
+	if err != nil {
+		t.Fatalf("GenerateAll failed: %v", err)
+	}
+
+	if len(thumbs) != 5 {
+		t.Fatalf("expected 5 thumbnails, got %d", len(thumbs))
+	}
+
+	for _, th := range thumbs {
+		info, err := os.Stat(th.LocalPath)
+		if err != nil {
+			t.Errorf("thumbnail file missing after generation: %s (%v)", th.LocalPath, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("thumbnail file is empty: %s", th.LocalPath)
+		}
+	}
+}

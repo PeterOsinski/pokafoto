@@ -109,3 +109,14 @@ func (s *StorageService) PutThumbnail(fileID, size, format string, filePath stri
 func (s *StorageService) IsConnected() bool {
 	return s.client != nil
 }
+
+func (s *StorageService) GetObjectStream(key string) (io.ReadCloser, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("s3 not configured")
+	}
+	obj, err := s.client.GetObject(context.Background(), s.cfg.Storage.S3.Bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("s3 get object stream: %w", err)
+	}
+	return obj, nil
+}

@@ -7,22 +7,23 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/drive/drive/internal/config"
+	"golang.org/x/sys/unix"
 )
 
-const (
-	defaultMaxCacheGB = 50
-	evictionInterval  = 5 * time.Minute
-)
+const evictionInterval = 5 * time.Minute
 
 type CacheEvictor struct {
+	cfg          *config.Config
 	thumbnailsDir string
 	maxBytes      int64
 }
 
-func NewCacheEvictor(thumbnailsDir string) *CacheEvictor {
+func NewCacheEvictor(cfg *config.Config) *CacheEvictor {
 	return &CacheEvictor{
-		thumbnailsDir: thumbnailsDir,
-		maxBytes:      defaultMaxCacheGB * 1024 * 1024 * 1024,
+		cfg:           cfg,
+		thumbnailsDir: cfg.ThumbnailsDir(),
 	}
 }
 
@@ -43,7 +44,36 @@ type fileInfo struct {
 	size    int64
 }
 
+func (c *CacheEvictor) ComputeMaxBytes() int64 {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(c.cfg.Storage.Local.Path, &stat); err != nil {
+		return 50 * 1024 * 1024 * 1024
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	maxAllowed := int64(total) * int64(c.cfg.MaxDiskUsagePercent()) / 100
+
+	var originalsSize int64
+	filepath.Walk(c.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			originalsSize += info.Size()
+		}
+		return nil
+	})
+
+	maxThumbnail := maxAllowed - originalsSize - 2*1024*1024*1024
+	if maxThumbnail < 1*1024*1024*1024 {
+		maxThumbnail = 1 * 1024 * 1024 * 1024
+	}
+	return maxThumbnail
+}
+
 func (c *CacheEvictor) evictIfNeeded() error {
+	c.calculateMaxBytes()
+	maxBytes := c.maxBytes
+
 	var totalSize int64
 	var files []fileInfo
 
@@ -62,17 +92,26 @@ func (c *CacheEvictor) evictIfNeeded() error {
 		return err
 	}
 
-	if totalSize <= c.maxBytes {
+	if totalSize <= maxBytes {
 		return nil
 	}
+
+	aggressiveThreshold := maxBytes * 80 / 100
+	aggressive := totalSize > maxBytes+aggressiveThreshold
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].modTime.Before(files[j].modTime)
 	})
 
 	freed := int64(0)
+	target := maxBytes
+	if aggressive {
+		target = maxBytes * 70 / 100
+		slog.Warn("cache exceeding aggressive threshold, evicting more", "total_bytes", totalSize, "max_bytes", maxBytes)
+	}
+
 	for _, f := range files {
-		if totalSize-freed <= c.maxBytes {
+		if totalSize-freed <= target {
 			break
 		}
 		if err := os.Remove(f.path); err == nil {
@@ -82,6 +121,9 @@ func (c *CacheEvictor) evictIfNeeded() error {
 
 	if freed > 0 {
 		slog.Info("cache eviction completed", "freed_bytes", freed)
+		if totalSize > maxBytes {
+			slog.Warn("cache still over limit after eviction", "total", totalSize, "max", maxBytes)
+		}
 	}
 
 	var mu sync.Mutex
@@ -105,4 +147,11 @@ func (c *CacheEvictor) evictIfNeeded() error {
 	})
 
 	return err
+}
+
+func (c *CacheEvictor) calculateMaxBytes() {
+	c.maxBytes = c.ComputeMaxBytes()
+	if c.maxBytes <= 0 {
+		c.maxBytes = 50 * 1024 * 1024 * 1024
+	}
 }

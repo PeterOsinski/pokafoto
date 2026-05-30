@@ -641,6 +641,69 @@ Change a user's role.
 
 **Response:** `200 OK`
 
+#### `GET /api/v1/admin/jobs`
+List upload jobs with pagination and optional status filter. Admin-only.
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `status` | string | — | Filter by status: `queued`, `processing`, `completed`, `skipped`, `failed` |
+| `limit` | int | 50 | Items per page (max 200) |
+| `offset` | int | 0 | Pagination offset |
+
+**Response:** `200 OK`
+```json
+{
+  "jobs": [
+    {
+      "id": "uuid",
+      "batch_id": "uuid",
+      "user_id": "uuid",
+      "filename": "DSC00015.JPG",
+      "size_bytes": 4521984,
+      "status": "completed",
+      "stage": "thumbnails",
+      "progress": 1.0,
+      "error": null,
+      "reason": null,
+      "file_id": "uuid",
+      "created_at": "2026-05-30T17:25:03Z",
+      "updated_at": "2026-05-30T17:25:14Z"
+    }
+  ],
+  "total": 200,
+  "summary": {
+    "completed": 166,
+    "failed": 34,
+    "skipped": 0,
+    "queued": 0,
+    "processing": 0
+  }
+}
+```
+
+#### `POST /api/v1/admin/jobs/{id}/retry`
+Retry a failed or skipped job by resetting it to `queued`. Returns `409 Conflict` if the job is not in a retryable state.
+
+**Response:** `200 OK`
+```json
+{ "status": "ok" }
+```
+
+#### `POST /api/v1/admin/jobs/reconcile`
+Scan for photos with missing thumbnails and create reconcile jobs to regenerate them. Jobs are picked up by the worker pool automatically.
+
+**Response:** `200 OK`
+```json
+{
+  "created": 237,
+  "details": {
+    "missing_all_thumbnails": 26,
+    "missing_preview_only": 211
+  }
+}
+```
+
 ---
 
 ### 5.1.10 Health & Stats
