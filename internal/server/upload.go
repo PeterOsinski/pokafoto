@@ -176,6 +176,51 @@ func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleUploadActiveJobs(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	jobs, err := s.uploadJobStore.ListActiveByUser(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list active jobs")
+		return
+	}
+
+	result := make([]map[string]interface{}, 0, len(jobs))
+	for _, j := range jobs {
+		jobMap := map[string]interface{}{
+			"job_id":   j.ID,
+			"batch_id": j.BatchID,
+			"filename": j.Filename,
+			"status":   j.Status,
+			"progress": j.Progress,
+		}
+		if j.FileID != nil && *j.FileID != "" {
+			jobMap["file_id"] = *j.FileID
+		}
+		if j.Stage != nil {
+			jobMap["stage"] = *j.Stage
+		}
+		if j.FolderID != nil {
+			jobMap["folder_id"] = *j.FolderID
+		}
+		if j.Error != nil {
+			jobMap["error"] = *j.Error
+		}
+		if j.Reason != nil {
+			jobMap["reason"] = *j.Reason
+		}
+		result = append(result, jobMap)
+	}
+
+	if result == nil {
+		result = make([]map[string]interface{}, 0)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"jobs": result,
+	})
+}
+
 func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 	var input []struct {
 		Filename string `json:"filename"`

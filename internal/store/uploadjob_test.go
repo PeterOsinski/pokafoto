@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/drive/drive/internal/model"
 )
@@ -412,26 +413,159 @@ func TestUploadJobStore_Create_shouldStoreSkipNameSizeDedup(t *testing.T) {
 	}
 }
 
-func TestUploadJobStore_Create_shouldStoreFolderID(t *testing.T) {
+func TestUploadJobStore_ListActiveByUser_shouldReturnActiveAndRecentJobs(t *testing.T) {
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
-	folderID := "folder-uuid"
 
-	job := &model.UploadJob{
-		BatchID:   "batch-folder",
+	j1 := &model.UploadJob{
+		BatchID:   "batch-active",
 		UserID:    userID,
-		Filename:  "photo.jpg",
-		SizeBytes: 1024,
+		Filename:  "queued.jpg",
+		SizeBytes: 100,
 		TempPath:  tmpPath,
-		FolderID:  &folderID,
 		Status:    model.JobStatusQueued,
 	}
-	if err := s.Create(job); err != nil {
-		t.Fatalf("create job: %v", err)
+	j2 := &model.UploadJob{
+		BatchID:   "batch-active",
+		UserID:    userID,
+		Filename:  "processing.jpg",
+		SizeBytes: 200,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusProcessing,
+	}
+	j3 := &model.UploadJob{
+		BatchID:   "batch-active",
+		UserID:    userID,
+		Filename:  "completed.jpg",
+		SizeBytes: 300,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusCompleted,
+	}
+	if err := s.Create(j1); err != nil {
+		t.Fatalf("create j1: %v", err)
+	}
+	if err := s.Create(j2); err != nil {
+		t.Fatalf("create j2: %v", err)
+	}
+	s.SetProcessing(j2.ID)
+	if err := s.Create(j3); err != nil {
+		t.Fatalf("create j3: %v", err)
+	}
+	s.Complete(j3.ID, "file-1")
+
+	jobs, err := s.ListActiveByUser(userID)
+	if err != nil {
+		t.Fatalf("list active by user: %v", err)
 	}
 
-	fetched, _ := s.FindByID(job.ID)
-	if fetched.FolderID == nil || *fetched.FolderID != folderID {
-		t.Errorf("expected folder_id %s, got %v", folderID, fetched.FolderID)
+	if len(jobs) != 3 {
+		t.Errorf("expected 3 active/recent jobs, got %d", len(jobs))
+	}
+
+	found := make(map[string]bool)
+	for _, j := range jobs {
+		found[j.Filename] = true
+	}
+	if !found["queued.jpg"] {
+		t.Error("expected queued.jpg in results")
+	}
+	if !found["processing.jpg"] {
+		t.Error("expected processing.jpg in results")
+	}
+	if !found["completed.jpg"] {
+		t.Error("expected completed.jpg in results (within 1 hour)")
+	}
+}
+
+func TestUploadJobStore_ListActiveByUser_shouldExcludeOtherUserJobs(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	s := NewUploadJobStore(db)
+
+	user1, _ := us.Create("user1_"+t.Name(), "password123", model.RoleMember, nil)
+	user2, _ := us.Create("user2_"+t.Name(), "password123", model.RoleMember, nil)
+
+	tmpPath := createTempPath(t)
+
+	j1 := &model.UploadJob{
+		BatchID:   "batch-active",
+		UserID:    user1.ID,
+		Filename:  "mine.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusQueued,
+	}
+	j2 := &model.UploadJob{
+		BatchID:   "batch-active",
+		UserID:    user2.ID,
+		Filename:  "theirs.jpg",
+		SizeBytes: 200,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusQueued,
+	}
+	if err := s.Create(j1); err != nil {
+		t.Fatalf("create j1: %v", err)
+	}
+	if err := s.Create(j2); err != nil {
+		t.Fatalf("create j2: %v", err)
+	}
+
+	jobs, err := s.ListActiveByUser(user1.ID)
+	if err != nil {
+		t.Fatalf("list active by user: %v", err)
+	}
+
+	if len(jobs) != 1 {
+		t.Errorf("expected 1 job for user1, got %d", len(jobs))
+	}
+	if jobs[0].Filename != "mine.jpg" {
+		t.Errorf("expected mine.jpg, got %s", jobs[0].Filename)
+	}
+}
+
+func TestUploadJobStore_ListActiveByUser_shouldExcludeOldCompletedJobs(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	j := &model.UploadJob{
+		BatchID:   "batch-old",
+		UserID:    userID,
+		Filename:  "old.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusCompleted,
+	}
+	if err := s.Create(j); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	s.Complete(j.ID, "file-old")
+
+	s.db.Exec(
+		`UPDATE upload_jobs SET updated_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(-2*time.Hour).Format(time.RFC3339),
+		j.ID,
+	)
+
+	jobs, err := s.ListActiveByUser(userID)
+	if err != nil {
+		t.Fatalf("list active by user: %v", err)
+	}
+
+	for _, job := range jobs {
+		if job.ID == j.ID {
+			t.Error("expected old completed job to be excluded")
+		}
+	}
+}
+
+func TestUploadJobStore_ListActiveByUser_shouldReturnEmptyForUnknownUser(t *testing.T) {
+	s, _, _ := setupUploadJobStore(t)
+
+	jobs, err := s.ListActiveByUser("nonexistent-user")
+	if err != nil {
+		t.Fatalf("list active by user: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Errorf("expected 0 jobs, got %d", len(jobs))
 	}
 }

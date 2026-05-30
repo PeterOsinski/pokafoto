@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/drive/drive/internal/model"
@@ -254,6 +255,65 @@ func TestUploadCheck_shouldRejectUnauthenticated(t *testing.T) {
 	defer cleanup()
 
 	w := testRequest(t, srv, "POST", "/api/v1/upload/check", "[]", jsonHeaders())
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestUploadActiveJobs_shouldReturnActiveJobs(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	ujs := store.NewUploadJobStore(db)
+	u, _ := us.Create("activejobsu_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	tmpDir := t.TempDir()
+	tmpPath := tmpDir + "/test-active.bin"
+	os.MkdirAll(tmpDir, 0755)
+	os.WriteFile(tmpPath, []byte("test"), 0644)
+
+	j1 := &model.UploadJob{
+		BatchID:   "batch-active-test",
+		UserID:    u.ID,
+		Filename:  "active.jpg",
+		SizeBytes: 1024,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusQueued,
+	}
+	ujs.Create(j1)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/upload/active", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	jobs := resp["jobs"].([]interface{})
+	if len(jobs) < 1 {
+		t.Fatalf("expected at least 1 job, got %d", len(jobs))
+	}
+
+	first := jobs[0].(map[string]interface{})
+	if first["filename"] != "active.jpg" {
+		t.Errorf("expected active.jpg, got %v", first["filename"])
+	}
+	if first["status"] != "queued" {
+		t.Errorf("expected queued status, got %v", first["status"])
+	}
+	if _, ok := first["batch_id"]; !ok {
+		t.Error("expected batch_id in response")
+	}
+}
+
+func TestUploadActiveJobs_shouldRejectUnauthenticated(t *testing.T) {
+	srv, _, cleanup := newTestServer(t)
+	defer cleanup()
+
+	w := testRequest(t, srv, "GET", "/api/v1/upload/active", "", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
 	}

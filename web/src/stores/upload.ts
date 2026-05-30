@@ -83,6 +83,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     globalWs.onopen = () => {
       reconnectAttempts = 0
+      fetchActiveJobs()
     }
 
     globalWs.onmessage = (event) => {
@@ -120,6 +121,39 @@ export const useUploadStore = defineStore('upload', () => {
     if (globalWs) {
       globalWs.close()
       globalWs = null
+    }
+  }
+
+  async function fetchActiveJobs() {
+    try {
+      const res = await api.get('/upload/active')
+      const activeJobs: any[] = res.data.jobs || []
+      for (const aj of activeJobs) {
+        if (aj.status === 'completed' || aj.status === 'skipped') {
+          if (aj.file_id) {
+            const alreadyCompleted = completedJobs.value.some(cj => cj.file_id === aj.file_id)
+            if (!alreadyCompleted) {
+              completedJobs.value.push({
+                file_id: aj.file_id,
+                filename: aj.filename,
+                folder_id: aj.folder_id,
+              })
+            }
+          }
+          continue
+        }
+        if (aj.status !== 'queued' && aj.status !== 'processing') {
+          continue
+        }
+        const idx = jobs.value.findIndex(j => j.job_id === aj.job_id)
+        if (idx >= 0) {
+          jobs.value[idx] = { ...jobs.value[idx], ...aj }
+        } else {
+          jobs.value = [aj as UploadJob, ...jobs.value]
+        }
+      }
+    } catch {
+      // best-effort: jobs will still appear via WS reconciliation
     }
   }
 

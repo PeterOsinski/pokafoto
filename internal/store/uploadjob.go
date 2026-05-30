@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/drive/drive/internal/model"
@@ -34,6 +35,28 @@ func (s *UploadJobStore) Create(job *model.UploadJob) error {
 }
 
 func (s *UploadJobStore) Claim() (*model.UploadJob, error) {
+	const maxRetries = 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*100) * time.Millisecond)
+		}
+
+		job, err := s.claimOnce()
+		if err == nil {
+			return job, nil
+		}
+		if !isSQLiteBusy(err) {
+			return nil, err
+		}
+		lastErr = err
+	}
+
+	return nil, fmt.Errorf("claim failed after %d retries: %w", maxRetries, lastErr)
+}
+
+func (s *UploadJobStore) claimOnce() (*model.UploadJob, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("begin claim tx: %w", err)
@@ -69,6 +92,10 @@ func (s *UploadJobStore) Claim() (*model.UploadJob, error) {
 	}
 
 	return s.FindByID(id)
+}
+
+func isSQLiteBusy(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "SQLITE_BUSY")
 }
 
 func (s *UploadJobStore) FindByID(id string) (*model.UploadJob, error) {
@@ -204,6 +231,29 @@ func (s *UploadJobStore) RecoverStuckJobs() (int64, error) {
 	}
 	affected, _ := result.RowsAffected()
 	return affected, nil
+}
+
+func (s *UploadJobStore) ListActiveByUser(userID string) ([]*model.UploadJob, error) {
+	cutoff := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	rows, err := s.db.Query(
+		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs WHERE user_id = ? AND (status IN ('queued','processing') OR (status IN ('completed','skipped','failed') AND updated_at > ?)) ORDER BY created_at DESC`,
+		userID, cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list active by user: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []*model.UploadJob
+	for rows.Next() {
+		job, err := s.scanJob(rows)
+		if err != nil {
+			continue
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, rows.Err()
 }
 
 func (s *UploadJobStore) DeleteByID(id string) error {
