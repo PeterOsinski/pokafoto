@@ -79,7 +79,7 @@
       </div>
     </div>
 
-    <div v-if="!currentFolderId && folders.children?.length" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+    <div v-if="!currentFolderId && folders.children?.length && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
       <button
         v-for="child in folders.children"
         :key="child.folder.id"
@@ -93,7 +93,7 @@
       </button>
     </div>
 
-    <div v-if="currentFolderId && subfolders.length > 0" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+    <div v-if="currentFolderId && subfolders.length > 0 && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
       <button
         v-for="child in subfolders"
         :key="child.folder.id"
@@ -107,18 +107,34 @@
       </button>
     </div>
 
-    <div v-if="!folders.children?.length && !currentFolderId && !loading" class="text-center py-10 text-[var(--text-secondary)]">
+    <div v-if="!folders.children?.length && !currentFolderId && !loading && settings.layout.value === 'tiles'" class="text-center py-10 text-[var(--text-secondary)]">
       <p class="text-lg">No folders yet.</p>
       <p class="mt-1 text-sm">Create a folder to start organizing your files.</p>
     </div>
 
-    <div v-if="currentFolderId || (!currentFolderId && folders.children?.length === 0)">
+    <div v-if="currentFolderId || settings.layout.value !== 'tiles' || (!currentFolderId && folders.children?.length === 0)">
       <div v-if="files.length === 0 && !loading" class="text-center py-8 text-[var(--text-secondary)]">
-        <p>No files in this folder.</p>
+        <p v-if="currentFolderId">No files in this folder.</p>
+        <p v-else-if="!folders.children?.length">No files in this folder.</p>
+        <p v-else>No files to show.</p>
+      </div>
+
+      <div v-if="settings.layout.value === 'list'" class="mb-4">
+        <button
+          v-for="child in listFolders"
+          :key="child.folder.id"
+          @click="navigateTo(child.folder.id)"
+          class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
+          style="height: 52px"
+        >
+          <span class="text-xl w-10 shrink-0">&#128193;</span>
+          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate">{{ child.folder.name }}</span>
+          <span class="text-xs text-[var(--text-secondary)] shrink-0">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        </button>
       </div>
 
       <GalleryTileView
-        v-else-if="settings.layout.value === 'tiles'"
+        v-if="settings.layout.value === 'tiles'"
         :files="files"
         :thumbSizePx="settings.thumbSizePx.value"
         :selectedIds="selectedIds"
@@ -136,16 +152,15 @@
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
       />
-      <GalleryTableView
-        v-else-if="settings.layout.value === 'table'"
+      <GalleryGroupedView
+        v-else-if="settings.layout.value === 'grouped'"
         :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
         :selectedIds="selectedIds"
         :selectionEnabled="selectionEnabled"
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
-        @download="handleDownload"
-        @delete="handleSingleDelete"
       />
     </div>
 
@@ -212,7 +227,7 @@ import Lightbox from '../components/Lightbox.vue'
 import FileViewer from '../components/FileViewer.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
 import GalleryListView from '../components/GalleryListView.vue'
-import GalleryTableView from '../components/GalleryTableView.vue'
+import GalleryGroupedView from '../components/GalleryGroupedView.vue'
 import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 import InlineUpload from '../components/InlineUpload.vue'
@@ -303,11 +318,15 @@ const subfolders = computed(() => {
   return find(folders.value.children ?? [])
 })
 
+const listFolders = computed(() => {
+  if (currentFolderId.value) return subfolders.value
+  return folders.value.children ?? []
+})
+
 const selectedIds = ref(new Set<string>())
 const lastClickedIndex = ref(-1)
 const selectionEnabled = ref(true)
 const showDeleteConfirm = ref(false)
-const pendingSingleDeleteId = ref<string | null>(null)
 
 const upload = useUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
@@ -328,7 +347,6 @@ const lightboxIndex = computed(() => {
 const fileViewerFile = ref<FileItem | null>(null)
 
 const deleteMessage = computed(() => {
-  if (pendingSingleDeleteId.value) return 'Delete this file? It will be moved to trash.'
   return `This will move ${selectedIds.value.size} ${selectedIds.value.size === 1 ? 'file' : 'files'} to trash. You can recover them later.`
 })
 
@@ -428,27 +446,15 @@ async function executeCopy(targetFolderId: string | null) {
 
 async function executeDelete() {
   try {
-    const ids = pendingSingleDeleteId.value
-      ? [pendingSingleDeleteId.value]
-      : Array.from(selectedIds.value)
+    const ids = Array.from(selectedIds.value)
     await api.post('/files/batch-delete', { ids })
     clearSelection()
-    pendingSingleDeleteId.value = null
     showDeleteConfirm.value = false
     loadFolders()
     loadFiles(true)
   } catch (e) {
     console.error('Failed to delete files', e)
   }
-}
-
-function handleDownload(fileId: string) {
-  window.open(`/api/v1/download/${fileId}`, '_blank')
-}
-
-function handleSingleDelete(fileId: string) {
-  pendingSingleDeleteId.value = fileId
-  showDeleteConfirm.value = true
 }
 
 function isShiftHeld(): boolean {
@@ -610,7 +616,7 @@ onUnmounted(() => {
 const layoutOptions = [
   { value: 'tiles', label: 'Tiles', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>' },
   { value: 'list', label: 'List', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>' },
-  { value: 'table', label: 'Table', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>' },
+  { value: 'grouped', label: 'Calendar', icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
 ]
 </script>
 

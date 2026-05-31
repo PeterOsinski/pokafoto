@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { nextTick } from 'vue'
+import { _resetSingleton } from '../composables/useLocalSettings'
 
 const routerReplace = vi.fn()
 
@@ -77,6 +78,8 @@ async function mountView(queryOverrides: Record<string, string> = {}) {
 describe('FoldersView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    _resetSingleton()
+    localStorage.clear()
     vi.clearAllMocks()
   })
 
@@ -189,5 +192,86 @@ describe('FoldersView', () => {
 
     const tileView = wrapper.findComponent({ name: 'GalleryTileView' })
     expect(tileView.exists()).toBe(true)
+  })
+
+  it('layout grouped renders GalleryGroupedView', async () => {
+    localStorage.setItem('drive:layout', 'grouped')
+    await setupApi(
+      { children: [] },
+      { items: [makeFile('file-1')], nextCursor: '', total: 1 },
+    )
+
+    const wrapper = await mountView({ folder_id: 'f-1' })
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    const groupedView = wrapper.findComponent({ name: 'GalleryGroupedView' })
+    expect(groupedView.exists()).toBe(true)
+  })
+
+  it('layout list shows folders at top when inside a folder with subfolders', async () => {
+    localStorage.setItem('drive:layout', 'list')
+    await setupApi(
+      {
+        children: [
+          {
+            folder: { id: 'f-1', name: 'Work', parent_id: null },
+            fileCount: 5,
+            children: [
+              { folder: { id: 'f-2', name: 'Sub', parent_id: 'f-1' }, fileCount: 3, children: [] },
+            ],
+          },
+        ],
+      },
+      { items: [makeFile('f1')], nextCursor: '', total: 1 },
+    )
+
+    const wrapper = await mountView({ folder_id: 'f-1' })
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    const listView = wrapper.findComponent({ name: 'GalleryListView' })
+    expect(listView.exists()).toBe(true)
+    expect(wrapper.text()).toContain('Sub')
+    expect(wrapper.text()).toContain('3 files')
+  })
+
+  it('layout list shows root folders at top', async () => {
+    localStorage.setItem('drive:layout', 'list')
+    await setupApi(
+      { children: [{ folder: { id: 'f-1', name: 'Work', parent_id: null }, fileCount: 5, children: [] }] },
+      { items: [], nextCursor: '', total: 0 },
+    )
+
+    const wrapper = await mountView()
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Work')
+    expect(wrapper.text()).toContain('5 files')
+    const listView = wrapper.findComponent({ name: 'GalleryListView' })
+    expect(listView.exists()).toBe(true)
+  })
+
+  it('layout list navigates into folder on click', async () => {
+    localStorage.setItem('drive:layout', 'list')
+    await setupApi(
+      { children: [{ folder: { id: 'f-1', name: 'Work', parent_id: null }, fileCount: 5, children: [] }] },
+      { items: [], nextCursor: '', total: 0 },
+    )
+
+    const wrapper = await mountView()
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    const folderButton = wrapper.find('.flex.items-center.w-full.border-b')
+    await folderButton.trigger('click')
+    await nextTick()
+
+    expect(routerReplace).toHaveBeenCalled()
   })
 })

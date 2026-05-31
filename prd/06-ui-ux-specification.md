@@ -129,7 +129,7 @@
 ```
 [📷 Photos] [🎬 Videos] [📄 All Files]  |  [Sort: Date ↓] [🔍 Search...]  |  [☐ All folders]
 ```
-Layout toggle: [Tiles] [List] [Grouped by Day] [Folders]
+Layout toggle: [Tiles] [List] [Grouped by Day]
 
 The **"All folders"** toggle, when enabled, includes files from all user-created folders in the gallery listing (not just root-level files). When disabled (default), only files at the root (no folder assignment) are shown. This filter is essential for "Date Taken" sorting to work across the entire library, allowing users to keep photos in organized folders while still browsing a unified timeline.
 
@@ -146,16 +146,31 @@ The **"All folders"** toggle, when enabled, includes files from all user-created
 - Move/Copy buttons open a **Folder Picker Dialog** — modal with folder tree and inline "New Folder" creation
 - Delete confirmation: modal warning about soft-delete (files go to trash, recoverable)
 
-**Folder Tree View (Folders layout):**
-- Replaces the thumbnail grid with a folder browser
-- Top-level shows folder cards with name, file count, folder icon
-- Click a folder card to navigate into it (URL updates: `?layout=folders&folder_id=uuid`)
-- "Back" button navigates up to parent
-- "+ New Folder" button in the header creates a folder in the current context
-- Inline creation: text input + Create/Cancel buttons
-- When inside a folder, show its immediate subfolders as cards and files as thumbnails below
+**Folder Tree View (Folders tab):**
+- Dedicated route `/folders` with three layout modes: Tiles, List, Calendar
+- **"Back" button** navigates up to parent folder
+- **"+ New Folder" button** in the header creates a folder in the current context
+- **Inline creation**: text input + Create/Cancel buttons
 - Root-level folders have no parent; nested folders use `parent_id` self-reference
 - File counts aggregate recursively (parent shows total including children)
+
+**Tiles layout (default):**
+- Top-level shows folder cards with name, file count, folder icon in a responsive grid
+- Click a folder card to navigate into it (URL updates: `?folder_id=uuid`)
+- When inside a folder, show its immediate subfolders as cards above the file thumbnail grid
+- Files render as thumbnails in a responsive CSS grid below the folder cards
+
+**List layout:**
+- Folder entries appear as rows at the top of a list view, showing folder emoji + name + file count
+- Files appear below the folder entries in a scrollable virtual list with thumbnail, name, date, type, and size columns
+- Click on a folder row navigates into it; click on a file row opens it in Lightbox or FileViewer
+- At root level, all top-level folders appear in the list; inside a folder, immediate subfolders appear first
+
+**Calendar layout:**
+- Files are grouped by date taken with sticky date headers, matching the Gallery's Grouped by Day view
+- Each date group shows a header with weekday, date, and photo count, followed by thumbnail rows
+- Thumbnail size is controlled by the size slider
+- Selection and batch operations (delete, move, copy) work the same as in Gallery
 
 ### 6.3.2 Lightbox / Photo Detail
 
