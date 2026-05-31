@@ -48,6 +48,7 @@ export interface CompletedJob {
 
 export const useUploadStore = defineStore('upload', () => {
   const jobs = ref<UploadJob[]>([])
+  const uploadError = ref('')
   const completedJobs = ref<CompletedJob[]>([])
 
   let globalWs: WebSocket | null = null
@@ -177,6 +178,7 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   async function uploadFiles(fileList: FileList | File[], targetFolderId: string | null, skipNameSizeDedup: boolean) {
+    uploadError.value = ''
     const allFiles = Array.from(fileList)
     const fileMap = new Map<string, File>()
     const uploadJobs: UploadJob[] = []
@@ -290,13 +292,17 @@ export const useUploadStore = defineStore('upload', () => {
                 }
               }
             }
-          } catch {
+          } catch (e: any) {
             const idx = jobs.value.findIndex(j => j.job_id === job.job_id)
+            const errMsg = e?.response?.data?.error?.message || e?.response?.data?.message || 'Network error'
+            if (e?.response?.status === 413) {
+              uploadError.value = errMsg
+            }
             if (idx >= 0) {
               jobs.value[idx] = {
                 ...jobs.value[idx],
                 status: 'failed',
-                error: 'Network error',
+                error: errMsg,
                 stage: undefined,
               }
             }
@@ -466,6 +472,7 @@ export const useUploadStore = defineStore('upload', () => {
   return {
     jobs,
     completedJobs,
+    uploadError,
     activeJobs,
     completedCount,
     hasActiveUploads,

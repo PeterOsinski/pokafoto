@@ -561,5 +561,25 @@ describe('withConcurrency', () => {
       expect(job!.status).toBe('failed')
       expect(job!.error).toBe('Network error')
     })
+
+    it('sets uploadError when server returns 413 QUOTA_EXCEEDED', async () => {
+      const upload = useUploadStore()
+      const mockPost = api.post as ReturnType<typeof vi.fn>
+      const file = makeFile('bigfile.jpg', 100)
+
+      mockPost.mockImplementation((url: string) => {
+        if (url === '/upload/check') return Promise.resolve({ data: { duplicates: [] } })
+        return Promise.reject({
+          response: {
+            status: 413,
+            data: { error: { message: 'Upload would exceed space quota (500 used + 200 incoming > 600 limit)' } }
+          }
+        })
+      })
+
+      await upload.uploadFiles([file], null, true)
+
+      expect(upload.uploadError).toContain('exceed space quota')
+    })
   })
 })

@@ -33,6 +33,18 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var incomingTotal int64
+	for _, fh := range files {
+		incomingTotal += fh.Size
+	}
+	used, _ := s.userStore.GetUsedSpace(userID)
+	user, _ := s.userStore.FindByID(userID)
+	if user != nil && user.SpaceQuota != nil && used+incomingTotal > *user.SpaceQuota {
+		writeError(w, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED",
+			fmt.Sprintf("Upload would exceed space quota (%d used + %d incoming > %d limit)", used, incomingTotal, *user.SpaceQuota))
+		return
+	}
+
 	batchID := uuid.New().String()
 	jobs := make([]map[string]interface{}, 0, len(files))
 
@@ -236,6 +248,8 @@ func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
+
 	records := make([]store.FileRecord, 0, len(input))
 	for _, item := range input {
 		records = append(records, store.FileRecord{
@@ -244,7 +258,7 @@ func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	existing, err := s.fileStore.FindByNameAndSizeBatch(records)
+	existing, err := s.fileStore.FindByNameAndSizeBatch(userID, records)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DEDUP_ERROR", "Failed to check duplicates")
 		return

@@ -722,7 +722,14 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request) {
-	breakdown, err := s.fileStore.AdminFileBreakdown()
+	userID := r.URL.Query().Get("user_id")
+	var breakdown *store.AdminFileBreakdown
+	var err error
+	if userID != "" {
+		breakdown, err = s.fileStore.AdminFileBreakdownByUser(userID)
+	} else {
+		breakdown, err = s.fileStore.AdminFileBreakdown()
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file breakdown")
 		return
@@ -774,7 +781,14 @@ func (s *Server) handleAdminWorkers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Request) {
-	breakdown, err := s.thumbnailStore.Breakdown()
+	userID := r.URL.Query().Get("user_id")
+	var breakdown []store.ThumbnailBreakdown
+	var err error
+	if userID != "" {
+		breakdown, err = s.thumbnailStore.BreakdownByUser(userID)
+	} else {
+		breakdown, err = s.thumbnailStore.Breakdown()
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get thumbnail stats")
 		return

@@ -36,6 +36,8 @@ const mockStatsResponse = {
       role: 'admin',
       file_count: 100,
       total_size_bytes: 524288000,
+      space_quota: null,
+      thumbnail_size_bytes: 52428800,
     },
     {
       id: 'user-2',
@@ -43,6 +45,8 @@ const mockStatsResponse = {
       role: 'member',
       file_count: 50,
       total_size_bytes: 549453824,
+      space_quota: 10737418240,
+      thumbnail_size_bytes: 104857600,
     },
   ],
 }
@@ -232,5 +236,75 @@ describe('AdminView', () => {
     expect(wrapper.text()).toContain('25')
     expect(wrapper.text()).toContain('762.9 MB')
     expect(wrapper.text()).toContain('3.1 GB')
+  })
+
+  it('displays Thumbnails and Quota columns in users table', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
+      if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
+      if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
+      return Promise.resolve({ data: [] })
+    })
+
+    const wrapper = mountAdmin()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Thumbnails')
+    expect(wrapper.text()).toContain('Quota')
+    expect(wrapper.text()).toContain('50.0 MB')
+    expect(wrapper.text()).toContain('100.0 MB')
+    expect(wrapper.text()).toContain('Unlimited')
+    expect(wrapper.text()).toContain('10.0 GB')
+  })
+
+  it('shows inline quota edit inputs on Edit click', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
+      if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
+      if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
+      return Promise.resolve({ data: [] })
+    })
+
+    const wrapper = mountAdmin()
+    await flushPromises()
+
+    const editButtons = wrapper.findAll('button')
+    const quotaEditBtn = editButtons.find(b => b.text() === 'Edit')
+    expect(quotaEditBtn).toBeTruthy()
+    await quotaEditBtn!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Save')
+    expect(wrapper.text()).toContain('Cancel')
+  })
+
+  it('calls PUT /admin/users/{id}/quota on save', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>
+    const mockPut = api.put as ReturnType<typeof vi.fn>
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/admin/stats') return Promise.resolve({ data: mockStatsResponse })
+      if (url === '/admin/workers') return Promise.resolve({ data: mockWorkersResponse })
+      if (url === '/admin/files/breakdown') return Promise.resolve({ data: mockBreakdownResponse })
+      if (url === '/admin/thumbnails/stats') return Promise.resolve({ data: mockThumbnailStatsResponse })
+      return Promise.resolve({ data: [] })
+    })
+    mockPut.mockResolvedValue({ data: {} })
+
+    const wrapper = mountAdmin()
+    await flushPromises()
+
+    const editButtons = wrapper.findAll('button')
+    const quotaEditBtn = editButtons.find(b => b.text() === 'Edit')
+    await quotaEditBtn!.trigger('click')
+    await flushPromises()
+
+    const saveBtn = wrapper.findAll('button').find(b => b.text() === 'Save')
+    await saveBtn!.trigger('click')
+
+    expect(mockPut).toHaveBeenCalledWith('/admin/users/user-1/quota', expect.objectContaining({}))
   })
 })

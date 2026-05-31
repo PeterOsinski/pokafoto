@@ -220,7 +220,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	p.notifySubscribers(job)
 
 	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
-		existing, _ := p.fileStore.FindByNameAndSize(job.Filename, job.SizeBytes)
+		existing, _ := p.fileStore.FindByNameAndSize(job.UserID, job.Filename, job.SizeBytes)
 		if existing != nil {
 			f.Close()
 			os.Remove(job.TempPath)
@@ -232,7 +232,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	}
 
 	if !job.SkipNameSizeDedup {
-		existingHash, _ := p.fileStore.FindBySHA256(sha256Hash)
+		existingHash, _ := p.fileStore.FindBySHA256(job.UserID, sha256Hash)
 		if existingHash != nil {
 			f.Close()
 			os.Remove(job.TempPath)

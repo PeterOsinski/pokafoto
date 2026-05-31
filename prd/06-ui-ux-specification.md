@@ -283,6 +283,9 @@ Upload functionality is available via the `InlineUpload` component, used in both
 - Delete user: confirmation dialog with warning about file deletion
 - Role change: dropdown in edit modal
 - Registration toggle: enables/disables the public registration endpoint
+- File Breakdown and Thumbnail Stats sections each have a user selector dropdown: "All Users" (global) or a specific username. Selecting a user filters the breakdown data to that user's files.
+
+**Upload Quota Error:** When a user attempts to upload files that would exceed their space quota, the server returns 413. The upload button area displays a red error message inline: "Upload would exceed space quota (X used + Y incoming > Z limit)". The error clears on the next upload attempt.
 
 **Job History Section:**
 ```

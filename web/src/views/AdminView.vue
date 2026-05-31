@@ -77,7 +77,18 @@
     </div>
 
     <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
-      <h3 class="text-sm font-semibold mb-3 text-[var(--text-secondary)]">File Breakdown</h3>
+      <div class="flex items-center gap-3 mb-3">
+        <h3 class="text-sm font-semibold text-[var(--text-secondary)]">File Breakdown</h3>
+        <select
+          v-model="breakdownUser"
+          @change="loadBreakdown()"
+          class="px-2 py-1 rounded text-xs"
+          style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+        >
+          <option value="">All Users</option>
+          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+        </select>
+      </div>
       <div v-if="breakdown" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <h4 class="text-xs font-semibold mb-2 text-[var(--text-secondary)]">By Media Type</h4>
@@ -126,7 +137,18 @@
     </div>
 
     <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
-      <h3 class="text-sm font-semibold mb-3 text-[var(--text-secondary)]">Thumbnail Stats</h3>
+      <div class="flex items-center gap-3 mb-3">
+        <h3 class="text-sm font-semibold text-[var(--text-secondary)]">Thumbnail Stats</h3>
+        <select
+          v-model="thumbnailUser"
+          @change="loadThumbnailStats()"
+          class="px-2 py-1 rounded text-xs"
+          style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+        >
+          <option value="">All Users</option>
+          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+        </select>
+      </div>
       <div v-if="thumbnailStats" class="space-y-2">
         <table class="w-full text-sm">
           <thead>
@@ -458,6 +480,8 @@ const thumbnailStats = ref<ThumbnailStats | null>(null)
 const editingQuota = ref<string | null>(null)
 const quotaInput = ref('')
 const quotaError = ref('')
+const breakdownUser = ref('')
+const thumbnailUser = ref('')
 let statsTimer: ReturnType<typeof setInterval> | null = null
 let workersTimer: ReturnType<typeof setInterval> | null = null
 let jobsTimer: ReturnType<typeof setInterval> | null = null
@@ -546,7 +570,9 @@ async function handleCreateUser() {
 
 async function loadBreakdown() {
   try {
-    const res = await api.get('/admin/files/breakdown')
+    const params: Record<string, string> = {}
+    if (breakdownUser.value) params.user_id = breakdownUser.value
+    const res = await api.get('/admin/files/breakdown', { params })
     breakdown.value = res.data
   } catch (e) {
     console.error('Failed to load breakdown', e)
@@ -619,7 +645,9 @@ async function reconcileThumbnails() {
 
 async function loadThumbnailStats() {
   try {
-    const res = await api.get('/admin/thumbnails/stats')
+    const params: Record<string, string> = {}
+    if (thumbnailUser.value) params.user_id = thumbnailUser.value
+    const res = await api.get('/admin/thumbnails/stats', { params })
     thumbnailStats.value = res.data
   } catch (e) {
     console.error('Failed to load thumbnail stats', e)

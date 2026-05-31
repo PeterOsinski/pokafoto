@@ -162,8 +162,19 @@ When a folder is uploaded (via `webkitdirectory`), the browser provides `webkitR
 ```
 
 **Deduplication behavior:**
-1. **Name+Size check (root uploads only):** When `skip_name_size_dedup` is not set to `"true"` and `folder_id` is null (root uploads), before any processing, check if a file with the same `original_name` AND `size_bytes` already exists in the root. If yes → status `skipped` with reason `duplicate_name_size`. The file is silently ignored — no upload, no processing. Folder-scoped uploads set `skip_name_size_dedup=true` and skip this check.
-2. **Content hash check (root uploads only):** SHA-256 hash computed during upload. Applied only when `skip_name_size_dedup` is not `"true"` (root uploads). If an identical hash already exists → status `skipped` with reason `duplicate_content`. Folder-scoped uploads skip this check.
+1. **Name+Size check (root uploads only):** When `skip_name_size_dedup` is not set to `"true"` and `folder_id` is null (root uploads), before any processing, check if a file with the same `original_name` AND `size_bytes` already exists **within the same user's files** in the root. If yes → status `skipped` with reason `duplicate_name_size`. The file is silently ignored — no upload, no processing. Folder-scoped uploads set `skip_name_size_dedup=true` and skip this check.
+2. **Content hash check (root uploads only):** SHA-256 hash computed during upload. Applied only when `skip_name_size_dedup` is not `"true"` (root uploads). If an identical hash already exists **within the same user's files** → status `skipped` with reason `duplicate_content`. Folder-scoped uploads skip this check.
+
+**Quota enforcement:** Uploads that would exceed the user's `space_quota` (total bytes of non-deleted original files) are rejected with `413 Payload Too Large`:
+
+```json
+{
+  "error": {
+    "code": "QUOTA_EXCEEDED",
+    "message": "Upload would exceed space quota (500000 used + 200000 incoming > 600000 limit)"
+  }
+}
+```
 
 #### `GET /api/v1/upload/{batch_id}/status`
 Check upload batch progress.
@@ -671,6 +682,38 @@ Change a user's role.
 **Response:** `200 OK`
 
 #### `PUT /api/v1/admin/users/{id}/quota`
+
+---
+
+#### `GET /api/v1/admin/files/breakdown?user_id=<optional-uuid>`
+Admin file type/ext breakdown. If `user_id` is provided, results are scoped to that user; otherwise global aggregate.
+
+**Response:** `200 OK`
+```json
+{
+  "media_types": [
+    { "media_type": "photo", "count": 120, "size_bytes": 800000000 }
+  ],
+  "extensions": [
+    { "extension": "jpeg", "count": 80, "size_bytes": 500000000 }
+  ],
+  "total_size": 3350000000
+}
+```
+
+#### `GET /api/v1/admin/thumbnails/stats?user_id=<optional-uuid>`
+Admin thumbnail cache breakdown. If `user_id` is provided, results are scoped to that user; otherwise global aggregate.
+
+**Response:** `200 OK`
+```json
+{
+  "breakdown": [
+    { "size": "sm", "count": 100, "total_size": 5000000 }
+  ],
+  "total_count": 400,
+  "total_size_bytes": 255000000
+}
+```
 Set a user's space quota (bytes, original files only). NULL = unlimited.
 
 **Request:**

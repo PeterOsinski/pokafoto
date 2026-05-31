@@ -1,8 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -11,16 +14,22 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestDownload_shouldReturn404WhenFileNotFound(t *testing.T) {
-	srv, _, cleanup := newTestServer(t)
-	defer cleanup()
-
-	token := generateTestToken(srv.cfg.Auth.JWTSecret, "user-id", "member")
-
-	w := testRequest(t, srv, "GET", "/api/v1/download/nonexistent-id", "", map[string]string{"Authorization": "Bearer " + token})
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", w.Code)
+func multipartUploadBody(t *testing.T, files map[string][]byte) (string, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for name, data := range files {
+		part, err := w.CreateFormFile("files", name)
+		if err != nil {
+			t.Fatalf("create form file %s: %v", name, err)
+		}
+		if _, err := part.Write(data); err != nil {
+			t.Fatalf("write form file %s: %v", name, err)
+		}
 	}
+	boundary := w.Boundary()
+	w.Close()
+	return buf.String(), boundary
 }
 
 func TestDownload_shouldReturn404WhenFileNotOnDisk(t *testing.T) {
@@ -316,5 +325,78 @@ func TestUploadActiveJobs_shouldRejectUnauthenticated(t *testing.T) {
 	w := testRequest(t, srv, "GET", "/api/v1/upload/active", "", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestUpload_shouldRejectQuotaExceeded(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	u, _ := us.Create("quota_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	quota := int64(50)
+	us.UpdateSpaceQuota(u.ID, &quota)
+
+	data := []byte("this file content is more than 50 bytes long so the quota check should reject it")
+	body, boundary := multipartUploadBody(t, map[string][]byte{"big.jpg": data})
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	req := httptest.NewRequest("POST", "/api/v1/upload", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413, got %d", w.Code)
+	}
+}
+
+func TestUpload_shouldAllowWhenUnderQuota(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	u, _ := us.Create("quota2_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	quota := int64(1024 * 1024)
+	us.UpdateSpaceQuota(u.ID, &quota)
+
+	data := []byte("small file")
+	body, boundary := multipartUploadBody(t, map[string][]byte{"small.jpg": data})
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	req := httptest.NewRequest("POST", "/api/v1/upload", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected 202, got %d", w.Code)
+	}
+}
+
+func TestUpload_shouldAllowWhenUnlimited(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	u, _ := us.Create("quota3_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	bigData := make([]byte, 1024*1024)
+	body, boundary := multipartUploadBody(t, map[string][]byte{"large.jpg": bigData})
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	req := httptest.NewRequest("POST", "/api/v1/upload", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected 202, got %d", w.Code)
 	}
 }

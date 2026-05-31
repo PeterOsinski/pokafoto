@@ -41,17 +41,17 @@ func (s *FileStore) FindByID(id string) (*model.File, error) {
 	))
 }
 
-func (s *FileStore) FindBySHA256(sha256 string) (*model.File, error) {
+func (s *FileStore) FindBySHA256(userID, sha256 string) (*model.File, error) {
 	return s.scanFile(s.db.QueryRow(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE sha256 = ?`,
-		sha256,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE sha256 = ? AND user_id = ? AND is_deleted = 0`,
+		sha256, userID,
 	))
 }
 
-func (s *FileStore) FindByNameAndSize(name string, size int64) (*model.File, error) {
+func (s *FileStore) FindByNameAndSize(userID, name string, size int64) (*model.File, error) {
 	return s.scanFile(s.db.QueryRow(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE original_name = ? AND size_bytes = ? AND is_deleted = 0 LIMIT 1`,
-		name, size,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE original_name = ? AND size_bytes = ? AND user_id = ? AND is_deleted = 0 LIMIT 1`,
+		name, size, userID,
 	))
 }
 
@@ -461,20 +461,21 @@ type FileRecord struct {
 	SizeBytes    int64   `json:"size_bytes"`
 }
 
-func (s *FileStore) FindByNameAndSizeBatch(nameSizes []FileRecord) ([]*model.File, error) {
+func (s *FileStore) FindByNameAndSizeBatch(userID string, nameSizes []FileRecord) ([]*model.File, error) {
 	if len(nameSizes) == 0 {
 		return nil, nil
 	}
 
 	placeholders := make([]string, 0, len(nameSizes))
-	args := make([]interface{}, 0, len(nameSizes)*2)
+	args := make([]interface{}, 0, len(nameSizes)*2+1)
 	for _, ns := range nameSizes {
 		placeholders = append(placeholders, "(?, ?)")
 		args = append(args, ns.OriginalName, ns.SizeBytes)
 	}
+	args = append(args, userID)
 
 	query := fmt.Sprintf(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE (original_name, size_bytes) IN (%s) AND is_deleted = 0`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted FROM files WHERE (original_name, size_bytes) IN (%s) AND user_id = ? AND is_deleted = 0`,
 		strings.Join(placeholders, ", "),
 	)
 
@@ -610,6 +611,50 @@ func (s *FileStore) AdminFileBreakdown() (*AdminFileBreakdown, error) {
 
 	if err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0`).Scan(&b.TotalSize); err != nil {
 		return nil, fmt.Errorf("total size: %w", err)
+	}
+
+	return b, nil
+}
+
+func (s *FileStore) AdminFileBreakdownByUser(userID string) (*AdminFileBreakdown, error) {
+	b := &AdminFileBreakdown{}
+
+	rows, err := s.db.Query(`SELECT media_type, COUNT(*), COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0 AND user_id = ? GROUP BY media_type ORDER BY media_type`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("media type breakdown by user: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var mt MediaTypeBreakdown
+		if err := rows.Scan(&mt.MediaType, &mt.Count, &mt.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan media type by user: %w", err)
+		}
+		b.MediaTypes = append(b.MediaTypes, mt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows media type by user: %w", err)
+	}
+
+	xrows, err := s.db.Query(`SELECT LOWER(SUBSTR(mime_type, INSTR(mime_type, '/') + 1)) as ext, COUNT(*) as cnt, COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0 AND user_id = ? GROUP BY ext ORDER BY cnt DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("extension breakdown by user: %w", err)
+	}
+	defer xrows.Close()
+
+	for xrows.Next() {
+		var eb ExtensionBreakdown
+		if err := xrows.Scan(&eb.Extension, &eb.Count, &eb.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan extension by user: %w", err)
+		}
+		b.Extensions = append(b.Extensions, eb)
+	}
+	if err := xrows.Err(); err != nil {
+		return nil, fmt.Errorf("rows extension by user: %w", err)
+	}
+
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = 0 AND user_id = ?`, userID).Scan(&b.TotalSize); err != nil {
+		return nil, fmt.Errorf("total size by user: %w", err)
 	}
 
 	return b, nil

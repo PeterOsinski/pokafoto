@@ -1,20 +1,23 @@
 <template>
-  <div class="inline-flex items-center">
-    <button
-      @click="triggerUpload"
-      class="px-3 py-1 rounded text-sm text-white"
-      style="background: var(--accent)"
-    >
-      {{ label }}
-    </button>
-      <input
-        ref="fileInput"
-        type="file"
-        multiple
-        :accept="accept"
-        class="hidden"
-        @change="handleChange"
-      />
+  <div class="inline-flex flex-col">
+    <div class="inline-flex items-center">
+      <button
+        @click="triggerUpload"
+        class="px-3 py-1 rounded text-sm text-white"
+        style="background: var(--accent)"
+      >
+        {{ label }}
+      </button>
+        <input
+          ref="fileInput"
+          type="file"
+          multiple
+          :accept="accept"
+          class="hidden"
+          @change="handleChange"
+        />
+    </div>
+    <p v-if="upload.uploadError" class="text-[var(--error)] text-xs mt-1">{{ upload.uploadError }}</p>
   </div>
 </template>
 

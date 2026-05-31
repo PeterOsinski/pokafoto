@@ -116,7 +116,7 @@ func TestFileStore_FindBySHA256_shouldReturnFile(t *testing.T) {
 	user := createTestUser(t, us)
 	created := createTestFile(t, fs, user.ID, "hash.jpg")
 
-	found, err := fs.FindBySHA256(created.SHA256)
+	found, err := fs.FindBySHA256(user.ID, created.SHA256)
 	if err != nil {
 		t.Fatalf("find by sha256: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestFileStore_FindByNameAndSize_shouldMatch(t *testing.T) {
 	user := createTestUser(t, us)
 	created := createTestFile(t, fs, user.ID, "namesize.jpg")
 
-	found, err := fs.FindByNameAndSize(created.OriginalName, created.SizeBytes)
+	found, err := fs.FindByNameAndSize(user.ID, created.OriginalName, created.SizeBytes)
 	if err != nil {
 		t.Fatalf("find by name and size: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldFindDuplicates(t *testing.T) {
 	f1 := createTestFile(t, fs, user.ID, "batch_dedup.jpg")
 	f2 := createTestFile(t, fs, user.ID, "batch_unique.jpg")
 
-	found, err := fs.FindByNameAndSizeBatch([]FileRecord{
+	found, err := fs.FindByNameAndSizeBatch(user.ID, []FileRecord{
 		{OriginalName: f1.OriginalName, SizeBytes: f1.SizeBytes},
 		{OriginalName: f2.OriginalName, SizeBytes: f2.SizeBytes},
 		{OriginalName: "nonexistent.jpg", SizeBytes: 999},
@@ -432,7 +432,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldReturnEmptyWhenNoDuplicates(t *t
 	user := createTestUser(t, us)
 	_ = createTestFile(t, fs, user.ID, "existing.jpg")
 
-	found, err := fs.FindByNameAndSizeBatch([]FileRecord{
+	found, err := fs.FindByNameAndSizeBatch(user.ID, []FileRecord{
 		{OriginalName: "no_match_1.jpg", SizeBytes: 111},
 		{OriginalName: "no_match_2.jpg", SizeBytes: 222},
 	})
@@ -448,7 +448,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldReturnNilOnEmptyInput(t *testing
 	db := OpenTestDB(t)
 	fs := NewFileStore(db)
 
-	found, err := fs.FindByNameAndSizeBatch(nil)
+	found, err := fs.FindByNameAndSizeBatch("", nil)
 	if err != nil {
 		t.Fatalf("find by name and size batch: %v", err)
 	}

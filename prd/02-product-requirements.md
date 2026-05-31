@@ -106,6 +106,9 @@
 | A-09 | As an admin, I can view per-user storage breakdowns (files + thumbnails) and total usage | P1 |
 | A-10 | As a user, I see a quota progress bar in the top bar showing my storage usage vs limit | P1 |
 | A-11 | Space quota decreases below the user's current usage are rejected with a validation error | P1 |
+| A-12 | As a user, I am prevented from uploading files that would exceed my space quota, with a clear error message | P1 |
+| A-13 | Deduplication only matches files within the same user account, not across all users | P1 |
+| A-14 | As an admin, I can view per-user file and thumbnail breakdowns alongside the global aggregate | P2 |
 
 ### Upload Reliability & Self-Healing
 | ID | User Story | Priority |
