@@ -219,3 +219,191 @@ func TestAuth_Config_shouldReturnRegistrationStatus(t *testing.T) {
 		t.Errorf("expected true, got %v", resp["allow_registration"])
 	}
 }
+
+func TestAdmin_UpdateQuota_shouldSetQuota(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	adminName := "qadmin_" + uuid.NewString()[:8]
+	admin, _ := us.Create(adminName, "adminpass123", model.RoleAdmin, nil)
+	member, _ := us.Create("quotauser_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	tenGB := int64(10737418240)
+	w := testRequest(t, srv, "PUT", "/api/v1/admin/users/"+member.ID+"/quota", `{"space_quota":10737418240}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	q := resp["space_quota"]
+	if qn, ok := q.(float64); !ok || int64(qn) != tenGB {
+		t.Errorf("expected space_quota=10737418240, got %v", q)
+	}
+
+	updated, _ := us.FindByID(member.ID)
+	if updated.SpaceQuota == nil || *updated.SpaceQuota != tenGB {
+		t.Errorf("expected persisted quota 10737418240, got %v", updated.SpaceQuota)
+	}
+}
+
+func TestAdmin_UpdateQuota_shouldAllowUnlimited(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	adminName := "qadmin2_" + uuid.NewString()[:8]
+	admin, _ := us.Create(adminName, "adminpass123", model.RoleAdmin, nil)
+	member, _ := us.Create("qunlim_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/admin/users/"+member.ID+"/quota", `{"space_quota":10737418240}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 setting quota, got %d", w.Code)
+	}
+
+	w = testRequest(t, srv, "PUT", "/api/v1/admin/users/"+member.ID+"/quota", `{"space_quota":null}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 setting null, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["space_quota"] != nil {
+		t.Errorf("expected null, got %v", resp["space_quota"])
+	}
+
+	updated, _ := us.FindByID(member.ID)
+	if updated.SpaceQuota != nil {
+		t.Errorf("expected nil quota, got %v", *updated.SpaceQuota)
+	}
+}
+
+func TestAdmin_UpdateQuota_shouldRejectBelowUsage(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	adminName := "qadmin3_" + uuid.NewString()[:8]
+	admin, _ := us.Create(adminName, "adminpass123", model.RoleAdmin, nil)
+	member, _ := us.Create("qbelow_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	f := &model.File{
+		UserID:       member.ID,
+		Filename:     "2024/07/bigfile.jpg",
+		OriginalName: "bigfile.jpg",
+		Path:         "2024/07",
+		SizeBytes:    5 * 1024 * 1024,
+		MimeType:     "image/jpeg",
+		SHA256:       "qtest_" + uuid.NewString(),
+		MediaType:    model.MediaTypePhoto,
+	}
+	fs.Create(f)
+
+	w := testRequest(t, srv, "PUT", "/api/v1/admin/users/"+member.ID+"/quota", `{"space_quota":1048576}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdmin_UpdateQuota_shouldRejectNonAdmin(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	member, _ := us.Create("qmember_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, member.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/admin/users/"+member.ID+"/quota", `{"space_quota":10737418240}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestAdmin_ListUsers_shouldIncludeQuotaFields(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("qlist_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	quota := int64(10737418240)
+	us.UpdateSpaceQuota(admin.ID, &quota)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/users", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	users := resp["users"].([]interface{})
+	if len(users) == 0 {
+		t.Fatal("expected at least 1 user")
+	}
+
+	first := users[0].(map[string]interface{})
+	if _, ok := first["space_quota"]; !ok {
+		t.Error("expected space_quota field in list response")
+	}
+	if _, ok := first["thumbnail_size_bytes"]; !ok {
+		t.Error("expected thumbnail_size_bytes field in list response")
+	}
+	if _, ok := first["file_count"]; !ok {
+		t.Error("expected file_count field in list response")
+	}
+	if _, ok := first["total_size_bytes"]; !ok {
+		t.Error("expected total_size_bytes field in list response")
+	}
+}
+
+func TestAdmin_Stats_shouldIncludePerUserThumbnails(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("qstats_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/stats", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	users, ok := resp["users"].([]interface{})
+	if !ok {
+		t.Fatal("expected users array in stats response")
+	}
+	if len(users) == 0 {
+		t.Fatal("expected at least 1 user")
+	}
+
+	u := users[0].(map[string]interface{})
+	if _, ok := u["thumbnail_size_bytes"]; !ok {
+		t.Error("expected thumbnail_size_bytes in per-user stats")
+	}
+	if _, ok := u["space_quota"]; !ok {
+		t.Error("expected space_quota in per-user stats")
+	}
+}

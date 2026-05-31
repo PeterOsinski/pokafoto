@@ -604,15 +604,32 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponses := make([]userResponse, 0, len(users))
+	userResponses := make([]map[string]interface{}, 0, len(users))
 	for _, u := range users {
-		userResponses = append(userResponses, userResponse{
-			ID:          u.ID,
-			Username:    u.Username,
-			DisplayName: u.DisplayName,
-			Role:        string(u.Role),
-			CreatedAt:   u.CreatedAt.Format(timeRFC3339),
-		})
+		fileCount, _ := s.fileStore.Stats(u.ID)
+		thumbSize, _ := s.userStore.GetThumbnailSize(u.ID)
+
+		resp := map[string]interface{}{
+			"id":          u.ID,
+			"username":    u.Username,
+			"display_name": u.DisplayName,
+			"role":        string(u.Role),
+			"created_at":  u.CreatedAt.Format(timeRFC3339),
+		}
+		if u.SpaceQuota != nil {
+			resp["space_quota"] = *u.SpaceQuota
+		} else {
+			resp["space_quota"] = nil
+		}
+		if fileCount != nil {
+			resp["file_count"] = fileCount.TotalFiles
+			resp["total_size_bytes"] = fileCount.TotalSize
+		} else {
+			resp["file_count"] = 0
+			resp["total_size_bytes"] = 0
+		}
+		resp["thumbnail_size_bytes"] = thumbSize
+		userResponses = append(userResponses, resp)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -651,6 +668,57 @@ func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+}
+
+func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	var req struct {
+		SpaceQuota *int64 `json:"space_quota"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.SpaceQuota != nil && *req.SpaceQuota < 0 {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Quota must be non-negative")
+		return
+	}
+
+	if req.SpaceQuota != nil {
+		used, err := s.userStore.GetUsedSpace(userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check usage")
+			return
+		}
+		if *req.SpaceQuota < used {
+			writeError(w, http.StatusUnprocessableEntity, "QUOTA_BELOW_USAGE", "Quota cannot be below current usage")
+			return
+		}
+	}
+
+	if err := s.userStore.UpdateSpaceQuota(userID, req.SpaceQuota); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update quota")
+		return
+	}
+
+	user, _ := s.userStore.FindByID(userID)
+	if user == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+		return
+	}
+
+	resp := map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"role":     string(user.Role),
+	}
+	if user.SpaceQuota != nil {
+		resp["space_quota"] = *user.SpaceQuota
+	} else {
+		resp["space_quota"] = nil
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request) {
@@ -745,15 +813,23 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		thumbSize, _ := s.userStore.GetThumbnailSize(u.ID)
 		totalFiles += stats.TotalFiles
 		totalSize += stats.TotalSize
-		userStats = append(userStats, map[string]interface{}{
-			"id":               u.ID,
-			"username":         u.Username,
-			"role":             string(u.Role),
-			"file_count":       stats.TotalFiles,
-			"total_size_bytes": stats.TotalSize,
-		})
+		ustat := map[string]interface{}{
+			"id":                  u.ID,
+			"username":            u.Username,
+			"role":                string(u.Role),
+			"file_count":          stats.TotalFiles,
+			"total_size_bytes":    stats.TotalSize,
+			"thumbnail_size_bytes": thumbSize,
+		}
+		if u.SpaceQuota != nil {
+			ustat["space_quota"] = *u.SpaceQuota
+		} else {
+			ustat["space_quota"] = nil
+		}
+		userStats = append(userStats, ustat)
 	}
 
 	cacheSize, _ := s.thumbnailStore.TotalSize()

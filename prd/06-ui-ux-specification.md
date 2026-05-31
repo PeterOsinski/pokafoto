@@ -34,7 +34,7 @@
 ### Desktop Layout (≥1024px, authenticated)
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Drive Logo]  [Gallery] [Folders] [Timeline] [Map]  [👤]  │
+│  [Drive Logo]  [Gallery] [Folders] [Timeline] [Map] [Admin] [████░░ 1.5GB/10GB]  [👤]  │
 ├──────────┬──────────────────────────────────────────────┤
 │          │                                              │
 │  Dir     │          Main Content Area                   │
@@ -267,7 +267,7 @@ Upload functionality is available via the `InlineUpload` component, used in both
 │  ┌──────────────────────────────────────────────────┐   │
 │  │  Users                                            │   │
 │  │  ┌──────────┬──────────┬────────┬─────────────┐   │   │
-│  │  │ Username │ Role     │ Files  │ Actions     │   │   │
+│  │  │ Username │ Role     │ Files  │ Size   │ Thumbnails │ Quota      │ Actions     │   │   │
 │  │  ├──────────┼──────────┼────────┼─────────────┤   │   │
 │  │  │ johndoe  │ Admin    │ 15,420 │ [Edit] [Del]│   │   │
 │  │  │ janesmith│ Member   │  3,200 │ [Edit] [Del]│   │   │

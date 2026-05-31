@@ -628,7 +628,10 @@ List all users.
       "role": "member",
       "display_name": "John Doe",
       "created_at": "2024-07-15T14:30:00Z",
-      "file_count": 15420
+      "space_quota": 10737418240,
+      "file_count": 15420,
+      "total_size_bytes": 8589934592,
+      "thumbnail_size_bytes": 2147483648
     }
   ],
   "total": 3
@@ -666,6 +669,19 @@ Change a user's role.
 ```
 
 **Response:** `200 OK`
+
+#### `PUT /api/v1/admin/users/{id}/quota`
+Set a user's space quota (bytes, original files only). NULL = unlimited.
+
+**Request:**
+```json
+{
+  "space_quota": 10737418240
+}
+```
+
+**Response:** `200 OK` — returns the updated user object with `space_quota`
+**Error:** `422 Unprocessable Entity` if quota is below current usage ("QUOTA_BELOW_USAGE")
 
 #### `GET /api/v1/admin/registration`
 Get current registration toggle state.

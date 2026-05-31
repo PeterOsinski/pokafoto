@@ -48,12 +48,13 @@ func (s *UserStore) Create(username, password string, role model.UserRole, displ
 func (s *UserStore) FindByUsername(username string) (*model.User, error) {
 	user := &model.User{}
 	var displayName sql.NullString
+	var spaceQuota sql.NullInt64
 	var createdAt, updatedAt string
 
 	err := s.db.QueryRow(
-		`SELECT id, username, password_hash, role, display_name, created_at, updated_at FROM users WHERE username = ?`,
+		`SELECT id, username, password_hash, role, display_name, space_quota, created_at, updated_at FROM users WHERE username = ?`,
 		username,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &displayName, &createdAt, &updatedAt)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &displayName, &spaceQuota, &createdAt, &updatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -65,6 +66,9 @@ func (s *UserStore) FindByUsername(username string) (*model.User, error) {
 	if displayName.Valid {
 		user.DisplayName = &displayName.String
 	}
+	if spaceQuota.Valid {
+		user.SpaceQuota = &spaceQuota.Int64
+	}
 	user.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	user.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 
@@ -74,12 +78,13 @@ func (s *UserStore) FindByUsername(username string) (*model.User, error) {
 func (s *UserStore) FindByID(id string) (*model.User, error) {
 	user := &model.User{}
 	var displayName sql.NullString
+	var spaceQuota sql.NullInt64
 	var createdAt, updatedAt string
 
 	err := s.db.QueryRow(
-		`SELECT id, username, password_hash, role, display_name, created_at, updated_at FROM users WHERE id = ?`,
+		`SELECT id, username, password_hash, role, display_name, space_quota, created_at, updated_at FROM users WHERE id = ?`,
 		id,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &displayName, &createdAt, &updatedAt)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &displayName, &spaceQuota, &createdAt, &updatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -91,6 +96,9 @@ func (s *UserStore) FindByID(id string) (*model.User, error) {
 	if displayName.Valid {
 		user.DisplayName = &displayName.String
 	}
+	if spaceQuota.Valid {
+		user.SpaceQuota = &spaceQuota.Int64
+	}
 	user.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	user.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 
@@ -98,7 +106,7 @@ func (s *UserStore) FindByID(id string) (*model.User, error) {
 }
 
 func (s *UserStore) List() ([]*model.User, error) {
-	rows, err := s.db.Query(`SELECT id, username, role, display_name, created_at, updated_at FROM users ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT id, username, role, display_name, space_quota, created_at, updated_at FROM users ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -108,12 +116,16 @@ func (s *UserStore) List() ([]*model.User, error) {
 	for rows.Next() {
 		u := &model.User{}
 		var displayName sql.NullString
+		var spaceQuota sql.NullInt64
 		var createdAt, updatedAt string
-		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &displayName, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &displayName, &spaceQuota, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		if displayName.Valid {
 			u.DisplayName = &displayName.String
+		}
+		if spaceQuota.Valid {
+			u.SpaceQuota = &spaceQuota.Int64
 		}
 		u.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		u.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
@@ -142,4 +154,30 @@ func (s *UserStore) Count() (int, error) {
 	var count int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count)
 	return count, err
+}
+
+func (s *UserStore) UpdateSpaceQuota(id string, quota *int64) error {
+	_, err := s.db.Exec(`UPDATE users SET space_quota = ?, updated_at = ? WHERE id = ?`, quota, time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return fmt.Errorf("update space quota: %w", err)
+	}
+	return nil
+}
+
+func (s *UserStore) GetUsedSpace(userID string) (int64, error) {
+	var used int64
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE user_id = ? AND is_deleted = 0`, userID).Scan(&used)
+	if err != nil {
+		return 0, fmt.Errorf("get used space: %w", err)
+	}
+	return used, nil
+}
+
+func (s *UserStore) GetThumbnailSize(userID string) (int64, error) {
+	var size int64
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(t.size_bytes), 0) FROM thumbnails t INNER JOIN files f ON t.file_id = f.id WHERE f.user_id = ? AND f.is_deleted = 0`, userID).Scan(&size)
+	if err != nil {
+		return 0, fmt.Errorf("get thumbnail size: %w", err)
+	}
+	return size, nil
 }

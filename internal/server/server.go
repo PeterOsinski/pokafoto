@@ -139,6 +139,7 @@ func (s *Server) setupRouter() {
 				r.Post("/users", s.handleAdminCreateUser)
 				r.Delete("/users/{id}", s.handleAdminDeleteUser)
 				r.Put("/users/{id}/role", s.handleAdminUpdateRole)
+				r.Put("/users/{id}/quota", s.handleAdminUpdateQuota)
 				r.Get("/registration", s.handleAdminGetRegistration)
 				r.Put("/registration", s.handleAdminToggleRegistration)
 			r.Get("/stats", s.handleAdminStats)

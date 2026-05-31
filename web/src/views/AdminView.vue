@@ -258,6 +258,8 @@
             <th class="text-left p-3 text-[var(--text-secondary)]">Role</th>
             <th class="text-left p-3 text-[var(--text-secondary)]">Files</th>
             <th class="text-left p-3 text-[var(--text-secondary)]">Size</th>
+            <th class="text-left p-3 text-[var(--text-secondary)]">Thumbnails</th>
+            <th class="text-left p-3 text-[var(--text-secondary)]">Quota</th>
             <th class="text-left p-3 text-[var(--text-secondary)]">Actions</th>
           </tr>
         </thead>
@@ -271,6 +273,29 @@
             </td>
             <td class="p-3 text-[var(--text-secondary)]">{{ user.file_count || 0 }}</td>
             <td class="p-3 text-[var(--text-secondary)]">{{ user.total_size_bytes ? formatBytes(user.total_size_bytes) : '-' }}</td>
+            <td class="p-3 text-[var(--text-secondary)]">{{ user.thumbnail_size_bytes !== undefined ? formatBytes(user.thumbnail_size_bytes) : '-' }}</td>
+            <td class="p-3 text-[var(--text-primary)]">
+              <template v-if="editingQuota === user.id">
+                <div class="flex items-center gap-1">
+                  <input
+                    v-model="quotaInput"
+                    type="text"
+                    placeholder="bytes"
+                    class="w-24 px-1 py-0.5 rounded text-xs"
+                    style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+                    @keyup.enter="saveQuota(user.id)"
+                    @keyup.escape="cancelEditQuota()"
+                  />
+                  <button @click="saveQuota(user.id)" class="px-1.5 py-0.5 rounded text-xs text-white" style="background: var(--accent)">Save</button>
+                  <button @click="cancelEditQuota()" class="px-1.5 py-0.5 rounded text-xs" style="background: var(--bg-elevated); color: var(--text-secondary)">Cancel</button>
+                </div>
+                <p v-if="quotaError" class="text-[var(--error)] text-xs mt-0.5">{{ quotaError }}</p>
+              </template>
+              <template v-else>
+                <span class="text-xs">{{ user.space_quota ? formatBytes(user.space_quota) : 'Unlimited' }}</span>
+                <button @click="startEditQuota(user)" class="ml-1 px-1 py-0.5 rounded text-xs text-[var(--accent)]" style="background: var(--bg-elevated)">Edit</button>
+              </template>
+            </td>
             <td class="p-3">
               <select
                 class="px-2 py-1 rounded text-xs mr-2"
@@ -334,6 +359,8 @@ interface AdminUser {
   display_name?: string
   file_count?: number
   total_size_bytes?: number
+  space_quota?: number | null
+  thumbnail_size_bytes?: number
 }
 
 interface AdminStats {
@@ -428,6 +455,9 @@ const jobStatusFilter = ref('')
 const jobSummary = ref<Record<string, number>>({})
 const reconciling = ref(false)
 const thumbnailStats = ref<ThumbnailStats | null>(null)
+const editingQuota = ref<string | null>(null)
+const quotaInput = ref('')
+const quotaError = ref('')
 let statsTimer: ReturnType<typeof setInterval> | null = null
 let workersTimer: ReturnType<typeof setInterval> | null = null
 let jobsTimer: ReturnType<typeof setInterval> | null = null
@@ -611,6 +641,44 @@ function formatDate(dateStr: string): string {
   if (!dateStr) return '-'
   const d = new Date(dateStr)
   return d.toLocaleString()
+}
+
+function startEditQuota(user: AdminUser) {
+  editingQuota.value = user.id
+  quotaError.value = ''
+  if (user.space_quota) {
+    quotaInput.value = String(user.space_quota)
+  } else {
+    quotaInput.value = ''
+  }
+}
+
+function cancelEditQuota() {
+  editingQuota.value = null
+  quotaInput.value = ''
+  quotaError.value = ''
+}
+
+async function saveQuota(userId: string) {
+  const raw = quotaInput.value.trim()
+  let quotaValue: number | null = null
+  if (raw !== '') {
+    const parsed = parseInt(raw, 10)
+    if (isNaN(parsed) || parsed < 0) {
+      quotaError.value = 'Invalid number'
+      return
+    }
+    quotaValue = parsed
+  }
+  try {
+    await api.put(`/admin/users/${userId}/quota`, { space_quota: quotaValue })
+    editingQuota.value = null
+    quotaInput.value = ''
+    quotaError.value = ''
+    loadStats()
+  } catch (e: any) {
+    quotaError.value = e.response?.data?.error?.message || 'Failed to update quota'
+  }
 }
 
 onMounted(() => {

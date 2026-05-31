@@ -14,6 +14,16 @@
         <router-link v-if="auth.isAdmin" to="/admin" class="text-sm" :class="navClass('/admin')">Admin</router-link>
       </nav>
       <div class="flex items-center gap-3">
+        <div v-if="quotaBytes !== null" class="hidden sm:flex items-center gap-2">
+          <div class="w-32 h-2 rounded-full" style="background: var(--bg-elevated)">
+            <div
+              class="h-2 rounded-full transition-all"
+              :class="quotaClass"
+              :style="{ width: quotaPct + '%' }"
+            />
+          </div>
+          <span class="text-xs text-[var(--text-secondary)] whitespace-nowrap">{{ quotaDisplay }}</span>
+        </div>
         <span class="text-sm text-[var(--text-secondary)] hidden sm:inline">{{ auth.user?.username }}</span>
         <button @click="handleLogout" class="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Logout</button>
       </div>
@@ -44,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useUploadStore } from './stores/upload'
@@ -57,6 +67,37 @@ const upload = useUploadStore()
 const router = useRouter()
 const route = useRoute()
 const showS3Banner = ref(false)
+const usedBytes = ref(0)
+const quotaBytes = ref<number | null>(null)
+
+const quotaDisplay = computed(() => {
+  if (quotaBytes.value === null) return ''
+  return formatBytes(usedBytes.value) + ' / ' + formatBytes(quotaBytes.value)
+})
+
+const quotaPct = computed(() => {
+  if (!quotaBytes.value || quotaBytes.value === 0) return 0
+  return Math.min((usedBytes.value / quotaBytes.value) * 100, 100)
+})
+
+const quotaClass = computed(() => {
+  const pct = quotaPct.value
+  if (pct > 80) return 'bg-[var(--error)]'
+  if (pct > 60) return 'bg-[var(--warning)]'
+  return 'bg-[var(--accent)]'
+})
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let val = bytes
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  return val.toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
+}
 
 function navClass(path: string) {
   if (path === '/') return route.path === '/' ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -77,5 +118,16 @@ onMounted(async () => {
       showS3Banner.value = true
     }
   } catch {}
+  if (auth.isAuthenticated) {
+    try {
+      const meRes = await api.get('/auth/me')
+      const user = meRes.data
+      if (user.space_quota) {
+        quotaBytes.value = user.space_quota
+      }
+      const statsRes = await api.get('/stats')
+      usedBytes.value = statsRes.data.total_size_bytes || 0
+    } catch {}
+  }
 })
 </script>

@@ -15,6 +15,7 @@ type User struct {
 	PasswordHash string    `json:"-" db:"password_hash"`
 	Role         UserRole  `json:"role" db:"role"`
 	DisplayName  *string   `json:"display_name,omitempty" db:"display_name"`
+	SpaceQuota   *int64    `json:"space_quota,omitempty" db:"space_quota"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }

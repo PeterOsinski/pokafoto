@@ -102,6 +102,10 @@
 | A-05 | As an admin, I can manage users (list, delete, change roles, create) from the admin panel | P0 |
 | A-06 | As an admin, I can enable or disable public registration via a toggle in the admin panel (runtime setting persisted in SQLite) | P1 |
 | A-07 | As an admin, I can create new users from the admin panel (no CLI required after initial admin setup) | P0 |
+| A-08 | As an admin, I can set a space quota per user (original file sizes only, not thumbnails) | P1 |
+| A-09 | As an admin, I can view per-user storage breakdowns (files + thumbnails) and total usage | P1 |
+| A-10 | As a user, I see a quota progress bar in the top bar showing my storage usage vs limit | P1 |
+| A-11 | Space quota decreases below the user's current usage are rejected with a validation error | P1 |
 
 ### Upload Reliability & Self-Healing
 | ID | User Story | Priority |

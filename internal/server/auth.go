@@ -212,13 +212,18 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, userResponse{
-		ID:          user.ID,
-		Username:    user.Username,
-		DisplayName: user.DisplayName,
-		Role:        string(user.Role),
-		CreatedAt:   user.CreatedAt.Format(time.RFC3339),
-	})
+	resp := map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"role":     string(user.Role),
+	}
+	if user.DisplayName != nil {
+		resp["display_name"] = *user.DisplayName
+	}
+	if user.SpaceQuota != nil {
+		resp["space_quota"] = *user.SpaceQuota
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) generateAccessToken(user *model.User) (string, error) {

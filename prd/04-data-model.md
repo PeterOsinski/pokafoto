@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash   TEXT NOT NULL,             -- bcrypt hash
     role            TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin', 'member')),
     display_name    TEXT,
+    space_quota     INTEGER,                   -- NULL = unlimited, value in bytes (original files only)
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -325,6 +326,7 @@ type User struct {
     PasswordHash string    `json:"-" db:"password_hash"`
     Role         UserRole  `json:"role" db:"role"`
     DisplayName  *string   `json:"display_name,omitempty" db:"display_name"`
+    SpaceQuota   *int64    `json:"space_quota,omitempty" db:"space_quota"`
     CreatedAt    time.Time `json:"created_at" db:"created_at"`
     UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
