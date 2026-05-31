@@ -129,6 +129,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if len(files) > 0 {
+		s.workerPool.NotifyJobsAvailable()
+	}
+
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"batch_id": batchID,
 		"jobs":     jobs,

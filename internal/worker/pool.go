@@ -21,6 +21,14 @@ import (
 
 const pollInterval = 1 * time.Second
 
+type s3Task struct {
+	UserID     string
+	Filename   string
+	DestPath   string
+	FileID     string
+	Thumbnails []*model.Thumbnail
+}
+
 type Pool struct {
 	cfg              *config.Config
 	fileStore        *store.FileStore
@@ -34,12 +42,15 @@ type Pool struct {
 	wg               sync.WaitGroup
 	stopCh           chan struct{}
 	jobCh            chan *model.UploadJob
+	s3JobCh          chan *s3Task
+	s3Workers        int
 	subscribers      map[string]map[string]chan *model.UploadJob
 	subMu            sync.RWMutex
 	userSubscribers  map[string]map[string]chan *model.UploadJob
 	userSubMu        sync.RWMutex
 	processingJobs   map[string]*model.UploadJob
 	processingMu     sync.RWMutex
+	notifyCh         chan struct{}
 	completedTotal   atomic.Int64
 	failedTotal      atomic.Int64
 	skippedTotal     atomic.Int64
@@ -80,9 +91,12 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		totalWorkers:     workers,
 		stopCh:           make(chan struct{}),
 		jobCh:            make(chan *model.UploadJob, workers*2),
+		s3JobCh:          make(chan *s3Task, workers*4),
+		s3Workers:        2,
 		subscribers:      make(map[string]map[string]chan *model.UploadJob),
 		userSubscribers:  make(map[string]map[string]chan *model.UploadJob),
 		processingJobs:   make(map[string]*model.UploadJob),
+		notifyCh:         make(chan struct{}, 1),
 	}
 
 	p.recoverStuckJobs()
@@ -90,6 +104,11 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 	for i := 0; i < workers; i++ {
 		p.wg.Add(1)
 		go p.worker(i)
+	}
+
+	for i := 0; i < p.s3Workers; i++ {
+		p.wg.Add(1)
+		go p.s3Worker(i)
 	}
 
 	p.wg.Add(1)
@@ -116,6 +135,13 @@ func (p *Pool) recoverStuckJobs() {
 	}
 }
 
+func (p *Pool) NotifyJobsAvailable() {
+	select {
+	case p.notifyCh <- struct{}{}:
+	default:
+	}
+}
+
 func (p *Pool) claimer() {
 	defer p.wg.Done()
 	ticker := time.NewTicker(pollInterval)
@@ -125,21 +151,61 @@ func (p *Pool) claimer() {
 		select {
 		case <-p.stopCh:
 			return
+		case <-p.notifyCh:
 		case <-ticker.C:
-			job, err := p.uploadJobStore.Claim()
-			if err != nil {
-				slog.Warn("claimer claim failed", "error", err)
+		}
+
+		if len(p.jobCh) >= cap(p.jobCh) {
+			continue
+		}
+
+		job, err := p.uploadJobStore.Claim()
+		if err != nil {
+			slog.Warn("claimer claim failed", "error", err)
+			continue
+		}
+		if job == nil {
+			continue
+		}
+		p.jobCh <- job
+	}
+}
+
+func (p *Pool) s3Worker(id int) {
+	defer p.wg.Done()
+
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case task, ok := <-p.s3JobCh:
+			if !ok {
+				return
+			}
+			if p.storageService == nil {
 				continue
 			}
-			if job == nil {
-				continue
+			if task.DestPath != "" {
+				if err := p.storageService.PutOriginals(task.UserID, task.Filename, task.DestPath); err != nil {
+					slog.Warn("s3 upload failed for original", "file_id", task.FileID, "error", err)
+				} else {
+					if err := os.Remove(task.DestPath); err != nil {
+						slog.Warn("failed to remove local original after s3 upload", "file_id", task.FileID, "error", err)
+					}
+				}
 			}
-			select {
-			case p.jobCh <- job:
-			default:
-				p.uploadJobStore.Fail(job.ID, "worker_at_capacity")
-				p.notifySubscribers(job)
-				p.failedTotal.Add(1)
+			for _, t := range task.Thumbnails {
+				if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
+					slog.Warn("thumbnail missing before s3 upload, skipping", "file_id", task.FileID, "size", t.Size, "path", t.LocalPath)
+					continue
+				}
+				format := "jpg"
+				if t.Size == model.ThumbSizePreview {
+					format = "webp"
+				}
+				if err := p.storageService.PutThumbnail(task.FileID, string(t.Size), format, t.LocalPath); err != nil {
+					slog.Warn("s3 upload failed for thumbnail", "file_id", task.FileID, "size", t.Size, "error", err)
+				}
 			}
 		}
 	}
@@ -381,27 +447,17 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	}
 
 	if p.storageService != nil {
-		if err := p.storageService.PutOriginals(job.UserID, fileRecord.Filename, destPath); err != nil {
-			slog.Warn("s3 upload failed for original", "file_id", fileRecord.ID, "error", err)
-		} else {
-			if err := os.Remove(destPath); err != nil {
-				slog.Warn("failed to remove local original after s3 upload", "file_id", fileRecord.ID, "path", destPath, "error", err)
-			} else {
-				slog.Info("removed local original after s3 upload", "file_id", fileRecord.ID, "path", destPath)
-			}
+		task := &s3Task{
+			UserID:     job.UserID,
+			Filename:   fileRecord.Filename,
+			DestPath:   destPath,
+			FileID:     fileRecord.ID,
+			Thumbnails: thumbs,
 		}
-		for _, t := range thumbs {
-			if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
-				slog.Warn("thumbnail file missing before s3 upload, skipping", "file_id", fileRecord.ID, "size", t.Size, "path", t.LocalPath)
-				continue
-			}
-			format := "jpg"
-			if t.Size == model.ThumbSizePreview {
-				format = "webp"
-			}
-			if err := p.storageService.PutThumbnail(fileRecord.ID, string(t.Size), format, t.LocalPath); err != nil {
-				slog.Warn("s3 upload failed for thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
-			}
+		select {
+		case p.s3JobCh <- task:
+		default:
+			slog.Warn("s3 upload queue full, keeping local copy", "file_id", fileRecord.ID)
 		}
 	}
 
@@ -464,19 +520,18 @@ func (p *Pool) processReconcileJob(job *model.UploadJob, f *os.File) {
 		}
 	}
 
-	if p.storageService != nil {
-		for _, t := range thumbs {
-			if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
-				slog.Warn("reconcile thumbnail file missing before s3 upload, skipping", "file_id", fileRecord.ID, "size", t.Size, "path", t.LocalPath)
-				continue
-			}
-			format := "jpg"
-			if t.Size == model.ThumbSizePreview {
-				format = "webp"
-			}
-			if err := p.storageService.PutThumbnail(fileRecord.ID, string(t.Size), format, t.LocalPath); err != nil {
-				slog.Warn("reconcile s3 upload failed for thumbnail", "file_id", fileRecord.ID, "size", t.Size, "error", err)
-			}
+	if p.storageService != nil && len(thumbs) > 0 {
+		task := &s3Task{
+			UserID:     job.UserID,
+			Filename:   fileRecord.Filename,
+			DestPath:   "",
+			FileID:     fileRecord.ID,
+			Thumbnails: thumbs,
+		}
+		select {
+		case p.s3JobCh <- task:
+		default:
+			slog.Warn("s3 upload queue full, skipping reconcile thumb upload", "file_id", fileRecord.ID)
 		}
 	}
 
@@ -559,6 +614,7 @@ func (p *Pool) RunReconciliation() map[string]interface{} {
 
 	if created > 0 {
 		slog.Info("reconciler created jobs", "created", created, "missing_all", missingAll, "missing_preview", missingPreview)
+		p.NotifyJobsAvailable()
 	}
 
 	return map[string]interface{}{

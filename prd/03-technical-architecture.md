@@ -259,9 +259,11 @@ drive/
 ```
 
 - Uploads are persisted directly into the `upload_jobs` SQLite table with `status = 'queued'`
-- A configurable pool of worker goroutines (default: 4) polls the table every 1 second
-- Each worker atomically claims a job via `UPDATE ... WHERE status = 'queued' LIMIT 1`
-- Each worker: dedup check → hashes → extracts EXIF → generates thumbnails → stores to local disk (+ S3 if enabled)
+- A **claim** goroutine polls the table every 1 second (or on `NotifyJobsAvailable`) and atomically claims a job via `UPDATE ... WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`, transitioning it to `processing`
+- Claimed jobs are pushed into a buffered channel (`jobCh`, capacity = `concurrent_workers × 2`) consumed by worker goroutines
+- **Backpressure**: The claimer checks `len(jobCh) < cap(jobCh)` before claiming from the DB. If the channel is full, no job is claimed — the claimer simply waits for the next tick, leaving jobs safely in `queued` status
+- Each worker: dedup check → hashes → extracts EXIF → generates thumbnails → stores to local disk → completes
+- S3 uploads (if enabled) are dispatched to a separate pool of 2 dedicated `s3Worker` goroutines via `s3JobCh` (capacity = `concurrent_workers × 4`). This prevents slow S3 operations from blocking the main processing pipeline. If the S3 channel is full, the local copy is retained (non-fatal fallback)
 - Progress is stored in the database at each stage and reported via WebSocket to the frontend
 - **Crash recovery**: On startup, any jobs stuck in `status = 'processing'` are reset to `queued` and reprocessed
 - Temp file existence is validated before processing; missing temp files mark the job as `failed`

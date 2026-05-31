@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/model"
+	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
 )
 
@@ -544,6 +546,55 @@ func TestPool_Shutdown_shouldStopWorkers(t *testing.T) {
 	}
 }
 
+func TestPool_NotifyJobsAvailable_shouldWakeClaimerImmediately(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("notifyuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	defer pool.Shutdown()
+
+	content := make([]byte, 256)
+	rand.Read(content)
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "notify-test.bin")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	job := enqueueJob(t, ujs, "batch-notify", u.ID, "notify-test.bin", info.Size(), tmpPath, nil, true)
+	pool.NotifyJobsAvailable()
+
+	pickedUp := false
+	deadline := time.After(100 * time.Millisecond)
+	for !pickedUp {
+		select {
+		case <-deadline:
+			t.Fatal("claimer did not pick up job within 100ms after NotifyJobsAvailable")
+		default:
+		}
+		fetched, _ := ujs.FindByID(job.ID)
+		if fetched != nil && fetched.Status != model.JobStatusQueued {
+			pickedUp = true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestDetectMimeTypeByExtension_known(t *testing.T) {
 	tests := []struct {
 		filename string
@@ -593,6 +644,106 @@ func TestDetectMediaType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPool_Claimer_shouldNotClaimWhenChannelFull(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+	cap := cfg.Upload.ConcurrentWorkers * 2
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("capacityuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool.Shutdown()
+
+	for i := 0; i < cap; i++ {
+		pool.jobCh <- &model.UploadJob{
+			ID:       "sentinel-" + strconv.Itoa(i),
+			TempPath: "/nonexistent/" + strconv.Itoa(i),
+		}
+	}
+
+	if len(pool.jobCh) != cap {
+		t.Fatalf("expected channel full (%d), got %d", cap, len(pool.jobCh))
+	}
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "capacity-test.jpg")
+	if err := os.WriteFile(tmpPath, []byte("capacity test content"), 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	jobIDs := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		job := enqueueJob(t, ujs, "batch-capacity", u.ID, fmt.Sprintf("photo%d.jpg", i), info.Size(), tmpPath, nil, true)
+		jobIDs[i] = job.ID
+	}
+
+	exifSvc := service.NewExifService()
+	thumbSvc := service.NewThumbnailService(cfg.ThumbnailsDir())
+	p := &Pool{
+		cfg:              cfg,
+		fileStore:        fs,
+		exifStore:        es,
+		thumbnailStore:   ts,
+		exifService:      exifSvc,
+		thumbnailService: thumbSvc,
+		storageService:   nil,
+		uploadJobStore:   ujs,
+		totalWorkers:     1,
+		stopCh:           make(chan struct{}),
+		jobCh:            pool.jobCh,
+		s3JobCh:          make(chan *s3Task, 4),
+		s3Workers:        2,
+		subscribers:      make(map[string]map[string]chan *model.UploadJob),
+		userSubscribers:  make(map[string]map[string]chan *model.UploadJob),
+		processingJobs:   make(map[string]*model.UploadJob),
+		notifyCh:         make(chan struct{}, 1),
+	}
+
+	p.wg.Add(1)
+	p.NotifyJobsAvailable()
+	go p.claimer()
+
+	time.Sleep(pollInterval + 500*time.Millisecond)
+
+	for _, id := range jobIDs {
+		job, _ := ujs.FindByID(id)
+		if job == nil {
+			t.Fatalf("job %s not found", id)
+		}
+		if job.Status == model.JobStatusFailed {
+			t.Errorf("job %s failed with reason %v", id, job.Reason)
+		}
+		if job.Status == model.JobStatusProcessing {
+			t.Errorf("job %s claimed despite full channel", id)
+		}
+		if job.Status != model.JobStatusQueued {
+			t.Errorf("job %s expected queued, got %s", id, job.Status)
+		}
+	}
+
+	for i := 0; i < cap; i++ {
+		select {
+		case <-p.jobCh:
+		default:
+		}
+	}
+
+	close(p.stopCh)
+	p.wg.Wait()
 }
 
 func TestDetectMimeTypeFromFile_tinyFilesShouldNotPanic(t *testing.T) {

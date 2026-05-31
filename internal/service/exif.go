@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
+	"math"
 	"os/exec"
 	"strconv"
 
+	jpegexif "github.com/dsoprea/go-exif/v3"
+	"github.com/dsoprea/go-exif/v3/common"
+	"github.com/dsoprea/go-jpeg-image-structure/v2"
+
 	"github.com/drive/drive/internal/model"
-	"github.com/rwcarlsen/goexif/exif"
 )
 
 type ExifService struct{}
@@ -38,116 +41,166 @@ type exifToolEntry struct {
 }
 
 func (s *ExifService) Extract(filePath string) (*model.ExifData, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("open file for exif: %w", err)
-	}
-	defer f.Close()
-
-	var data model.ExifData
-
-	x, err := exif.Decode(f)
-	if err != nil {
-		data, fallbackErr := s.extractViaExifTool(filePath)
-		if fallbackErr != nil {
-			slog.Warn("exiftool fallback failed", "error", fallbackErr)
-			return nil, nil
-		}
+	data, err := s.extractViaDsoprea(filePath)
+	if err == nil && data != nil {
 		return data, nil
 	}
 
-	if v, err := x.Get(exif.Make); err == nil {
-		if s, err := v.StringVal(); err == nil {
-			data.CameraMake = &s
-		} else {
-			s := v.String()
-			data.CameraMake = &s
+	data, fallbackErr := s.extractViaExifTool(filePath)
+	if fallbackErr != nil {
+		slog.Warn("exiftool fallback failed", "error", fallbackErr)
+		return nil, nil
+	}
+	return data, nil
+}
+
+func (s *ExifService) extractViaDsoprea(filePath string) (*model.ExifData, error) {
+	jmp := jpegstructure.NewJpegMediaParser()
+	mc, err := jmp.ParseFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("jpeg parse: %w", err)
+	}
+
+	rootIfd, _, err := mc.Exif()
+	if err != nil {
+		return nil, fmt.Errorf("exif extract: %w", err)
+	}
+
+	var data model.ExifData
+
+	if results, err := rootIfd.FindTagWithName("Make"); err == nil && len(results) > 0 {
+		s := valueString(results[0])
+		data.CameraMake = &s
+	}
+	if results, err := rootIfd.FindTagWithName("Model"); err == nil && len(results) > 0 {
+		s := valueString(results[0])
+		data.CameraModel = &s
+	}
+	if results, err := rootIfd.FindTagWithName("Orientation"); err == nil && len(results) > 0 {
+		if i, err := results[0].Value(); err == nil {
+			if arr, ok := i.([]uint16); ok && len(arr) > 0 {
+				v := int(arr[0])
+				data.Orientation = &v
+			}
 		}
 	}
-	if v, err := x.Get(exif.Model); err == nil {
-		if s, err := v.StringVal(); err == nil {
-			data.CameraModel = &s
-		} else {
-			s := v.String()
-			data.CameraModel = &s
-		}
+	if results, err := rootIfd.FindTagWithName("Software"); err == nil && len(results) > 0 {
+		s := valueString(results[0])
+		data.Software = &s
 	}
-	if v, err := x.Get(exif.LensModel); err == nil {
-		if s, err := v.StringVal(); err == nil {
+
+	exifIfd, err := jpegexif.FindIfdFromRootIfd(rootIfd, "IFD/Exif")
+	if err == nil && exifIfd != nil {
+		if results, err := exifIfd.FindTagWithName("LensModel"); err == nil && len(results) > 0 {
+			s := valueString(results[0])
 			data.LensModel = &s
-		} else {
-			s := v.String()
-			data.LensModel = &s
 		}
-	}
-	if v, err := x.Get(exif.FocalLength); err == nil {
-		if n, d, err := v.Rat2(0); err == nil && d != 0 {
-			f := float64(n) / float64(d)
-			data.FocalLength = &f
+		if results, err := exifIfd.FindTagWithName("FocalLength"); err == nil && len(results) > 0 {
+			if f := rationalFloat(results[0]); f != nil {
+				data.FocalLength = f
+			}
 		}
-	}
-	if v, err := x.Get(exif.FNumber); err == nil {
-		if n, d, err := v.Rat2(0); err == nil && d != 0 {
-			f := float64(n) / float64(d)
-			data.Aperture = &f
+		if results, err := exifIfd.FindTagWithName("FNumber"); err == nil && len(results) > 0 {
+			if f := rationalFloat(results[0]); f != nil {
+				data.Aperture = f
+			}
 		}
-	}
-	if v, err := x.Get(exif.ExposureTime); err == nil {
-		if n, d, err := v.Rat2(0); err == nil && d != 0 {
-			s := fmt.Sprintf("%d/%d", n, d)
-			data.ShutterSpeed = &s
+		if results, err := exifIfd.FindTagWithName("ExposureTime"); err == nil && len(results) > 0 {
+			if s := rationalString(results[0]); s != "" {
+				data.ShutterSpeed = &s
+			}
 		}
-	}
-	if v, err := x.Get(exif.ISOSpeedRatings); err == nil {
-		if i, err := v.Int(0); err == nil {
-			data.ISO = &i
+		if results, err := exifIfd.FindTagWithName("ISOSpeedRatings"); err == nil && len(results) > 0 {
+			if i, err := results[0].Value(); err == nil {
+				if arr, ok := i.([]uint16); ok && len(arr) > 0 {
+					v := int(arr[0])
+					data.ISO = &v
+				}
+			}
 		}
-	}
-	if v, err := x.Get(exif.DateTimeOriginal); err == nil {
-		if s, err := v.StringVal(); err == nil {
-			data.DateTaken = &s
-		} else {
-			s := v.String()
+		if results, err := exifIfd.FindTagWithName("DateTimeOriginal"); err == nil && len(results) > 0 {
+			s := valueString(results[0])
 			data.DateTaken = &s
 		}
+		if results, err := exifIfd.FindTagWithName("ColorSpace"); err == nil && len(results) > 0 {
+			if i, err := results[0].Value(); err == nil {
+				if arr, ok := i.([]uint16); ok && len(arr) > 0 {
+					s := "sRGB"
+					if arr[0] == 0xFFFF {
+						s = "Uncalibrated"
+					} else if arr[0] == 2 {
+						s = "Adobe RGB"
+					}
+					data.ColorSpace = &s
+				}
+			}
+		}
+		if results, err := exifIfd.FindTagWithName("Flash"); err == nil && len(results) > 0 {
+			if i, err := results[0].Value(); err == nil {
+				if arr, ok := i.([]uint16); ok && len(arr) > 0 {
+					v := int(arr[0])
+					data.Flash = &v
+				}
+			}
+		}
 	}
-	if lat, lon, err := x.LatLong(); err == nil {
+
+	if gi, err := rootIfd.GpsInfo(); err == nil && gi != nil {
+		lat := math.Round(gi.Latitude.Decimal()*1e7) / 1e7
+		lon := math.Round(gi.Longitude.Decimal()*1e7) / 1e7
 		data.GPSLatitude = &lat
 		data.GPSLongitude = &lon
-	}
-	if v, err := x.Get(exif.Orientation); err == nil {
-		if i, err := v.Int(0); err == nil {
-			data.Orientation = &i
-		}
-	}
-	if v, err := x.Get(exif.ColorSpace); err == nil {
-		if i, err := v.Int(0); err == nil {
-			s := "sRGB"
-			if i == 0xFFFF {
-				s = "Uncalibrated"
-			} else if i == 2 {
-				s = "Adobe RGB"
-			}
-			data.ColorSpace = &s
-		}
-	}
-	if v, err := x.Get(exif.Flash); err == nil {
-		if i, err := v.Int(0); err == nil {
-			data.Flash = &i
-		}
-	}
-	if v, err := x.Get(exif.Software); err == nil {
-		if s, err := v.StringVal(); err == nil {
-			data.Software = &s
-		} else {
-			s := v.String()
-			data.Software = &s
-		}
 	}
 
 	data.LensMake = data.CameraMake
 
 	return &data, nil
+}
+
+func valueString(ite *jpegexif.IfdTagEntry) string {
+	v, err := ite.Value()
+	if err != nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	s, err := ite.FormatFirst()
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+func rationalFloat(ite *jpegexif.IfdTagEntry) *float64 {
+	v, err := ite.Value()
+	if err != nil {
+		return nil
+	}
+	rat, ok := v.([]exifcommon.Rational)
+	if !ok || len(rat) == 0 {
+		return nil
+	}
+	if rat[0].Denominator == 0 {
+		return nil
+	}
+	f := float64(rat[0].Numerator) / float64(rat[0].Denominator)
+	return &f
+}
+
+func rationalString(ite *jpegexif.IfdTagEntry) string {
+	v, err := ite.Value()
+	if err != nil {
+		return ""
+	}
+	rat, ok := v.([]exifcommon.Rational)
+	if !ok || len(rat) == 0 {
+		return ""
+	}
+	if rat[0].Denominator == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d/%d", rat[0].Numerator, rat[0].Denominator)
 }
 
 func (s *ExifService) extractViaExifTool(filePath string) (*model.ExifData, error) {
