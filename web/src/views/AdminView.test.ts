@@ -89,10 +89,11 @@ const mockThumbnailStatsResponse = {
     { size: 'sm', count: 100, total_size: 5000000 },
     { size: 'lg', count: 100, total_size: 50000000 },
     { size: 'md', count: 100, total_size: 80000000 },
+    { size: 'xl', count: 100, total_size: 200000000 },
     { size: 'preview', count: 100, total_size: 120000000 },
   ],
-  total_count: 400,
-  total_size_bytes: 255000000,
+  total_count: 500,
+  total_size_bytes: 455000000,
 }
 
 describe('AdminView', () => {

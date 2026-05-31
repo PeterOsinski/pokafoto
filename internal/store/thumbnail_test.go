@@ -42,6 +42,55 @@ func TestThumbnailStore_TotalSize_shouldReturnZeroWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestThumbnailStore_Create_shouldAcceptXL(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeXL, 500000)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 500)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeLarge, 1200)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeMedium, 2000)
+
+	thumb, err := ts.FindByFileIDAndSize(f.ID, model.ThumbSizeXL)
+	if err != nil {
+		t.Fatalf("FindByFileIDAndSize xl: %v", err)
+	}
+	if thumb.SizeBytes != 500000 {
+		t.Errorf("expected 500000, got %d", thumb.SizeBytes)
+	}
+	if string(thumb.Size) != string(model.ThumbSizeXL) {
+		t.Errorf("expected xl, got %s", thumb.Size)
+	}
+
+	count, err := ts.CountByFileID(f.ID)
+	if err != nil {
+		t.Fatalf("CountByFileID: %v", err)
+	}
+	if count != 4 {
+		t.Errorf("expected 4 thumbnails, got %d", count)
+	}
+
+	breakdown, err := ts.Breakdown()
+	if err != nil {
+		t.Fatalf("Breakdown: %v", err)
+	}
+	hasXL := false
+	for _, b := range breakdown {
+		if b.Size == "xl" {
+			hasXL = true
+			break
+		}
+	}
+	if !hasXL {
+		t.Error("expected xl size in breakdown")
+	}
+}
+
 func createTestThumb(t *testing.T, ts *ThumbnailStore, fileID string, size model.ThumbnailSize, sizeBytes int64) {
 	t.Helper()
 	th := &model.Thumbnail{
