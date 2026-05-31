@@ -7,7 +7,8 @@
 All endpoints return JSON. Timestamps are ISO 8601. IDs are UUID v7 strings.
 
 **Authentication:** All endpoints require `Authorization: Bearer <token>` header, except for:
-- `POST /api/v1/auth/register` (if `auth.allow_registration: true`)
+- `GET /api/v1/auth/config`
+- `POST /api/v1/auth/register` (if registration enabled)
 - `POST /api/v1/auth/login`
 - `GET /api/v1/health`
 
@@ -103,6 +104,16 @@ Get the current user's profile.
   "display_name": "John Doe",
   "role": "member",
   "created_at": "2024-07-15T14:30:00Z"
+}
+```
+
+#### `GET /api/v1/auth/config`
+Get public auth configuration. Does not require authentication.
+
+**Response:** `200 OK`
+```json
+{
+  "allow_registration": false
 }
 ```
 
@@ -624,6 +635,21 @@ List all users.
 }
 ```
 
+#### `POST /api/v1/admin/users`
+Create a new user. Admin only.
+
+**Request:**
+```json
+{
+  "username": "newuser",
+  "password": "password123",
+  "role": "member",
+  "display_name": "New User"
+}
+```
+
+**Response:** `201 Created` — returns the created user object (same shape as register response).
+
 #### `DELETE /api/v1/admin/users/{id}`
 Delete a user and all their files (soft-delete their files first).
 
@@ -640,6 +666,33 @@ Change a user's role.
 ```
 
 **Response:** `200 OK`
+
+#### `GET /api/v1/admin/registration`
+Get current registration toggle state.
+
+**Response:** `200 OK`
+```json
+{
+  "allow_registration": false
+}
+```
+
+#### `PUT /api/v1/admin/registration`
+Toggle self-registration on or off. Persists to SQLite `settings` table, overriding config file value.
+
+**Request:**
+```json
+{
+  "enabled": true
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "allow_registration": true
+}
+```
 
 #### `GET /api/v1/admin/jobs`
 List upload jobs with pagination and optional status filter. Admin-only.

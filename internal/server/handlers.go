@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/store"
@@ -513,6 +514,87 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBatchDownload(w http.ResponseWriter, r *http.Request) {
 	s.handleBatchDownloadReal(w, r)
+}
+
+func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username    string  `json:"username"`
+		Password    string  `json:"password"`
+		Role        string  `json:"role"`
+		DisplayName *string `json:"display_name,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	if len(req.Username) < 3 || len(req.Username) > 32 {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Username must be 3-32 characters")
+		return
+	}
+	if len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Password must be at least 8 characters")
+		return
+	}
+	if req.Role != "admin" && req.Role != "member" && req.Role != "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Role must be 'admin' or 'member'")
+		return
+	}
+
+	role := model.RoleMember
+	if req.Role == "admin" {
+		role = model.RoleAdmin
+	}
+
+	existing, _ := s.userStore.FindByUsername(req.Username)
+	if existing != nil {
+		writeError(w, http.StatusConflict, "USERNAME_EXISTS", "Username is already taken")
+		return
+	}
+
+	user, err := s.userStore.Create(req.Username, req.Password, role, req.DisplayName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, userResponse{
+		ID:          user.ID,
+		Username:    user.Username,
+		DisplayName: user.DisplayName,
+		Role:        string(user.Role),
+		CreatedAt:   user.CreatedAt.Format(timeRFC3339),
+	})
+}
+
+func (s *Server) handleAdminGetRegistration(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"allow_registration": s.isRegistrationAllowed(),
+	})
+}
+
+func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+
+	val := "false"
+	if req.Enabled {
+		val = "true"
+	}
+	if err := s.settingStore.Set("allow_registration", val); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update setting")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"allow_registration": req.Enabled,
+	})
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {

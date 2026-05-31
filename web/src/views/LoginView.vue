@@ -33,7 +33,7 @@
           {{ loading ? 'Logging in...' : 'Log In' }}
         </button>
       </form>
-      <p class="text-center mt-4 text-[var(--text-secondary)] text-sm">
+      <p v-if="registrationAllowed" class="text-center mt-4 text-[var(--text-secondary)] text-sm">
         Don't have an account?
         <router-link to="/register" class="text-[var(--accent)] hover:underline">Register</router-link>
       </p>
@@ -42,9 +42,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import api from '../api/client'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -53,6 +54,14 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const registrationAllowed = ref(false)
+
+onMounted(async () => {
+  try {
+    const res = await api.get('/auth/config')
+    registrationAllowed.value = res.data.allow_registration
+  } catch {}
+})
 
 async function handleLogin() {
   loading.value = true

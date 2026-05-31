@@ -232,11 +232,25 @@
       <div v-else class="text-sm text-[var(--text-secondary)]">No jobs found.</div>
     </div>
 
-    <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
-      <span class="text-sm text-[var(--text-secondary)]">Registration: {{ regEnabled ? 'Enabled' : 'Disabled' }}</span>
+    <div class="mb-6 p-4 rounded-md flex items-center justify-between" style="background: var(--bg-surface)">
+      <span class="text-sm text-[var(--text-secondary)]">Registration: <span :class="regEnabled ? 'text-green-400' : 'text-[var(--error)]'">{{ regEnabled ? 'Enabled' : 'Disabled' }}</span></span>
+      <button
+        @click="toggleRegistration"
+        :disabled="registrationLoading"
+        class="px-3 py-1 rounded text-xs"
+        :style="{ background: regEnabled ? 'var(--error)' : 'var(--accent)', color: '#fff', opacity: registrationLoading ? 0.5 : 1 }"
+      >{{ registrationLoading ? '...' : (regEnabled ? 'Disable' : 'Enable') }}</button>
     </div>
 
     <div class="overflow-x-auto rounded-md" style="background: var(--bg-surface)">
+      <div class="flex items-center justify-between p-3 border-b" style="border-color: var(--border-color)">
+        <h3 class="text-sm font-semibold text-[var(--text-secondary)]">Users</h3>
+        <button
+          @click="showCreateUser = true"
+          class="px-3 py-1 rounded text-xs"
+          style="background: var(--accent); color: #fff"
+        >Create User</button>
+      </div>
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b" style="border-color: var(--border-color)">
@@ -276,7 +290,35 @@
           </tr>
         </tbody>
       </table>
-      <div v-if="users.length === 0" class="p-6 text-center text-[var(--text-secondary)]">No users found.</div>
+      <div v-if="users.length === 0 && !showCreateUser" class="p-6 text-center text-[var(--text-secondary)]">No users found.</div>
+    </div>
+
+    <div v-if="showCreateUser" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showCreateUser = false">
+      <div class="w-full max-w-md p-6 rounded-lg" style="background: var(--bg-surface)">
+        <h3 class="text-lg font-semibold mb-4 text-[var(--text-primary)]">Create User</h3>
+        <form @submit.prevent="handleCreateUser" class="space-y-3">
+          <input v-model="newUser.username" type="text" placeholder="Username (3-32 chars)" minlength="3" maxlength="32" required
+            class="w-full px-3 py-2 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)" />
+          <input v-model="newUser.password" type="password" placeholder="Password (8+ chars)" minlength="8" required
+            class="w-full px-3 py-2 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)" />
+          <select v-model="newUser.role"
+            class="w-full px-3 py-2 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)">
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+          <input v-model="newUser.displayName" type="text" placeholder="Display Name (optional)"
+            class="w-full px-3 py-2 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)" />
+          <p v-if="createUserError" class="text-[var(--error)] text-sm">{{ createUserError }}</p>
+          <div class="flex gap-2 justify-end">
+            <button type="button" @click="showCreateUser = false" class="px-4 py-2 rounded text-sm"
+              style="background: var(--bg-elevated); color: var(--text-secondary)">Cancel</button>
+            <button type="submit" :disabled="createUserLoading"
+              class="px-4 py-2 rounded text-sm text-white" style="background: var(--accent)">
+              {{ createUserLoading ? 'Creating...' : 'Create' }}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
@@ -371,6 +413,11 @@ interface JobRecord {
 
 const users = ref<AdminUser[]>([])
 const regEnabled = ref(true)
+const registrationLoading = ref(false)
+const showCreateUser = ref(false)
+const createUserLoading = ref(false)
+const createUserError = ref('')
+const newUser = ref({ username: '', password: '', role: 'member', displayName: '' })
 const stats = ref<AdminStats | null>(null)
 const workers = ref<WorkerStats | null>(null)
 const breakdown = ref<FileBreakdown | null>(null)
@@ -422,6 +469,48 @@ async function loadStats() {
     users.value = res.data.users || []
   } catch (e) {
     console.error('Failed to load stats', e)
+  }
+}
+
+async function loadRegistrationStatus() {
+  try {
+    const res = await api.get('/admin/registration')
+    regEnabled.value = res.data.allow_registration
+  } catch (e) {
+    console.error('Failed to load registration status', e)
+  }
+}
+
+async function toggleRegistration() {
+  registrationLoading.value = true
+  try {
+    const res = await api.put('/admin/registration', { enabled: !regEnabled.value })
+    regEnabled.value = res.data.allow_registration
+  } catch (e: any) {
+    console.error('Failed to toggle registration', e)
+    alert('Failed to update: ' + (e.response?.data?.error?.message || 'Unknown error'))
+  } finally {
+    registrationLoading.value = false
+  }
+}
+
+async function handleCreateUser() {
+  createUserLoading.value = true
+  createUserError.value = ''
+  try {
+    await api.post('/admin/users', {
+      username: newUser.value.username,
+      password: newUser.value.password,
+      role: newUser.value.role,
+      display_name: newUser.value.displayName || undefined,
+    })
+    showCreateUser.value = false
+    newUser.value = { username: '', password: '', role: 'member', displayName: '' }
+    loadStats()
+  } catch (e: any) {
+    createUserError.value = e.response?.data?.error?.message || 'Failed to create user'
+  } finally {
+    createUserLoading.value = false
   }
 }
 
@@ -530,6 +619,7 @@ onMounted(() => {
   loadWorkers()
   loadJobs()
   loadThumbnailStats()
+  loadRegistrationStatus()
   statsTimer = setInterval(() => { loadStats(); loadBreakdown() }, 10000)
   workersTimer = setInterval(loadWorkers, 5000)
   jobsTimer = setInterval(loadJobs, 10000)

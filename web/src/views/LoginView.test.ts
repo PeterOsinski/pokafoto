@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 vi.mock('@/api/client', () => ({
   default: {
     post: vi.fn(),
-    get: vi.fn(),
+    get: vi.fn().mockResolvedValue({ data: { allow_registration: true } }),
     put: vi.fn(),
     delete: vi.fn(),
   },
@@ -49,10 +49,12 @@ describe('LoginView', () => {
     expect(wrapper.find('button[type="submit"]').text()).toBe('Log In')
   })
 
-  it('has register link', () => {
+  it('has register link', async () => {
     const { wrapper } = mountWithRouter(LoginView)
+    await flushPromises()
 
     const link = wrapper.findComponent({ name: 'RouterLink' })
+    expect(link.exists()).toBe(true)
     expect(link.text()).toContain('Register')
     expect(link.props('to')).toBe('/register')
   })

@@ -219,6 +219,13 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- migrations/008_settings.sql
+-- Key-value settings table for runtime configuration overrides
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- migrations/002_fts5.sql
 -- Full-text search virtual table (separate migration for evolvability)
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(

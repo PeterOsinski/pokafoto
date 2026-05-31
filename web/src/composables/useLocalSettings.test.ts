@@ -115,4 +115,32 @@ describe('useLocalSettings', () => {
       }
     })
   })
+
+  describe('highResDownload', () => {
+    it('defaults to false', () => {
+      const s = useLocalSettings()
+      expect(s.highResDownload.value).toBe(false)
+    })
+
+    it('persists to localStorage on change', () => {
+      const s = useLocalSettings()
+      s.highResDownload.value = true
+      expect(localStorage.getItem('drive:highResDownload')).toBe('true')
+    })
+
+    it('reads from localStorage on init', () => {
+      localStorage.setItem('drive:highResDownload', 'true')
+      _resetSingleton()
+      const s = useLocalSettings()
+      expect(s.highResDownload.value).toBe(true)
+    })
+
+    it('stays a ref after value assignment', () => {
+      const s = useLocalSettings()
+      s.highResDownload.value = true
+      s.highResDownload.value = false
+      expect(s.highResDownload).toBeTypeOf('object')
+      expect(s.highResDownload.value).toBe(false)
+    })
+  })
 })

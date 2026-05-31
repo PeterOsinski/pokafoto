@@ -16,8 +16,8 @@ func TestDefaultConfig_shouldSetExpectedDefaults(t *testing.T) {
 	if cfg.Auth.SessionDurationH != 72 {
 		t.Errorf("expected 72h, got %d", cfg.Auth.SessionDurationH)
 	}
-	if !cfg.Auth.AllowRegistration {
-		t.Error("expected registration allowed by default")
+	if cfg.Auth.AllowRegistration {
+		t.Error("expected registration disabled by default")
 	}
 	if cfg.Upload.ConcurrentWorkers != 4 {
 		t.Errorf("expected 4 workers, got %d", cfg.Upload.ConcurrentWorkers)

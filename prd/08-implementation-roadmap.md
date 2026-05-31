@@ -40,8 +40,10 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 |---|---|---|---|
 | HTTP server skeleton | Chi router, middleware, health endpoint | `cmd/server/main.go` | ✅ (`internal/server/server.go`) |
 | Auth service + middleware | JWT creation/validation, bcrypt password hashing | `internal/service/auth.go`, `internal/middleware/auth.go` | ✅ (in `internal/server/auth.go`, `middleware.go`) |
-| Auth endpoints | `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/v1/auth/me` | `internal/handler/auth.go` | ✅ (in `internal/server/auth.go`) |
+| Auth endpoints | `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/v1/auth/me`, `GET /api/v1/auth/config` | `internal/handler/auth.go` | ✅ (in `internal/server/auth.go`) |
 | Admin CLI command | `drive admin create` — CLI subcommand to bootstrap first admin user | `cmd/drive/main.go` | ✅ |
+| Admin create user | `POST /api/v1/admin/users` — admin creates users from admin panel | `internal/server/handlers.go` | ✅ |
+| Registration toggle | `GET/PUT /api/v1/admin/registration` — runtime toggle persisted in SQLite settings table; `GET /api/v1/auth/config` — public endpoint for UI | `internal/server/handlers.go`, `migration_008_settings.sql` | ✅ |
 | Upload endpoint | `POST /api/v1/upload` — multipart parsing, validation | `internal/handler/upload.go` | ✅ (`internal/server/upload.go`) |
 | Name+Size dedup check | Query DB for existing file with same `original_name` + `size_bytes` | `internal/service/dedup.go` | ✅ (in worker pipeline) |
 | SHA-256 hashing | Stream file to temp, compute hash, detect content-level duplicates | `internal/service/dedup.go` | ✅ (in worker pipeline) |

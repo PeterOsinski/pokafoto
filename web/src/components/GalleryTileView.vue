@@ -1,31 +1,34 @@
 <template>
-  <RecycleScroller
-    class="scroller"
-    :items="rows"
-    :item-size="props.thumbSizePx + 8"
-    key-field="key"
-    v-slot="{ item: rowItems, index: rowIndex }"
-    :buffer="300"
-  >
-    <div class="flex gap-2" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)`, display: 'grid' }">
-      <ThumbnailCard
-        v-for="(file, colIndex) in rowItems"
-        :key="file.id"
-        :file="file"
-        :selected="selectedIds.has(file.id)"
-        :selectable="selectionEnabled"
-        :anySelected="selectedIds.size > 0"
-        :thumbSize="effectiveThumbSize"
-        @select="$emit('select', file.id)"
-        @deselect="$emit('deselect', file.id)"
-        @open="$emit('open', rowIndex * columns + colIndex)"
-      />
-    </div>
-  </RecycleScroller>
+  <div ref="containerRef" style="width: 100%; min-height: 400px">
+    <RecycleScroller
+      v-if="containerWidth > 0"
+      class="scroller"
+      :items="rows"
+      :item-size="itemSize"
+      key-field="key"
+      v-slot="{ item: rowItems, index: rowIndex }"
+      :buffer="300"
+    >
+      <div class="grid gap-2" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)` }">
+        <ThumbnailCard
+          v-for="(file, colIndex) in rowItems"
+          :key="file.id"
+          :file="file"
+          :selected="selectedIds.has(file.id)"
+          :selectable="selectionEnabled"
+          :anySelected="selectedIds.size > 0"
+          :thumbSize="effectiveThumbSize"
+          @select="$emit('select', file.id)"
+          @deselect="$emit('deselect', file.id)"
+          @open="$emit('open', rowIndex * columns + colIndex)"
+        />
+      </div>
+    </RecycleScroller>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import ThumbnailCard from './ThumbnailCard.vue'
@@ -66,7 +69,21 @@ defineEmits<{
   open: [index: number]
 }>()
 
-const columns = computed(() => Math.max(1, Math.floor(1200 / (props.thumbSizePx + 8))))
+const containerRef = ref<HTMLElement | null>(null)
+const containerWidth = ref(0)
+let resizeObserver: ResizeObserver | null = null
+
+const gap = 8
+
+const columns = computed(() => {
+  if (containerWidth.value <= 0) return 1
+  return Math.max(1, Math.floor(containerWidth.value / (props.thumbSizePx + gap)))
+})
+
+const itemSize = computed(() => {
+  if (columns.value <= 0) return props.thumbSizePx + gap
+  return Math.round(containerWidth.value / columns.value) + gap
+})
 
 const effectiveThumbSize = computed<'sm' | 'md' | 'lg'>(() => {
   if (props.thumbSizePx <= 100) return 'sm'
@@ -84,11 +101,26 @@ const rows = computed(() => {
   }
   return result
 })
+
+onMounted(() => {
+  if (containerRef.value) {
+    containerWidth.value = containerRef.value.clientWidth
+    resizeObserver = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        containerWidth.value = entries[0].contentRect.width
+      }
+    })
+    resizeObserver.observe(containerRef.value)
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+})
 </script>
 
 <style scoped>
 .scroller {
   height: calc(100vh - 200px);
-  min-height: 400px;
 }
 </style>

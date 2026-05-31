@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
+import { useLocalSettings, _resetSingleton } from '../composables/useLocalSettings'
 import Lightbox from './Lightbox.vue'
 
 const { mockApiGet } = vi.hoisted(() => ({
@@ -47,6 +48,8 @@ function mountLightbox(props: Record<string, any> = {}) {
 describe('Lightbox', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    localStorage.clear()
+    _resetSingleton()
     vi.clearAllMocks()
     mockApiGet.mockResolvedValue({ data: {} })
   })
@@ -193,6 +196,46 @@ describe('Lightbox', () => {
       expect(wrapper.text()).toContain('1/1000s')
       expect(wrapper.text()).toContain('ISO 400')
       expect(wrapper.text()).toContain('48.8566')
+    })
+  })
+
+  describe('2000px checkbox', () => {
+    function xlFile() {
+      return makeFile({
+        thumbnails: {
+          sm: { url: '/thumb/sm.jpg', width: 200, height: 200 },
+          md: { url: '/thumb/md.jpg', width: 800, height: 600 },
+          xl: { url: '/thumb/xl.jpg', width: 2000, height: 1500 },
+          preview: { url: '/thumb/preview.jpg', width: 1600, height: 1200 },
+        },
+      })
+    }
+
+    it('renders 2000px checkbox when file has xl thumbnails', async () => {
+      const wrapper = mount(Lightbox, { props: { file: xlFile(), index: 0, total: 1, hasPrev: false, hasNext: false } })
+      await flushPromises()
+
+      const label = wrapper.find('label')
+      expect(label.text()).toContain('2000px')
+    })
+
+    it('does not render 2000px checkbox when file has no xl thumbnails', async () => {
+      const file = makeFile()
+      const wrapper = mount(Lightbox, { props: { file, index: 0, total: 1, hasPrev: false, hasNext: false } })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('2000px')
+    })
+
+    it('sets highResDownload ref to true when checkbox is checked', async () => {
+      const settings = useLocalSettings()
+      const wrapper = mount(Lightbox, { props: { file: xlFile(), index: 0, total: 1, hasPrev: false, hasNext: false } })
+      await flushPromises()
+
+      const checkbox = wrapper.find<HTMLInputElement>('input[type="checkbox"]')
+      await checkbox.setValue(true)
+
+      expect(settings.highResDownload.value).toBe(true)
     })
   })
 })

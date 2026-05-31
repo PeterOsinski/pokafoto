@@ -18,6 +18,9 @@ func newTestServer(t *testing.T) (*Server, *store.DB, func()) {
 
 	db := store.OpenTestDB(t)
 
+	settingStore := store.NewSettingStore(db)
+	settingStore.Set("allow_registration", "true")
+
 	s := New(cfg, db)
 
 	return s, db, func() {

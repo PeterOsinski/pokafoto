@@ -26,6 +26,7 @@ type Server struct {
 	thumbnailStore *store.ThumbnailStore
 	geoStore       *store.GeoStore
 	uploadJobStore *store.UploadJobStore
+	settingStore   *store.SettingStore
 	storageService *service.StorageService
 	workerPool     *worker.Pool
 }
@@ -42,6 +43,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		thumbnailStore: store.NewThumbnailStore(db),
 		geoStore:       store.NewGeoStore(db),
 		uploadJobStore: store.NewUploadJobStore(db),
+		settingStore:   store.NewSettingStore(db),
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -82,22 +84,8 @@ func (s *Server) setupRouter() {
 	}))
 
 	r.Get("/api/v1/health", s.handleHealth)
+	r.Get("/api/v1/auth/config", s.handleAuthConfig)
 
-	s.registerRoutes(r)
-
-	spa := s.serveSPA()
-	if spa != nil {
-		r.NotFound(spa.ServeHTTP)
-	}
-
-	s.router = r
-}
-
-func (s *Server) Start(addr string) error {
-	return http.ListenAndServe(addr, s.router)
-}
-
-func (s *Server) registerRoutes(r *chi.Mux) {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", s.handleRegister)
 		r.Post("/auth/login", s.handleLogin)
@@ -148,8 +136,11 @@ func (s *Server) registerRoutes(r *chi.Mux) {
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.adminMiddleware)
 				r.Get("/users", s.handleAdminListUsers)
+				r.Post("/users", s.handleAdminCreateUser)
 				r.Delete("/users/{id}", s.handleAdminDeleteUser)
 				r.Put("/users/{id}/role", s.handleAdminUpdateRole)
+				r.Get("/registration", s.handleAdminGetRegistration)
+				r.Put("/registration", s.handleAdminToggleRegistration)
 			r.Get("/stats", s.handleAdminStats)
 			r.Get("/files/breakdown", s.handleAdminFileBreakdown)
 			r.Get("/thumbnails/stats", s.handleAdminThumbnailStats)
@@ -160,6 +151,17 @@ func (s *Server) registerRoutes(r *chi.Mux) {
 			})
 		})
 	})
+
+	spa := s.serveSPA()
+	if spa != nil {
+		r.NotFound(spa.ServeHTTP)
+	}
+
+	s.router = r
+}
+
+func (s *Server) Start(addr string) error {
+	return http.ListenAndServe(addr, s.router)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

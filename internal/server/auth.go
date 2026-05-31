@@ -32,8 +32,23 @@ type userResponse struct {
 	CreatedAt   string  `json:"created_at,omitempty"`
 }
 
+func (s *Server) isRegistrationAllowed() bool {
+	if s.settingStore != nil {
+		if val, err := s.settingStore.Get("allow_registration"); err == nil && val != "" {
+			return val == "true"
+		}
+	}
+	return s.cfg.Auth.AllowRegistration
+}
+
+func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"allow_registration": s.isRegistrationAllowed(),
+	})
+}
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.Auth.AllowRegistration {
+	if !s.isRegistrationAllowed() {
 		writeError(w, http.StatusForbidden, "REGISTRATION_DISABLED", "Registration is disabled")
 		return
 	}

@@ -98,9 +98,10 @@
 | A-01 | As a user, I can register an account with a username and password | P0 |
 | A-02 | As a user, I can log in and log out of my account | P0 |
 | A-03 | As a user, my files are private and only accessible to me | P0 |
-| A-04 | As an admin, I can create the first admin user via the CLI | P0 |
-| A-05 | As an admin, I can manage users (list, delete, change roles) | P1 |
-| A-06 | As an admin, I can enable or disable public registration | P1 |
+| A-04 | As an admin, I can create the first admin user via the CLI (`drive admin create`) | P0 |
+| A-05 | As an admin, I can manage users (list, delete, change roles, create) from the admin panel | P0 |
+| A-06 | As an admin, I can enable or disable public registration via a toggle in the admin panel (runtime setting persisted in SQLite) | P1 |
+| A-07 | As an admin, I can create new users from the admin panel (no CLI required after initial admin setup) | P0 |
 
 ### Upload Reliability & Self-Healing
 | ID | User Story | Priority |
@@ -209,10 +210,12 @@ All primary UI states are reflected in the URL as query parameters on the galler
 - JWT-based sessions with access + refresh tokens
 - Roles: `admin` and `member`
 - Admin user created via CLI: `drive admin create`
-- Self-registration can be enabled/disabled via config (`auth.allow_registration`)
-- All API endpoints require `Authorization: Bearer <token>` header (exceptions: health, login, register)
+- Additional users created from admin panel by admins (`POST /api/v1/admin/users`)
+- Self-registration disabled by default (`auth.allow_registration: false`)
+- Self-registration can be enabled/disabled at runtime via admin panel toggle (persisted in SQLite `settings` table, overriding config file)
+- All API endpoints require `Authorization: Bearer <token>` header (exceptions: health, login, register, auth config)
 - Row-level filtering: all file/resource queries scoped to `user_id`
-- Admins can list, delete, and change roles of all users
+- Admins can list, delete, change roles, and create all users
 
 ---
 

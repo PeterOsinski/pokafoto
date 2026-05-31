@@ -100,7 +100,7 @@ func DefaultConfig() *Config {
 			Path: "./data/drive.db",
 		},
 		Auth: AuthConfig{
-			AllowRegistration: true,
+			AllowRegistration: false,
 			JWTSecret:         "",
 			SessionDurationH:  72,
 		},

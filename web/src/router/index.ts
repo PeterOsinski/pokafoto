@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import axios from 'axios'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -47,12 +48,21 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next('/login')
   } else if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
     next('/')
+  } else if (to.path === '/register') {
+    try {
+      const res = await axios.get('/api/v1/auth/config')
+      if (!res.data.allow_registration) {
+        next('/login')
+        return
+      }
+    } catch {}
+    next()
   } else if ((to.path === '/login' || to.path === '/register') && auth.isAuthenticated) {
     next('/')
   } else {
