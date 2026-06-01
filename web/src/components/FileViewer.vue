@@ -9,33 +9,78 @@
     <div class="flex items-center justify-between p-3 shrink-0">
       <button class="text-white text-xl hover:text-[var(--accent)]" @click="$emit('close')">✕</button>
       <span class="text-white text-sm truncate max-w-[60%]">{{ file.originalName }}</span>
-      <button
-        class="text-white text-sm hover:text-[var(--accent)]"
-        @click="downloadFile"
-      >⬇ Download</button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="file.id"
+          @click="panel = panel === 'comments' ? '' : 'comments'"
+          class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
+          :class="{ 'bg-white/10': panel === 'comments' }"
+        >💬</button>
+        <button
+          v-if="file.id"
+          @click="panel = panel === 'tags' ? '' : 'tags'"
+          class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
+          :class="{ 'bg-white/10': panel === 'tags' }"
+        >🏷</button>
+        <button
+          class="text-white text-sm hover:text-[var(--accent)]"
+          @click="downloadFile"
+        >⬇ Download</button>
+      </div>
     </div>
 
-    <div class="flex-1 min-h-0">
-      <div v-if="loading" class="flex items-center justify-center h-full">
-        <span class="text-[var(--text-secondary)] text-lg">Loading...</span>
+    <div class="flex-1 flex overflow-hidden min-h-0">
+      <div class="flex-1 min-h-0 overflow-auto">
+        <div v-if="loading" class="flex items-center justify-center h-full">
+          <span class="text-[var(--text-secondary)] text-lg">Loading...</span>
+        </div>
+
+        <div v-else-if="error" class="flex flex-col items-center justify-center h-full gap-4 px-4">
+          <p class="text-[var(--text-secondary)] text-lg">{{ error }}</p>
+          <button
+            class="px-4 py-2 rounded text-white"
+            style="background: var(--accent)"
+            @click="downloadFile"
+          >Download raw file</button>
+        </div>
+
+        <template v-else>
+          <PdfViewer v-if="viewerType === 'pdf'" :blobUrl="blobUrl" />
+          <JsonViewer v-else-if="viewerType === 'json'" :content="textContent" />
+          <MarkdownViewer v-else-if="viewerType === 'markdown'" :content="textContent" />
+          <CsvViewer v-else-if="viewerType === 'csv'" :content="textContent" />
+          <TextViewer v-else :content="textContent" />
+        </template>
       </div>
 
-      <div v-else-if="error" class="flex flex-col items-center justify-center h-full gap-4 px-4">
-        <p class="text-[var(--text-secondary)] text-lg">{{ error }}</p>
-        <button
-          class="px-4 py-2 rounded text-white"
-          style="background: var(--accent)"
-          @click="downloadFile"
-        >Download raw file</button>
-      </div>
+      <div v-if="panel" class="w-80 shrink-0 overflow-y-auto p-4 border-l border-white/10" style="background: rgba(0,0,0,0.9)">
+        <template v-if="panel === 'comments'">
+          <h3 class="text-sm font-medium text-white mb-3">Comments</h3>
+          <CommentsSection
+            :comments="comments"
+            :file-id="file?.id || ''"
+            @delete="deleteComment"
+            @toggle-reaction="toggleReaction"
+          />
+          <div v-if="!comments.length && !commentsLoading" class="text-xs text-gray-500 text-center py-4">No comments yet</div>
+          <div v-if="commentsLoading" class="text-xs text-gray-500 text-center py-4">Loading...</div>
+          <form @submit.prevent="addComment" class="mt-4">
+            <textarea
+              v-model="newComment"
+              placeholder="Add a comment..."
+              rows="2"
+              class="w-full px-3 py-2 bg-black/50 border border-white/10 rounded text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-blue-500"
+            ></textarea>
+            <button type="submit" :disabled="!newComment.trim()" class="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs rounded transition-colors">Post</button>
+          </form>
+        </template>
 
-      <template v-else>
-        <PdfViewer v-if="viewerType === 'pdf'" :blobUrl="blobUrl" />
-        <JsonViewer v-else-if="viewerType === 'json'" :content="textContent" />
-        <MarkdownViewer v-else-if="viewerType === 'markdown'" :content="textContent" />
-        <CsvViewer v-else-if="viewerType === 'csv'" :content="textContent" />
-        <TextViewer v-else :content="textContent" />
-      </template>
+        <template v-else-if="panel === 'tags'">
+          <h3 class="text-sm font-medium text-white mb-3">Tags</h3>
+          <div v-if="tagsLoading" class="text-xs text-gray-500 text-center py-4">Loading...</div>
+          <TagInput v-model="fileTags" placeholder="Add tags..." />
+        </template>
+      </div>
     </div>
 
     <div class="p-3 shrink-0" style="background: rgba(0,0,0,0.7)">
@@ -53,6 +98,8 @@ import JsonViewer from './viewers/JsonViewer.vue'
 import MarkdownViewer from './viewers/MarkdownViewer.vue'
 import CsvViewer from './viewers/CsvViewer.vue'
 import TextViewer from './viewers/TextViewer.vue'
+import CommentsSection from './CommentsSection.vue'
+import TagInput from './TagInput.vue'
 
 interface FileItem {
   id: string
@@ -78,11 +125,23 @@ const blobUrl = ref<string | null>(null)
 const textContent = ref('')
 const viewerType = ref<ViewerType | null>(null)
 const rawBlob = ref<Blob | null>(null)
+const panel = ref('')
+const comments = ref<any[]>([])
+const commentsLoading = ref(false)
+const newComment = ref('')
+const fileTags = ref<string[]>([])
+const tagsLoading = ref(false)
+const tagsLoaded = ref(false)
 
 let destroyed = false
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(() => props.file, async (f) => {
   cleanup()
+  panel.value = ''
+  comments.value = []
+  fileTags.value = []
+  tagsLoaded.value = false
   if (!f?.id) {
     loading.value = false
     return
@@ -171,4 +230,72 @@ function triggerDownload(blob: Blob, filename: string) {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+async function fetchComments() {
+  if (!props.file?.id) return
+  commentsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/comments`)
+    comments.value = res.data.comments || []
+  } catch {
+    comments.value = []
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function fetchTags() {
+  if (!props.file?.id) return
+  tagsLoading.value = true
+  tagsLoaded.value = false
+  try {
+    const res = await api.get(`/files/${props.file.id}/tags`)
+    fileTags.value = (res.data.tags || []).map((t: any) => t.name)
+  } catch {
+    fileTags.value = []
+  } finally {
+    tagsLoading.value = false
+    nextTick(() => { tagsLoaded.value = true })
+  }
+}
+
+watch(() => panel.value, (val) => {
+  if (val === 'comments') fetchComments()
+  if (val === 'tags') fetchTags()
+})
+
+async function addComment() {
+  if (!newComment.value.trim() || !props.file?.id) return
+  try {
+    await api.post(`/files/${props.file.id}/comments`, { content: newComment.value.trim() })
+    newComment.value = ''
+    await fetchComments()
+  } catch {}
+}
+
+async function deleteComment(commentId: string) {
+  if (!props.file?.id) return
+  try {
+    await api.delete(`/files/${props.file.id}/comments/${commentId}`)
+    await fetchComments()
+  } catch {}
+}
+
+async function toggleReaction(commentId: string, emoji: string) {
+  if (!props.file?.id) return
+  try {
+    await api.post(`/files/${props.file.id}/comments/${commentId}/reactions`, { emoji })
+    await fetchComments()
+  } catch {}
+}
+
+watch(fileTags, () => {
+  if (!tagsLoaded.value || !props.file?.id) return
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    try {
+      await api.post(`/files/${props.file!.id}/tags`, { tags: fileTags.value })
+    } catch {}
+  }, 500)
+})
 </script>
