@@ -367,6 +367,110 @@
         </form>
       </div>
     </div>
+
+    <div class="mb-6 p-4 rounded-md" style="background: var(--bg-surface)">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-[var(--text-secondary)]">Database Backup</h3>
+        <button
+          v-if="backupStatus?.enabled"
+          @click="triggerBackup"
+          :disabled="triggeringBackup"
+          class="px-3 py-1 rounded text-xs text-white"
+          style="background: var(--accent)"
+        >{{ triggeringBackup ? 'Running...' : 'Trigger Backup Now' }}</button>
+      </div>
+      <div v-if="!backupStatus">
+        <span class="text-sm text-[var(--text-secondary)]">Loading...</span>
+      </div>
+      <div v-else-if="!backupStatus.enabled">
+        <span class="text-sm text-[var(--text-secondary)]">Database backup is not configured. Set <code class="text-xs px-1 rounded" style="background: var(--bg-elevated)">DRIVE_BACKUP_ENABLED=true</code> to enable.</span>
+      </div>
+      <div v-else class="space-y-1 text-sm">
+        <div class="flex items-center gap-2">
+          <span :class="backupStatus.last_result?.status === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'" class="px-2 py-0.5 rounded text-xs font-medium">
+            {{ backupStatus.last_result?.status === 'success' ? 'Success' : 'Failed' }}
+          </span>
+          <span class="text-[var(--text-secondary)]" v-if="backupStatus.last_result">
+            Last: {{ formatRelativeTime(backupStatus.last_result.timestamp) }}
+          </span>
+          <span class="text-[var(--text-secondary)]" v-if="backupStatus.last_result?.size_bytes">
+            · {{ formatBytes(backupStatus.last_result.size_bytes) }}
+          </span>
+          <span class="text-[var(--text-secondary)]" v-if="backupStatus.last_result?.error" :title="backupStatus.last_result.error">
+            · {{ backupStatus.last_result.error.substring(0, 60) }}
+          </span>
+        </div>
+        <div class="text-xs text-[var(--text-secondary)]">
+          Schedule: every {{ backupStatus.interval_h }}h · Retain: {{ backupStatus.retention_days }} days
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 rounded-md" style="background: var(--bg-surface)">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-secondary)]">System Logs</h3>
+
+      <div class="flex flex-wrap gap-1 mb-3">
+        <button
+          v-for="tab in eventFilterTabs"
+          :key="tab.key"
+          @click="setEventFilter(tab.filter, tab.severity)"
+          class="px-2 py-1 rounded text-xs transition-colors"
+          :class="eventTypeFilter === tab.filter && eventSeverityFilter === tab.severity
+            ? 'text-white'
+            : 'text-[var(--text-secondary)]'"
+          :style="eventTypeFilter === tab.filter && eventSeverityFilter === tab.severity
+            ? 'background: var(--accent)'
+            : 'background: var(--bg-elevated)'"
+        >
+          {{ tab.label }} {{ tab.count !== undefined ? tab.count : '' }}
+        </button>
+      </div>
+
+      <div v-if="events.length === 0" class="text-sm text-[var(--text-secondary)] text-center py-4">
+        {{ eventTypeFilter ? 'No events match the selected filter.' : 'No system events recorded yet' }}
+      </div>
+      <div v-else>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b" style="border-color: var(--border-color)">
+              <th class="text-left py-1 text-[var(--text-secondary)] font-normal w-28">Time</th>
+              <th class="text-left py-1 text-[var(--text-secondary)] font-normal w-16">Type</th>
+              <th class="text-left py-1 text-[var(--text-secondary)] font-normal w-12"></th>
+              <th class="text-left py-1 text-[var(--text-secondary)] font-normal">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="evt in events"
+              :key="evt.id"
+              class="border-b"
+              :class="evt.severity === 'error' ? 'border-l-2 border-l-red-500' : evt.severity === 'warning' ? 'border-l-2 border-l-yellow-500' : ''"
+              style="border-bottom-color: var(--border-color)"
+            >
+              <td class="py-1 text-[var(--text-secondary)] text-xs">{{ formatRelativeTime(evt.created_at) }}</td>
+              <td class="py-1 text-[var(--text-primary)] text-xs">{{ formatEventType(evt.event_type) }}</td>
+              <td class="py-1">
+                <span class="px-1.5 py-0.5 rounded text-xs font-medium"
+                  :class="evt.severity === 'error' ? 'bg-red-500/20 text-red-400' : evt.severity === 'warning' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'"
+                >{{ evt.severity === 'error' ? 'err' : evt.severity === 'warning' ? 'warn' : 'info' }}</span>
+              </td>
+              <td class="py-1 text-[var(--text-primary)] text-xs truncate max-w-xs">{{ evt.message }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="flex justify-between mt-2 text-xs">
+          <span class="text-[var(--text-secondary)]">{{ eventOffset + 1 }}-{{ Math.min(eventOffset + eventLimit, eventTotal) }} of {{ eventTotal }} events</span>
+          <div class="flex gap-2">
+            <button @click="eventOffset = Math.max(0, eventOffset - eventLimit)" :disabled="eventOffset === 0" class="px-2 py-1 rounded" :style="eventOffset === 0 ? '' : { background: 'var(--bg-elevated)', color: 'var(--text-primary)' }">
+              Prev
+            </button>
+            <button @click="eventOffset = eventOffset + eventLimit" :disabled="eventOffset + eventLimit >= eventTotal" class="px-2 py-1 rounded" :style="eventOffset + eventLimit >= eventTotal ? '' : { background: 'var(--bg-elevated)', color: 'var(--text-primary)' }">
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -460,6 +564,31 @@ interface JobRecord {
   updated_at: string
 }
 
+interface BackupStatus {
+  enabled: boolean
+  interval_h: number
+  retention_days: number
+  last_result: {
+    status: string
+    timestamp: string
+    size_bytes: number
+    error?: string
+  } | null
+}
+
+interface SystemEvent {
+  id: string
+  event_type: string
+  severity: 'info' | 'warning' | 'error'
+  message: string
+  metadata: Record<string, any> | null
+  created_at: string
+}
+
+interface EventCounts {
+  by_type: Record<string, number>
+}
+
 const users = ref<AdminUser[]>([])
 const regEnabled = ref(true)
 const registrationLoading = ref(false)
@@ -486,6 +615,18 @@ let statsTimer: ReturnType<typeof setInterval> | null = null
 let workersTimer: ReturnType<typeof setInterval> | null = null
 let jobsTimer: ReturnType<typeof setInterval> | null = null
 let thumbStatsTimer: ReturnType<typeof setInterval> | null = null
+let eventsTimer: ReturnType<typeof setInterval> | null = null
+let backupStatusTimer: ReturnType<typeof setInterval> | null = null
+
+const backupStatus = ref<BackupStatus | null>(null)
+const triggeringBackup = ref(false)
+const events = ref<SystemEvent[]>([])
+const eventCounts = ref<EventCounts | null>(null)
+const eventTotal = ref(0)
+const eventOffset = ref(0)
+const eventLimit = 50
+const eventTypeFilter = ref('')
+const eventSeverityFilter = ref('')
 
 const jobStatusTabs = [
   { label: 'All', value: '' },
@@ -709,6 +850,116 @@ async function saveQuota(userId: string) {
   }
 }
 
+async function loadBackupStatus() {
+  try {
+    const res = await api.get('/admin/backup/status')
+    backupStatus.value = res.data
+  } catch (e) {
+    console.error('Failed to load backup status', e)
+  }
+}
+
+async function triggerBackup() {
+  triggeringBackup.value = true
+  try {
+    await api.post('/admin/backup')
+    setTimeout(loadBackupStatus, 2000)
+  } catch (e) {
+    console.error('Failed to trigger backup', e)
+  } finally {
+    triggeringBackup.value = false
+  }
+}
+
+async function loadEvents() {
+  try {
+    const params: Record<string, string> = {
+      limit: String(eventLimit),
+      offset: String(eventOffset),
+    }
+    if (eventTypeFilter.value) params.event_type = eventTypeFilter.value
+    if (eventSeverityFilter.value) params.severity = eventSeverityFilter.value
+    const res = await api.get('/admin/events', { params })
+    events.value = res.data.events || []
+    eventTotal.value = res.data.total || 0
+  } catch (e) {
+    console.error('Failed to load events', e)
+  }
+}
+
+async function loadEventCounts() {
+  try {
+    const res = await api.get('/admin/events/counts')
+    eventCounts.value = res.data
+  } catch (e) {
+    console.error('Failed to load event counts', e)
+  }
+}
+
+const eventFilterTabs = computed(() => {
+  const counts = eventCounts.value?.by_type || {}
+  const allCount = Object.values(counts).reduce((a: number, b: number) => a + b, 0)
+  const backupCount = (counts['backup_success'] || 0) + (counts['backup_failure'] || 0) + (counts['backup_pruned'] || 0)
+  const uploadCount = (counts['upload_error'] || 0) + (counts['upload_skipped'] || 0) + (counts['s3_upload_error'] || 0)
+  const cacheCount = (counts['cache_eviction_run'] || 0) + (counts['cache_over_limit'] || 0)
+  const systemCount = (counts['server_start'] || 0) + (counts['server_shutdown'] || 0) + (counts['s3_disconnect'] || 0) + (counts['reconciliation_run'] || 0) + (counts['reconciliation_error'] || 0)
+  const errorCount = Object.entries(counts).filter(([k]) => k.endsWith('_error') || k === 'backup_failure').reduce((a, [, v]) => a + (v as number), 0)
+  const warnCount = (counts['cache_over_limit'] || 0) + (counts['s3_disconnect'] || 0)
+
+  return [
+    { key: 'all', label: 'All', filter: '', severity: '', count: allCount },
+    { key: 'backup', label: 'Backup', filter: '', severity: '', count: backupCount },
+    { key: 'upload', label: 'Upload', filter: '', severity: '', count: uploadCount },
+    { key: 'cache', label: 'Cache', filter: '', severity: '', count: cacheCount },
+    { key: 'system', label: 'System', filter: '', severity: '', count: systemCount },
+    { key: 'errors', label: 'Errors', filter: '', severity: 'error', count: errorCount },
+    { key: 'warnings', label: 'Warnings', filter: '', severity: 'warning', count: warnCount },
+  ]
+})
+
+function setEventFilter(filter: string, severity: string) {
+  eventOffset.value = 0
+  if (severity) {
+    eventSeverityFilter.value = severity
+    eventTypeFilter.value = ''
+  } else if (filter === 'backup') {
+    eventSeverityFilter.value = ''
+    eventTypeFilter.value = ''
+  } else if (filter === 'upload') {
+    eventSeverityFilter.value = ''
+    eventTypeFilter.value = ''
+  } else if (filter === 'cache') {
+    eventSeverityFilter.value = ''
+    eventTypeFilter.value = ''
+  } else if (filter === 'system') {
+    eventSeverityFilter.value = ''
+    eventTypeFilter.value = ''
+  } else {
+    eventTypeFilter.value = ''
+    eventSeverityFilter.value = ''
+  }
+  loadEvents()
+}
+
+function formatEventType(eventType: string): string {
+  return eventType.replace(/_/g, ' ')
+}
+
+function formatRelativeTime(dateStr: string): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24) return `${diffH}h ago`
+  const diffD = Math.floor(diffH / 24)
+  if (diffD < 7) return `${diffD}d ago`
+  return d.toLocaleDateString()
+}
+
 onMounted(() => {
   loadStats()
   loadBreakdown()
@@ -716,10 +967,15 @@ onMounted(() => {
   loadJobs()
   loadThumbnailStats()
   loadRegistrationStatus()
+  loadBackupStatus()
+  loadEvents()
+  loadEventCounts()
   statsTimer = setInterval(() => { loadStats(); loadBreakdown() }, 10000)
   workersTimer = setInterval(loadWorkers, 5000)
   jobsTimer = setInterval(loadJobs, 10000)
   thumbStatsTimer = setInterval(loadThumbnailStats, 30000)
+  eventsTimer = setInterval(() => { loadEvents(); loadEventCounts() }, 30000)
+  backupStatusTimer = setInterval(loadBackupStatus, 30000)
 })
 
 onUnmounted(() => {
@@ -727,5 +983,7 @@ onUnmounted(() => {
   if (workersTimer) clearInterval(workersTimer)
   if (jobsTimer) clearInterval(jobsTimer)
   if (thumbStatsTimer) clearInterval(thumbStatsTimer)
+  if (eventsTimer) clearInterval(eventsTimer)
+  if (backupStatusTimer) clearInterval(backupStatusTimer)
 })
 </script>

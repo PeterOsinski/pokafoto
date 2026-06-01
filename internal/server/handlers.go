@@ -1219,6 +1219,63 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 
 var timeRFC3339 = "2006-01-02T15:04:05Z07:00"
 
+func (s *Server) handleAdminListEvents(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+
+	events, total, err := s.systemEventsStore.List(
+		limit, offset,
+		r.URL.Query().Get("event_type"),
+		r.URL.Query().Get("severity"),
+		r.URL.Query().Get("date_from"),
+		r.URL.Query().Get("date_to"),
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list events")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"events": events,
+		"total":  total,
+	})
+}
+
+func (s *Server) handleAdminEventCounts(w http.ResponseWriter, r *http.Request) {
+	counts, err := s.systemEventsStore.EventCounts()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get event counts")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"by_type": counts,
+	})
+}
+
+func (s *Server) handleAdminBackupStatus(w http.ResponseWriter, r *http.Request) {
+	result := s.backupScheduler.LastResult()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"enabled":        s.cfg.Backup.Enabled,
+		"interval_h":     s.cfg.Backup.IntervalH,
+		"retention_days": s.cfg.Backup.RetentionDays,
+		"last_result":    result,
+	})
+}
+
+func (s *Server) handleAdminTriggerBackup(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.Backup.Enabled || !s.storageService.IsConnected() {
+		writeError(w, http.StatusConflict, "BACKUP_UNAVAILABLE", "Backup is not enabled or S3 is not connected")
+		return
+	}
+	go s.backupScheduler.RunBackup()
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status": "backup_started",
+	})
+}
+
 func folderIDFromQuery(r *http.Request) *string {
 	v := r.URL.Query().Get("folder_id")
 	if v == "" {

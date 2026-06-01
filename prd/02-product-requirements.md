@@ -121,6 +121,14 @@
 | R-06 | Thumbnail files are explicitly synced to disk after generation to prevent data loss on Docker overlayfs | P0 |
 | R-07 | The worker verifies thumbnail files still exist on disk before attempting S3 upload, logging a warning and skipping if missing | P0 |
 
+### System Backup & Monitoring
+| ID | User Story | Priority |
+|---|---|---|
+| B-01 | As an admin, the database is automatically backed up to S3 on a configurable schedule | P1 |
+| B-02 | As an admin, old backups are automatically cleaned up based on retention policy | P1 |
+| B-03 | As an admin, I can view system events (backups, upload errors, cache evictions) in the Admin Panel with filtering by type and severity | P1 |
+| B-04 | As an admin, I can trigger an immediate backup from the Admin Panel | P2 |
+
 ### Sharing (Future / V2)
 | ID | User Story | Priority |
 |---|---|---|
@@ -211,6 +219,28 @@ All primary UI states are reflected in the URL as query parameters on the galler
 - Gallery layout, sort order, media type filter, thumbnail size → `?layout=`, `?sort=`, `?media=`, `?thumb=`
 - Browser back/forward navigates between these states correctly
 - Copying the URL and opening it in another tab restores the same view (auth redirect preserves query params via vue-router)
+
+### FR-08: Automated Database Backup
+Upon startup, if `backup.enabled: true` and S3 is available:
+1. The system creates a consistent SQLite snapshot via `VACUUM INTO`
+2. The snapshot is uploaded to S3 under `backups/database/drive-backup-<timestamp>.db`
+3. Each backup run is recorded as a system_events row (backup_success/backup_failure/pruned)
+4. Old backups are pruned according to `backup.retention_days`
+5. Backups run automatically on the configured `backup.interval_h` schedule
+6. Admins can view backup status and trigger manual backups from the Admin Panel
+
+### FR-09: System Event Logging
+All key system operations are recorded in a single `system_events` table:
+1. Backup successes, failures, and prunes
+2. Upload errors (worker failures, S3 upload failures) 
+3. Upload skips (dedup hits)
+4. Reconciliation results
+5. Cache eviction outcomes
+6. S3 connectivity changes
+7. Server lifecycle events (start, shutdown)
+
+Admins can filter the event log by type and severity in the Admin Panel.
+90-day automatic retention with daily purge.
 
 ### FR-06: Authentication & User Management
 - User registration with username + password (bcrypt hashed)

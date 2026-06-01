@@ -9,21 +9,24 @@ import (
 	"time"
 
 	"github.com/drive/drive/internal/config"
+	"github.com/drive/drive/internal/service"
 	"golang.org/x/sys/unix"
 )
 
 const evictionInterval = 5 * time.Minute
 
 type CacheEvictor struct {
-	cfg          *config.Config
+	cfg           *config.Config
 	thumbnailsDir string
 	maxBytes      int64
+	eventRecorder *service.EventRecorder
 }
 
-func NewCacheEvictor(cfg *config.Config) *CacheEvictor {
+func NewCacheEvictor(cfg *config.Config, eventRecorder *service.EventRecorder) *CacheEvictor {
 	return &CacheEvictor{
 		cfg:           cfg,
 		thumbnailsDir: cfg.ThumbnailsDir(),
+		eventRecorder: eventRecorder,
 	}
 }
 
@@ -121,8 +124,17 @@ func (c *CacheEvictor) evictIfNeeded() error {
 
 	if freed > 0 {
 		slog.Info("cache eviction completed", "freed_bytes", freed)
+		c.eventRecorder.Info("cache_eviction_run", "Cache eviction completed", map[string]interface{}{
+			"freed_bytes": freed,
+			"total_bytes": totalSize,
+			"max_bytes":   maxBytes,
+		})
 		if totalSize > maxBytes {
 			slog.Warn("cache still over limit after eviction", "total", totalSize, "max", maxBytes)
+			c.eventRecorder.Warn("cache_over_limit", "Cache still over limit after eviction", map[string]interface{}{
+				"total": totalSize,
+				"max":   maxBytes,
+			})
 		}
 	}
 

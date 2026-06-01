@@ -147,3 +147,36 @@ func TestConfig_IsAllowedExtension_specific(t *testing.T) {
 		t.Error("expected .pdf denied")
 	}
 }
+
+func TestConfig_BackupDefaults_shouldBeDisabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Backup.Enabled {
+		t.Error("expected backup disabled by default")
+	}
+	if cfg.Backup.IntervalH != 24 {
+		t.Errorf("expected interval 24, got %d", cfg.Backup.IntervalH)
+	}
+	if cfg.Backup.RetentionDays != 7 {
+		t.Errorf("expected retention 7 days, got %d", cfg.Backup.RetentionDays)
+	}
+}
+
+func TestConfig_EnvOverridesBackup(t *testing.T) {
+	os.Setenv("DRIVE_BACKUP_ENABLED", "true")
+	os.Setenv("DRIVE_BACKUP_INTERVAL_H", "12")
+	os.Setenv("DRIVE_BACKUP_RETENTION_DAYS", "14")
+	defer os.Unsetenv("DRIVE_BACKUP_ENABLED")
+	defer os.Unsetenv("DRIVE_BACKUP_INTERVAL_H")
+	defer os.Unsetenv("DRIVE_BACKUP_RETENTION_DAYS")
+
+	cfg := Load()
+	if !cfg.Backup.Enabled {
+		t.Error("expected backup enabled")
+	}
+	if cfg.Backup.IntervalH != 12 {
+		t.Errorf("expected interval 12, got %d", cfg.Backup.IntervalH)
+	}
+	if cfg.Backup.RetentionDays != 14 {
+		t.Errorf("expected retention 14, got %d", cfg.Backup.RetentionDays)
+	}
+}

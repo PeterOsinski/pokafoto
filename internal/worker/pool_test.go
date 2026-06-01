@@ -46,7 +46,7 @@ func setupTestPool(t *testing.T) (*Pool, *store.FileStore, *store.UploadJobStore
 		t.Fatalf("create user: %v", err)
 	}
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	return pool, fs, ujs, u.ID, func() {
 		pool.Shutdown()
 	}
@@ -124,7 +124,7 @@ func TestPool_DBProcessed_shouldSkipDuplicateContent(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	content := []byte("duplicate-content-hash-test")
@@ -204,7 +204,7 @@ func TestPool_Recovery_shouldResetStuckProcessingJobs(t *testing.T) {
 	es := store.NewExifStore(db)
 	ts := store.NewThumbnailStore(db)
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	fetched, _ = ujs.FindByID(job.ID)
@@ -243,7 +243,7 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 
 	enqueueJob(t, ujs, "batch-files", u.ID, "document.pdf", info.Size(), tmpPath, nil, true)
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	var files []*model.File
@@ -304,7 +304,7 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 
 	enqueueJob(t, ujs, "batch-skip", u.ID, "document.pdf", info.Size(), tmpPath, nil, true)
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	var files []*model.File
@@ -438,7 +438,7 @@ func TestPool_SkipNameSizeDedup_shouldSkipChecksWhenFlagSet(t *testing.T) {
 
 	enqueueJob(t, ujs, "batch-dedup-skip", u.ID, "dup.jpg", info.Size(), tmpPath, nil, true)
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	var files []*model.File
@@ -563,7 +563,7 @@ func TestPool_NotifyJobsAvailable_shouldWakeClaimerImmediately(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	defer pool.Shutdown()
 
 	content := make([]byte, 256)
@@ -664,7 +664,7 @@ func TestPool_Claimer_shouldNotClaimWhenChannelFull(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	pool := NewPool(cfg, fs, es, ts, nil, ujs)
+	pool := NewPool(cfg, fs, es, ts, nil, ujs, nil)
 	pool.Shutdown()
 
 	for i := 0; i < cap; i++ {

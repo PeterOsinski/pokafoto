@@ -171,6 +171,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Disk space monitoring | Alert when cache disk <10% free | `internal/monitor/disk.go` | ✅ Admin dashboard shows disk utilization |
 | Structured logging | `slog` (Go stdlib), JSON format, request IDs | Middleware | ⚠️ Uses slog; no request ID propagation |
 | Health checks | `/health` with DB + S3 connectivity check | `internal/handler/health.go` | ✅ |
+| System event logging + DB backup to S3 | system_events table, EventRecorder service, backup scheduler, admin API + UI, retention purge, wired into worker pool and cache evictor | internal/backup/, internal/service/eventrecorder.go, internal/store/event.go, internal/server/, web/src/views/AdminView.vue | ❌ |
 
 ### Week 10b: File Viewer (Non-Media Documents) — Frontend-Only Feature
 

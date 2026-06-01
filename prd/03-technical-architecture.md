@@ -159,8 +159,19 @@ drive/
                       │ 6. Upload to S3      │  ← Only if s3.enabled: true
                       │   (originals +       │
                       │    thumbnails)       │
-                      └──────────────────────┘
+                       └──────────────────────┘
 ```
+
+### ERD: system_events
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT (UUIDv7) | Primary key |
+| `event_type` | TEXT | e.g. `backup_success`, `upload_error`, `cache_eviction`, `s3_disconnected` |
+| `severity` | TEXT | `info`, `warn`, `err` |
+| `message` | TEXT | Human-readable description |
+| `metadata` | TEXT (JSON) | Optional structured data (file_id, size_bytes, error details) |
+| `created_at` | TEXT | ISO 8601 timestamp |
 
 ## 3.4 Data Flow: Gallery Browsing
 
@@ -314,6 +325,11 @@ map:
   tile_source: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
   max_cluster_radius: 80
 
+backup:
+  enabled: false                    # Set true to enable auto-backup to S3
+  interval_h: 24                    # Hours between backups
+  retention_days: 7                 # Days to keep backups on S3
+
 ---
 
 ## 3.8 First-Run Boot Sequence
@@ -325,6 +341,7 @@ On startup, Drive follows this sequence:
 3. **Create storage directories** — Ensure `{storage.local.path}/originals` and `{storage.local.path}/thumbnails` exist.
 4. **Check S3 connectivity** (if `s3.enabled: true`) — Validate endpoint, bucket access, and credentials. Log warning on failure but continue (degraded mode).
 5. **Start cache eviction goroutine** — Background scheduler that runs LRU eviction every 5 minutes.
+5c. **Start backup scheduler goroutine** — If backup.enabled and S3 connected, runs an immediate backup then on configured interval. If disabled or S3 unavailable, logs a warning and skips.
 6. **Start HTTP server** — Listen on configured `host:port`. Serve Vue.js SPA (embedded via `embed.FS`) and API.
 7. **Admin user setup** — Admin user must be created via CLI: `drive admin create`. First boot without any users shows an error to run the CLI command. Self-registration is available if `auth.allow_registration: true` and at least one admin exists.
 

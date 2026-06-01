@@ -816,6 +816,81 @@ Scan for photos with missing thumbnails and create reconcile jobs to regenerate 
 }
 ```
 
+#### `GET /api/v1/admin/events`
+Paginated, filterable system events. Admin-only.
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `event_type` | string | — | Filter by type: `backup_success`, `backup_failure`, `backup_pruned`, `upload_error`, `upload_skip`, `reconciliation`, `cache_eviction`, `s3_connected`, `s3_disconnected`, `server_start`, `server_shutdown` |
+| `severity` | string | — | Filter by severity: `info`, `warn`, `err` |
+| `date_from` | string | — | ISO 8601 start date |
+| `date_to` | string | — | ISO 8601 end date |
+| `limit` | int | 50 | Items per page (max 200) |
+| `offset` | int | 0 | Pagination offset |
+
+**Response:** `200 OK`
+```json
+{
+  "events": [
+    {
+      "id": "uuid-v7",
+      "event_type": "backup_success",
+      "severity": "info",
+      "message": "Database backup completed successfully",
+      "metadata": { "size_bytes": 5242880, "backup_key": "backups/database/drive-backup-2024-07-15T14:30:00Z.db" },
+      "created_at": "2024-07-15T14:30:00Z"
+    }
+  ],
+  "total": 1420
+}
+```
+
+#### `GET /api/v1/admin/events/counts`
+Event counts for UI filter badges. Admin-only.
+
+**Response:** `200 OK`
+```json
+{
+  "by_type": {
+    "backup_success": 42,
+    "backup_failure": 3,
+    "backup_pruned": 30,
+    "upload_error": 5,
+    "upload_skip": 120,
+    "reconciliation": 15,
+    "cache_eviction": 864,
+    "s3_connected": 2,
+    "s3_disconnected": 1,
+    "server_start": 5,
+    "server_shutdown": 3
+  }
+}
+```
+
+#### `GET /api/v1/admin/backup/status`
+Backup configuration and last result. Admin-only.
+
+**Response:** `200 OK`
+```json
+{
+  "enabled": true,
+  "interval_h": 24,
+  "retention_days": 7,
+  "last_result": {
+    "status": "success",
+    "timestamp": "2024-07-15T14:30:00Z",
+    "size_bytes": 5242880
+  }
+}
+```
+
+#### `POST /api/v1/admin/backup`
+Trigger immediate database backup. Admin-only.
+
+**Response:** `202 Accepted` — backup job queued.
+**Error:** `409 Conflict` — a backup is already in progress.
+
 ---
 
 ### 5.1.10 Health & Stats

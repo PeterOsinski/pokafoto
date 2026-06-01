@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/drive/drive/internal/backup"
 	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
@@ -15,22 +16,25 @@ import (
 )
 
 type Server struct {
-	cfg             *config.Config
-	db              *store.DB
-	router          *chi.Mux
-	userStore       *store.UserStore
-	sessStore       *store.SessionStore
-	fileStore       *store.FileStore
-	folderStore     *store.FolderStore
-	exifStore       *store.ExifStore
-	thumbnailStore  *store.ThumbnailStore
-	geoStore        *store.GeoStore
-	uploadJobStore  *store.UploadJobStore
-	settingStore    *store.SettingStore
-	storageService  *service.StorageService
-	workerPool      *worker.Pool
-	s3DeletionPool  *S3DeletionPool
-	stopCh          chan struct{}
+	cfg               *config.Config
+	db                *store.DB
+	router            *chi.Mux
+	userStore         *store.UserStore
+	sessStore         *store.SessionStore
+	fileStore         *store.FileStore
+	folderStore       *store.FolderStore
+	exifStore         *store.ExifStore
+	thumbnailStore    *store.ThumbnailStore
+	geoStore          *store.GeoStore
+	uploadJobStore    *store.UploadJobStore
+	settingStore      *store.SettingStore
+	storageService    *service.StorageService
+	workerPool        *worker.Pool
+	s3DeletionPool    *S3DeletionPool
+	eventRecorder     *service.EventRecorder
+	systemEventsStore *store.SystemEventsStore
+	backupScheduler   *backup.Scheduler
+	stopCh            chan struct{}
 }
 
 func New(cfg *config.Config, db *store.DB) *Server {
@@ -55,22 +59,41 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		storageService, _ = service.NewStorageService(&config.Config{}) // disabled client
 	}
 
-	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore)
+	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore, s.eventRecorder)
 	s.storageService = storageService
 
 	s.s3DeletionPool = NewS3DeletionPool(storageService)
 
+	s.systemEventsStore = store.NewSystemEventsStore(db)
+	s.eventRecorder = service.NewEventRecorder(db)
+
+	if err != nil {
+		s.eventRecorder.Warn("s3_disconnect", "S3 storage init failed", map[string]interface{}{"error": err.Error()})
+	}
+
+	s.eventRecorder.Info("server_start", "server startup complete", map[string]interface{}{
+		"s3_enabled": cfg.Storage.S3.Enabled,
+		"port":       cfg.Server.Port,
+		"workers":    cfg.Upload.ConcurrentWorkers,
+	})
+
+	s.backupScheduler = backup.NewScheduler(cfg, db, storageService, s.eventRecorder)
+	s.backupScheduler.Start()
+
 	s.workerPool.StartReconciler(30 * time.Minute)
 
-	go NewCacheEvictor(cfg).Start()
+	go NewCacheEvictor(cfg, s.eventRecorder).Start()
 	go s.startTrashCleanup()
+	go s.startEventRetention()
 
 	s.setupRouter()
 	return s
 }
 
 func (s *Server) Shutdown() {
+	s.eventRecorder.Info("server_shutdown", "server shutting down gracefully", nil)
 	close(s.stopCh)
+	s.backupScheduler.Shutdown()
 	s.workerPool.Shutdown()
 	s.s3DeletionPool.Shutdown()
 }
@@ -164,8 +187,12 @@ func (s *Server) setupRouter() {
 			r.Get("/workers", s.handleAdminWorkers)
 			r.Get("/jobs", s.handleAdminListJobs)
 			r.Post("/jobs/{id}/retry", s.handleAdminRetryJob)
-			r.Post("/jobs/reconcile", s.handleAdminReconcileJobs)
-			r.Get("/s3-deletion-queue", s.handleAdminS3DeletionQueue)
+		r.Post("/jobs/reconcile", s.handleAdminReconcileJobs)
+		r.Get("/s3-deletion-queue", s.handleAdminS3DeletionQueue)
+		r.Get("/events", s.handleAdminListEvents)
+		r.Get("/events/counts", s.handleAdminEventCounts)
+		r.Get("/backup/status", s.handleAdminBackupStatus)
+		r.Post("/backup", s.handleAdminTriggerBackup)
 			})
 		})
 	})
@@ -196,4 +223,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"db_connected":  dbOK,
 		"s3_connected":  s3OK,
 	})
+}
+
+func (s *Server) startEventRetention() {
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-time.After(24 * time.Hour):
+		}
+		deleted, err := s.systemEventsStore.PurgeOlderThan(90 * 24 * time.Hour)
+		if err != nil {
+			slog.Warn("event retention purge failed", "error", err)
+		} else if deleted > 0 {
+			slog.Info("purged old system events", "deleted", deleted)
+		}
+	}
 }

@@ -136,3 +136,29 @@ func (s *StorageService) DeleteThumbnail(fileID, size, format string) error {
 	key := fmt.Sprintf("thumbnails/%s/%s.%s", fileID, size, format)
 	return s.client.RemoveObject(context.Background(), s.cfg.Storage.S3.Bucket, key, minio.RemoveObjectOptions{})
 }
+
+func (s *StorageService) DeleteObject(key string) error {
+	if s.client == nil {
+		return nil
+	}
+	return s.client.RemoveObject(context.Background(), s.cfg.Storage.S3.Bucket, key, minio.RemoveObjectOptions{})
+}
+
+func (s *StorageService) ListObjects(prefix string) ([]string, error) {
+	if s.client == nil {
+		return nil, nil
+	}
+	var keys []string
+	ctx := context.Background()
+	for obj := range s.client.ListObjects(ctx, s.cfg.Storage.S3.Bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("list s3 objects: %w", obj.Err)
+		}
+		keys = append(keys, obj.Key)
+	}
+	return keys, nil
+}
+
+func (s *StorageService) Client() *minio.Client {
+	return s.client
+}

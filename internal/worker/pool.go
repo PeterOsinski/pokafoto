@@ -38,6 +38,7 @@ type Pool struct {
 	thumbnailService *service.ThumbnailService
 	storageService   *service.StorageService
 	uploadJobStore   *store.UploadJobStore
+	eventRecorder    *service.EventRecorder
 	totalWorkers     int
 	wg               sync.WaitGroup
 	stopCh           chan struct{}
@@ -74,7 +75,7 @@ type JobInfo struct {
 	Progress float64 `json:"progress"`
 }
 
-func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore) *Pool {
+func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore, eventRecorder *service.EventRecorder) *Pool {
 	workers := cfg.Upload.ConcurrentWorkers
 	if workers <= 0 {
 		workers = 4
@@ -88,6 +89,7 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir()),
 		storageService:   storageService,
 		uploadJobStore:   uploadJobStore,
+		eventRecorder:    eventRecorder,
 		totalWorkers:     workers,
 		stopCh:           make(chan struct{}),
 		jobCh:            make(chan *model.UploadJob, workers*2),
@@ -188,6 +190,10 @@ func (p *Pool) s3Worker(id int) {
 			if task.DestPath != "" {
 				if err := p.storageService.PutOriginals(task.UserID, task.Filename, task.DestPath); err != nil {
 					slog.Warn("s3 upload failed for original", "file_id", task.FileID, "error", err)
+					p.eventRecorder.Error("s3_upload_error", "S3 upload failed for original", map[string]interface{}{
+						"file_id": task.FileID,
+						"error":   err.Error(),
+					})
 				} else {
 					if err := os.Remove(task.DestPath); err != nil {
 						slog.Warn("failed to remove local original after s3 upload", "file_id", task.FileID, "error", err)
@@ -205,6 +211,11 @@ func (p *Pool) s3Worker(id int) {
 				}
 				if err := p.storageService.PutThumbnail(task.FileID, string(t.Size), format, t.LocalPath); err != nil {
 					slog.Warn("s3 upload failed for thumbnail", "file_id", task.FileID, "size", t.Size, "error", err)
+					p.eventRecorder.Error("s3_upload_error", "S3 upload failed for thumbnail", map[string]interface{}{
+						"file_id": task.FileID,
+						"size":    string(t.Size),
+						"error":   err.Error(),
+					})
 				}
 			}
 		}
@@ -228,6 +239,11 @@ func (p *Pool) worker(id int) {
 				p.notifySubscribers(job)
 				p.failedTotal.Add(1)
 				slog.Warn("temp file missing, marking job as failed", "job_id", job.ID, "temp_path", job.TempPath)
+				p.eventRecorder.Error("upload_error", "Upload failed: temp file missing", map[string]interface{}{
+					"job_id":    job.ID,
+					"filename":  job.Filename,
+					"temp_path": job.TempPath,
+				})
 				continue
 			}
 
@@ -270,6 +286,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		p.uploadJobStore.Fail(job.ID, "hash_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: hash computation error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+		})
 		return
 	}
 	sha256Hash := fmt.Sprintf("%x", hasher.Sum(nil))
@@ -293,6 +313,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 			p.uploadJobStore.Skip(job.ID, "duplicate_name_size", existing.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
+			p.eventRecorder.Info("upload_skipped", "Upload skipped: duplicate name+size", map[string]interface{}{
+				"filename": job.Filename,
+				"reason":   "duplicate_name_size",
+			})
 			return
 		}
 	}
@@ -305,6 +329,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 			p.uploadJobStore.Skip(job.ID, "duplicate_content", existingHash.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
+			p.eventRecorder.Info("upload_skipped", "Upload skipped: duplicate content", map[string]interface{}{
+				"filename": job.Filename,
+				"reason":   "duplicate_content",
+			})
 			return
 		}
 	}
@@ -354,6 +382,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		p.uploadJobStore.Fail(job.ID, "storage_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: storage error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+		})
 		return
 	}
 
@@ -367,6 +399,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: write error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+		})
 		return
 	}
 
@@ -378,6 +414,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: write error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+		})
 		return
 	}
 	f.Close()
@@ -417,6 +457,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		p.uploadJobStore.Fail(job.ID, "db_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: database error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+		})
 		return
 	}
 
@@ -437,6 +481,10 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		thumbs, err = p.thumbnailService.GenerateAll(fileRecord.ID, destPath, mimeType)
 		if err != nil {
 			slog.Warn("thumbnail generation failed", "file_id", fileRecord.ID, "error", err)
+			p.eventRecorder.Error("upload_error", "Upload failed: thumbnail generation error", map[string]interface{}{
+				"file_id": fileRecord.ID,
+				"error":   err.Error(),
+			})
 		} else {
 			for _, t := range thumbs {
 				if err := p.thumbnailStore.Create(t); err != nil {
@@ -578,6 +626,9 @@ func (p *Pool) RunReconciliation() map[string]interface{} {
 	files, err := p.fileStore.FindPhotosMissingThumbnails()
 	if err != nil {
 		slog.Warn("reconciler failed to find missing thumbnails", "error", err)
+		p.eventRecorder.Error("reconciliation_error", "Reconciliation failed to find missing thumbnails", map[string]interface{}{
+			"error": err.Error(),
+		})
 		return map[string]interface{}{"created": 0, "details": map[string]int{}}
 	}
 
@@ -614,6 +665,11 @@ func (p *Pool) RunReconciliation() map[string]interface{} {
 
 	if created > 0 {
 		slog.Info("reconciler created jobs", "created", created, "missing_all", missingAll, "missing_preview", missingPreview)
+		p.eventRecorder.Info("reconciliation_run", "Thumbnail reconciliation completed", map[string]interface{}{
+			"created":         created,
+			"missing_all":     missingAll,
+			"missing_preview": missingPreview,
+		})
 		p.NotifyJobsAvailable()
 	}
 

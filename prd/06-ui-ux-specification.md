@@ -349,6 +349,46 @@ Upload functionality is available via the `InlineUpload` component, used in both
 - Auto-refreshes every 5 seconds
 - All counters (completed, failed, skipped) are lifetime totals for the current process
 
+**System Logs Section:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  System Events                                          │
+│  [All 1420] [Backup 42] [Upload 125] [Cache 864]       │
+│  [System 21] [Errors 8] [Warnings 103]                 │
+│  ┌──────────────┬──────────┬──────────┬──────────────┐  │
+│  │ Time         │ Type     │ Severity │ Message      │  │
+│  ├──────────────┼──────────┼──────────┼──────────────┤  │
+│  │ 14:30:00 UTC │ backup   │ {info}   │ DB backup ok │  │
+│  │ 14:25:00 UTC │ upload   │ {err}    │ S3 upload    │  │
+│  │ 14:20:00 UTC │ cache    │ {warn}   │ Evict 50MB   │  │
+│  │ 14:15:00 UTC │ system   │ {info}   │ Server start │  │
+│  └──────────────┴──────────┴──────────┴──────────────┘  │
+│  1-4 of 1420 events                    [Prev] [Next]    │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Filter tabs with count badges: `[All N] [Backup N] [Upload N] [Cache N] [System N] [Errors N] [Warnings N]`
+- Counts fetched from `GET /api/v1/admin/events/counts`
+- Event table columns: Time, Type, Severity (info/warn/err badge), Message
+- Severity badges: info=blue, warn=yellow, err=red
+- Paginated via `GET /api/v1/admin/events` with `limit`/`offset` and optional `event_type`/`severity`/`date_from`/`date_to` filters
+- Auto-refreshes every 10 seconds
+
+**Backup Status Card:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Database Backup                                        │
+│  Status: ✅ Last successful backup — Jul 15, 14:30 UTC  │
+│  File size: 5.0 MB                                      │
+│  Interval: 24h   Retention: 7 days                      │
+│  [Trigger Backup Now]                                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Backup status card (separate from the log table) with status, last backup timestamp, file size, config info, and "Trigger Backup Now" button
+- Data fetched from `GET /api/v1/admin/backup/status`
+- "Trigger Backup Now" button calls `POST /api/v1/admin/backup`; button shows spinner during backup, disabled on success or conflict
+
 ---
 
 ### 6.3.7 File Viewer (Non-Media Files)

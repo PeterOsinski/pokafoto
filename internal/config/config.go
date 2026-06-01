@@ -60,6 +60,12 @@ type MapConfig struct {
 	MaxClusterRadius int    `yaml:"max_cluster_radius"`
 }
 
+type BackupConfig struct {
+	Enabled       bool `yaml:"enabled"`
+	IntervalH     int  `yaml:"interval_h"`
+	RetentionDays int  `yaml:"retention_days"`
+}
+
 type ServerConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
@@ -74,6 +80,7 @@ type Config struct {
 	Upload              UploadConfig   `yaml:"upload"`
 	Map                 MapConfig      `yaml:"map"`
 	TrashExpirationDays int            `yaml:"trash_expiration_days"`
+	Backup              BackupConfig   `yaml:"backup"`
 }
 
 func DefaultConfig() *Config {
@@ -127,6 +134,11 @@ func DefaultConfig() *Config {
 			MaxClusterRadius: 80,
 		},
 		TrashExpirationDays: 30,
+		Backup: BackupConfig{
+			Enabled:       false,
+			IntervalH:     24,
+			RetentionDays: 7,
+		},
 	}
 }
 
@@ -176,6 +188,19 @@ func Load() *Config {
 	if v := os.Getenv("DRIVE_TRASH_EXPIRATION_DAYS"); v != "" {
 		if d, err := strconv.Atoi(v); err == nil && d > 0 {
 			cfg.TrashExpirationDays = d
+		}
+	}
+	if v := os.Getenv("DRIVE_BACKUP_ENABLED"); v != "" {
+		cfg.Backup.Enabled = v == "true"
+	}
+	if v := os.Getenv("DRIVE_BACKUP_INTERVAL_H"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h > 0 {
+			cfg.Backup.IntervalH = h
+		}
+	}
+	if v := os.Getenv("DRIVE_BACKUP_RETENTION_DAYS"); v != "" {
+		if d, err := strconv.Atoi(v); err == nil && d > 0 {
+			cfg.Backup.RetentionDays = d
 		}
 	}
 
