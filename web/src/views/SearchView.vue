@@ -47,6 +47,19 @@
       <TagInput v-model="tags" placeholder="Add tags..." />
     </div>
 
+    <div v-if="tagStats.length" class="flex flex-wrap gap-2 mb-4">
+      <button
+        v-for="t in tagStats"
+        :key="t.name"
+        @click="toggleTag(t.name)"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm border border-gray-700 hover:border-gray-500 transition-colors"
+        :class="tags.includes(t.name) ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-800 text-gray-300'"
+      >
+        {{ t.name }}
+        <span class="text-xs" :class="tags.includes(t.name) ? 'text-blue-200' : 'text-gray-500'">{{ t.count }}</span>
+      </button>
+    </div>
+
     <div class="mb-6 flex gap-2">
       <button @click="doSearch" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">Search</button>
       <button @click="clearFilters" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded-lg transition-colors">Clear</button>
@@ -106,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import api from '../api/client'
 import TagInput from '../components/TagInput.vue'
 import SizeRangeSlider from '../components/SizeRangeSlider.vue'
@@ -119,6 +132,7 @@ const createdBefore = ref('')
 const takenAfter = ref('')
 const takenBefore = ref('')
 const tags = ref<string[]>([])
+const tagStats = ref<{ name: string; count: number }[]>([])
 const results = ref<any[]>([])
 const loading = ref(false)
 const searched = ref(false)
@@ -157,6 +171,27 @@ function clearFilters() {
   results.value = []
   searched.value = false
 }
+
+async function fetchTagStats() {
+  try {
+    const res = await api.get('/tags/stats')
+    tagStats.value = res.data.tags || []
+  } catch {
+    tagStats.value = []
+  }
+}
+
+function toggleTag(name: string) {
+  if (tags.value.includes(name)) {
+    tags.value = tags.value.filter(t => t !== name)
+  } else {
+    tags.value = [...tags.value, name]
+  }
+}
+
+onMounted(() => {
+  fetchTagStats()
+})
 
 function preview(item: any) {
   previewItem.value = item

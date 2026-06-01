@@ -109,3 +109,30 @@ func (s *TagStore) FindByFileID(fileID string) ([]*model.Tag, error) {
 	}
 	return tags, rows.Err()
 }
+
+func (s *TagStore) ListWithCount(userID string) ([]model.TagWithCount, error) {
+	rows, err := s.db.Query(
+		`SELECT t.id, t.name, COUNT(ft.file_id) as cnt
+		 FROM tags t
+		 JOIN file_tags ft ON t.id = ft.tag_id
+		 JOIN files f ON ft.file_id = f.id
+		 WHERE f.user_id = ? AND f.is_deleted = 0
+		 GROUP BY t.id, t.name
+		 ORDER BY COUNT(ft.file_id) DESC, t.name`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list tags with count: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []model.TagWithCount
+	for rows.Next() {
+		t := model.TagWithCount{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.Count); err != nil {
+			continue
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}

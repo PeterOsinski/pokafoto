@@ -31,6 +31,31 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleTagStats(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	tags, err := s.tagStore.ListWithCount(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get tag stats")
+		return
+	}
+
+	type tagStatResponse struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+
+	items := make([]tagStatResponse, 0, len(tags))
+	for _, t := range tags {
+		items = append(items, tagStatResponse{ID: t.ID, Name: t.Name, Count: t.Count})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tags": items,
+	})
+}
+
 func (s *Server) handleGetFileTags(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)

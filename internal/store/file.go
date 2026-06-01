@@ -341,6 +341,17 @@ func (s *FileStore) SearchEnhanced(opts SearchOptions) (*SearchResult, map[strin
 		conditions = append(conditions, "f.taken_at <= ?")
 		args = append(args, *opts.TakenBefore)
 	}
+	if len(opts.Tags) > 0 {
+		placeholders := make([]string, len(opts.Tags))
+		for i, tag := range opts.Tags {
+			placeholders[i] = "?"
+			args = append(args, strings.TrimSpace(strings.ToLower(tag)))
+		}
+		conditions = append(conditions, fmt.Sprintf(
+			"f.id IN (SELECT ft.file_id FROM file_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name IN (%s))",
+			strings.Join(placeholders, ","),
+		))
+	}
 
 	whereClause := strings.Join(conditions, " AND ")
 

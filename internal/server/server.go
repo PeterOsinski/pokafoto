@@ -185,6 +185,7 @@ func (s *Server) setupRouter() {
 			r.Post("/trash/empty", s.handleEmptyTrash)
 
 			r.Get("/tags", s.handleListTags)
+			r.Get("/tags/stats", s.handleTagStats)
 			r.Get("/albums", s.handleListAlbums)
 			r.Post("/albums", s.handleCreateAlbum)
 			r.Get("/albums/{id}", s.handleGetAlbum)

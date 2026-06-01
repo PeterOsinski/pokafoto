@@ -539,3 +539,98 @@ func TestHandlers_Trash_emptyRemovesAll(t *testing.T) {
 		t.Error("all files should be permanently deleted")
 	}
 }
+
+func TestHandlers_Search_shouldFilterByTags(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewTagStore(db)
+	u, _ := us.Create("tagsearch_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "sunset_beach.jpg")
+	f2 := createTestFileForHandler(t, fs, u.ID, "portrait.jpg")
+
+	tag1, _ := ts.FindOrCreate("sunset")
+	tag2, _ := ts.FindOrCreate("portrait")
+	ts.AddToFile(f1.ID, tag1.ID, u.ID)
+	ts.AddToFile(f2.ID, tag2.ID, u.ID)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/search?tags=sunset", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	items := resp["items"].([]interface{})
+	if len(items) != 1 {
+		t.Errorf("expected 1 result for 'sunset' tag, got %d", len(items))
+	}
+}
+
+func TestHandlers_Search_shouldReturnEmptyForNonMatchingTag(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewTagStore(db)
+	u, _ := us.Create("tagempty_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "sunset_beach.jpg")
+
+	tag1, _ := ts.FindOrCreate("sunset")
+	ts.AddToFile(f1.ID, tag1.ID, u.ID)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/search?tags=nonexistent", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	items := resp["items"].([]interface{})
+	if len(items) != 0 {
+		t.Errorf("expected 0 results for non-matching tag, got %d", len(items))
+	}
+}
+
+func TestHandlers_TagStats_shouldReturnCounts(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewTagStore(db)
+	u, _ := us.Create("tagstats_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "beach.jpg")
+	f2 := createTestFileForHandler(t, fs, u.ID, "sunset.jpg")
+
+	tag1, _ := ts.FindOrCreate("vacation")
+	tag2, _ := ts.FindOrCreate("landscape")
+	ts.AddToFile(f1.ID, tag1.ID, u.ID)
+	ts.AddToFile(f2.ID, tag1.ID, u.ID)
+	ts.AddToFile(f2.ID, tag2.ID, u.ID)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/tags/stats", "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	tags := resp["tags"].([]interface{})
+	if len(tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(tags))
+	}
+	first := tags[0].(map[string]interface{})
+	if first["name"] != "vacation" || int(first["count"].(float64)) != 2 {
+		t.Errorf("expected vacation with count 2, got %v=%v", first["name"], first["count"])
+	}
+}

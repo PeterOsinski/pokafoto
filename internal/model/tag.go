@@ -7,6 +7,12 @@ type Tag struct {
 	Name string `json:"name" db:"name"`
 }
 
+type TagWithCount struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
 type FileTag struct {
 	FileID         string    `json:"file_id" db:"file_id"`
 	TagID          string    `json:"tag_id" db:"tag_id"`

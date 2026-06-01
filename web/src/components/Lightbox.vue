@@ -90,7 +90,6 @@
           <h3 class="text-sm font-medium text-white mb-3">Tags</h3>
           <div v-if="tagsLoading" class="text-xs text-gray-500 text-center py-4">Loading...</div>
           <TagInput v-model="fileTags" placeholder="Add tags..." />
-          <button @click="saveTags" :disabled="tagsSaving" class="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs rounded transition-colors">{{ tagsSaving ? 'Saving...' : 'Save' }}</button>
         </template>
       </div>
     </div>
@@ -176,7 +175,7 @@ const commentsLoading = ref(false)
 const newComment = ref('')
 const fileTags = ref<string[]>([])
 const tagsLoading = ref(false)
-const tagsSaving = ref(false)
+const tagsLoaded = ref(false)
 
 const previewSrc = computed(() => {
   const t = props.file?.thumbnails
@@ -193,6 +192,7 @@ watch(() => props.file, async (file) => {
   panel.value = ''
   comments.value = []
   fileTags.value = []
+  tagsLoaded.value = false
 
   if (oldVideoURL) {
     URL.revokeObjectURL(oldVideoURL)
@@ -242,6 +242,7 @@ async function fetchComments() {
 async function fetchTags() {
   if (!props.file?.id) return
   tagsLoading.value = true
+  tagsLoaded.value = false
   try {
     const res = await api.get(`/files/${props.file.id}/tags`)
     fileTags.value = (res.data.tags || []).map((t: any) => t.name)
@@ -249,6 +250,7 @@ async function fetchTags() {
     fileTags.value = []
   } finally {
     tagsLoading.value = false
+    nextTick(() => { tagsLoaded.value = true })
   }
 }
 
@@ -282,15 +284,17 @@ async function toggleReaction(commentId: string, emoji: string) {
   } catch {}
 }
 
-async function saveTags() {
-  if (!props.file?.id) return
-  tagsSaving.value = true
-  try {
-    await api.post(`/files/${props.file.id}/tags`, { tags: fileTags.value })
-  } catch {} finally {
-    tagsSaving.value = false
-  }
-}
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(fileTags, () => {
+  if (!tagsLoaded.value || !props.file?.id) return
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    try {
+      await api.post(`/files/${props.file!.id}/tags`, { tags: fileTags.value })
+    } catch {}
+  }, 500)
+})
 
 function handleClose() {
   panel.value = ''

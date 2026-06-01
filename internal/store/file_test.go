@@ -835,3 +835,70 @@ func TestFileStore_FindByNameAndSize_shouldNotMatchDeleted(t *testing.T) {
 		t.Error("expected nil - deleted files should not match dedup")
 	}
 }
+
+func TestFileStore_SearchEnhanced_shouldFilterByTags(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewTagStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "sunset_beach.jpg")
+	f2 := createTestFile(t, fs, user.ID, "portrait.jpg")
+
+	tag1, _ := ts.FindOrCreate("sunset")
+	tag2, _ := ts.FindOrCreate("portrait")
+	ts.AddToFile(f1.ID, tag1.ID, user.ID)
+	ts.AddToFile(f2.ID, tag2.ID, user.ID)
+
+	result, _, err := fs.SearchEnhanced(SearchOptions{UserID: user.ID, Tags: []string{"sunset"}})
+	if err != nil {
+		t.Fatalf("search by tag: %v", err)
+	}
+	if len(result.Files) != 1 {
+		t.Errorf("expected 1 file with 'sunset' tag, got %d", len(result.Files))
+	}
+	if result.Files[0].ID != f1.ID {
+		t.Errorf("expected file %s, got %s", f1.ID, result.Files[0].ID)
+	}
+}
+
+func TestFileStore_SearchEnhanced_shouldReturnEmptyForNonMatchingTag(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewTagStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "sunset_beach.jpg")
+	tag1, _ := ts.FindOrCreate("sunset")
+	ts.AddToFile(f1.ID, tag1.ID, user.ID)
+
+	result, _, err := fs.SearchEnhanced(SearchOptions{UserID: user.ID, Tags: []string{"nonexistent"}})
+	if err != nil {
+		t.Fatalf("search by tag: %v", err)
+	}
+	if len(result.Files) != 0 {
+		t.Errorf("expected 0 files with 'nonexistent' tag, got %d", len(result.Files))
+	}
+}
+
+func TestFileStore_SearchEnhanced_shouldMatchCaseInsensitiveTags(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewTagStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "sunset_beach.jpg")
+	tag1, _ := ts.FindOrCreate("Sunset")
+	ts.AddToFile(f1.ID, tag1.ID, user.ID)
+
+	result, _, err := fs.SearchEnhanced(SearchOptions{UserID: user.ID, Tags: []string{"sunset"}})
+	if err != nil {
+		t.Fatalf("search by tag: %v", err)
+	}
+	if len(result.Files) != 1 {
+		t.Errorf("expected 1 file, got %d", len(result.Files))
+	}
+}
