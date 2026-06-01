@@ -51,6 +51,24 @@ const router = createRouter({
       component: () => import('../views/TrashView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/albums',
+      name: 'albums',
+      component: () => import('../views/AlbumsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/albums/:id',
+      name: 'album-detail',
+      component: () => import('../views/AlbumDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/search',
+      name: 'search',
+      component: () => import('../views/SearchView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

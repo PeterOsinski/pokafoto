@@ -86,7 +86,12 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	file, err := s.fileStore.FindByID(fileID)
-	if err != nil || file == nil || file.UserID != userID {
+	if err != nil || file == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+		return
+	}
+
+	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
@@ -279,29 +284,69 @@ func (s *Server) handleListDirs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
-	query := r.URL.Query().Get("q")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 50
 	}
 
-	if query == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"items": []interface{}{},
-			"total": 0,
-		})
-		return
+	opts := store.SearchOptions{
+		UserID: userID,
+		Query:  r.URL.Query().Get("q"),
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
 	}
 
-	result, err := s.fileStore.Search(userID, query, limit)
+	if v := r.URL.Query().Get("size_min"); v != "" {
+		n, _ := strconv.ParseInt(v, 10, 64)
+		opts.SizeMin = &n
+	}
+	if v := r.URL.Query().Get("size_max"); v != "" {
+		n, _ := strconv.ParseInt(v, 10, 64)
+		opts.SizeMax = &n
+	}
+	if v := r.URL.Query().Get("created_after"); v != "" {
+		opts.CreatedAfter = &v
+	}
+	if v := r.URL.Query().Get("created_before"); v != "" {
+		opts.CreatedBefore = &v
+	}
+	if v := r.URL.Query().Get("taken_after"); v != "" {
+		opts.TakenAfter = &v
+	}
+	if v := r.URL.Query().Get("taken_before"); v != "" {
+		opts.TakenBefore = &v
+	}
+	if tags := r.URL.Query().Get("tags"); tags != "" {
+		opts.Tags = strings.Split(tags, ",")
+	}
+
+	result, folderPaths, err := s.fileStore.SearchEnhanced(opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Search failed")
 		return
 	}
 
-	items := make([]interface{}, 0, len(result.Files))
+	type searchItemResponse struct {
+		ID           string                `json:"id"`
+		Filename     string                `json:"filename"`
+		OriginalName string                `json:"originalName"`
+		Path         string                `json:"path"`
+		SizeBytes    int64                 `json:"sizeBytes"`
+		MimeType     string                `json:"mimeType"`
+		MediaType    string                `json:"mediaType"`
+		Width        *int                  `json:"width,omitempty"`
+		Height       *int                  `json:"height,omitempty"`
+		DurationSec  *float64              `json:"durationSec,omitempty"`
+		TakenAt      *string               `json:"takenAt,omitempty"`
+		FolderID     *string               `json:"folder_id,omitempty"`
+		FolderPath   string                `json:"folder_path,omitempty"`
+		CreatedAt    string                `json:"createdAt"`
+		Thumbnails   *thumbnailSetResponse `json:"thumbnails,omitempty"`
+	}
+
+	items := make([]searchItemResponse, 0, len(result.Files))
 	for _, f := range result.Files {
-		item := fileResponse{
+		item := searchItemResponse{
 			ID:           f.ID,
 			Filename:     f.Filename,
 			OriginalName: f.OriginalName,
@@ -317,7 +362,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
 			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
 		}
+		if fp, ok := folderPaths[f.ID]; ok {
+			item.FolderPath = fp
+		}
 		items = append(items, item)
+	}
+
+	if items == nil {
+		items = []searchItemResponse{}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -481,7 +533,12 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	file, err := s.fileStore.FindByID(fileID)
-	if err != nil || file == nil || file.UserID != userID {
+	if err != nil || file == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+		return
+	}
+
+	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}

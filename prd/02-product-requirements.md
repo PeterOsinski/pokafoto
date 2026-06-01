@@ -129,11 +129,33 @@
 | B-03 | As an admin, I can view system events (backups, upload errors, cache evictions) in the Admin Panel with filtering by type and severity | P1 |
 | B-04 | As an admin, I can trigger an immediate backup from the Admin Panel | P2 |
 
-### Sharing (Future / V2)
+### Sharing & Social Features (v3)
 | ID | User Story | Priority |
 |---|---|---|
-| S-01 | As a user, I can generate a shareable link to an album or individual photo | P3 |
-| S-02 | As a user, shared links can be password-protected and time-limited | P3 |
+| AL-01 | As a user, I can create an album with a name and optional description | P0 |
+| AL-02 | As a user, I can add images to an album from my library | P0 |
+| AL-03 | As a user, I can share an album with other users by username with view/comment/edit permission levels | P0 |
+| AL-04 | As a shared album recipient, I can view all images in albums shared with me | P0 |
+| AL-05 | As a shared album recipient with edit permission, I can add images to the album | P1 |
+| AL-06 | As an album owner, I can remove users' access to the album | P0 |
+| AL-07 | As a user, I can comment on images in shared albums (all album members can see comments; view-only members can read but not add) | P0 |
+| AL-08 | As a user, I can add emoji reactions (👍❤️😂😮😢🙏) to comments via toggle | P0 |
+| AL-09 | As a user, I can add comments to my own files in private space (visible only to me) | P0 |
+| AL-10 | As a user, I can tag files with text labels; autocomplete suggests existing tags | P0 |
+
+### Advanced Search (v3)
+| ID | User Story | Priority |
+|---|---|---|
+| S-01 | As a user, I can search by filename, size range (slider), date added, date created, tags, and comment text | P0 |
+| S-02 | As a user, search results show a flat list with folder path breadcrumb for files in folders | P0 |
+| S-03 | As a user, I can preview and download files directly from search results | P0 |
+| S-04 | As a user, tag input shows autocomplete from existing tags in the system | P0 |
+
+### Sharing (Legacy — future v2)
+| ID | User Story | Priority |
+|---|---|---|
+| S-01-legacy | As a user, I can generate a shareable link to an album or individual photo | P3 |
+| S-02-legacy | As a user, shared links can be password-protected and time-limited | P3 |
 
 ---
 

@@ -214,6 +214,27 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 
 ---
 
+## 8.5 Phase 3a — Social Features & Advanced Search (Weeks 20-22) — ✅ Complete
+
+**Goal:** Shared albums, comments, reactions, tags, and advanced search.
+
+| Task | Details | Deliverable | Status |
+|---|---|---|---|
+| Album tables migration | `albums`, `album_items`, `album_shares` | `migration_012_albums.sql` | ✅ |
+| Comments & reactions migration | `comments`, `reactions` | `migration_013_comments_reactions.sql` | ✅ |
+| Tags migration | `tags`, `file_tags` | `migration_014_tags.sql` | ✅ |
+| Album models | Album, AlbumItem, AlbumShare, Comment, Reaction, Tag structs | `internal/model/` | ✅ |
+| Album stores | AlbumStore, AlbumItemStore, AlbumShareStore, CommentStore, ReactionStore, TagStore | `internal/store/` | ✅ |
+| Album & comment handlers | CRUD for albums, album items, shares, comments, reactions, tags | `internal/server/albums.go`, `comments.go`, `reactions.go`, `tags.go` | ✅ |
+| Enhanced search | Size range, date ranges, tag filtering, folder path in results | `internal/store/file.go`, `internal/server/handlers.go` | ✅ |
+| Shared file access | Cross-user file access for album members (get, download) | `internal/server/handlers.go` | ✅ |
+| Frontend album views | AlbumsView, AlbumDetailView with sharing UI | `web/src/views/` | ✅ |
+| Frontend search view | SearchView with size slider, date pickers, tag input | `web/src/views/SearchView.vue` | ✅ |
+| Comment component | CommentsSection, ReactionPicker | `web/src/components/` | ✅ |
+| Tag system | TagInput with autocomplete, SizeRangeSlider | `web/src/components/` | ✅ |
+| Navigation | Albums and Search routes with nav items | `web/src/router/`, `App.vue` | ✅ |
+| Tests | 4 new test files (album, comment, reaction, tag stores) | `internal/store/*_test.go` | ✅ |
+
 ## 8.5 Phase 3 — Differentiators (Weeks 13-20) — ❌ 0% Complete
 
 ### Weeks 13-14: AI Tagging — ❌

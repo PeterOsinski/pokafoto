@@ -28,6 +28,12 @@ type Server struct {
 	geoStore          *store.GeoStore
 	uploadJobStore    *store.UploadJobStore
 	settingStore      *store.SettingStore
+	albumStore        *store.AlbumStore
+	albumItemStore    *store.AlbumItemStore
+	albumShareStore   *store.AlbumShareStore
+	commentStore      *store.CommentStore
+	reactionStore     *store.ReactionStore
+	tagStore          *store.TagStore
 	storageService    *service.StorageService
 	workerPool        *worker.Pool
 	s3DeletionPool    *S3DeletionPool
@@ -39,18 +45,24 @@ type Server struct {
 
 func New(cfg *config.Config, db *store.DB) *Server {
 	s := &Server{
-		cfg:            cfg,
-		db:             db,
-		userStore:      store.NewUserStore(db),
-		sessStore:      store.NewSessionStore(db),
-		fileStore:      store.NewFileStore(db),
-		folderStore:    store.NewFolderStore(db),
-		exifStore:      store.NewExifStore(db),
-		thumbnailStore: store.NewThumbnailStore(db),
-		geoStore:       store.NewGeoStore(db),
-		uploadJobStore: store.NewUploadJobStore(db),
-		settingStore:   store.NewSettingStore(db),
-		stopCh:         make(chan struct{}),
+		cfg:             cfg,
+		db:              db,
+		userStore:       store.NewUserStore(db),
+		sessStore:       store.NewSessionStore(db),
+		fileStore:       store.NewFileStore(db),
+		folderStore:     store.NewFolderStore(db),
+		exifStore:       store.NewExifStore(db),
+		thumbnailStore:  store.NewThumbnailStore(db),
+		geoStore:        store.NewGeoStore(db),
+		uploadJobStore:  store.NewUploadJobStore(db),
+		settingStore:    store.NewSettingStore(db),
+		albumStore:      store.NewAlbumStore(db),
+		albumItemStore:  store.NewAlbumItemStore(db),
+		albumShareStore: store.NewAlbumShareStore(db),
+		commentStore:    store.NewCommentStore(db),
+		reactionStore:   store.NewReactionStore(db),
+		tagStore:        store.NewTagStore(db),
+		stopCh:          make(chan struct{}),
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -171,6 +183,32 @@ func (s *Server) setupRouter() {
 			r.Delete("/trash/{id}", s.handlePermanentDeleteTrash)
 			r.Post("/trash/batch-permanent-delete", s.handleBatchPermanentDeleteTrash)
 			r.Post("/trash/empty", s.handleEmptyTrash)
+
+			r.Get("/tags", s.handleListTags)
+			r.Get("/albums", s.handleListAlbums)
+			r.Post("/albums", s.handleCreateAlbum)
+			r.Get("/albums/{id}", s.handleGetAlbum)
+			r.Put("/albums/{id}", s.handleUpdateAlbum)
+			r.Delete("/albums/{id}", s.handleDeleteAlbum)
+			r.Get("/albums/{id}/items", s.handleListAlbumItems)
+			r.Post("/albums/{id}/items", s.handleAddAlbumItems)
+			r.Delete("/albums/{id}/items/{itemId}", s.handleRemoveAlbumItem)
+			r.Post("/albums/{id}/shares", s.handleShareAlbum)
+			r.Delete("/albums/{id}/shares/{shareId}", s.handleRemoveShare)
+
+			r.Get("/files/{id}/comments", s.handleListComments)
+			r.Post("/files/{id}/comments", s.handleAddComment)
+			r.Put("/files/{id}/comments/{commentId}", s.handleUpdateComment)
+			r.Delete("/files/{id}/comments/{commentId}", s.handleDeleteComment)
+
+			r.Get("/files/{id}/comments/{commentId}/reactions", s.handleGetReactions)
+			r.Post("/files/{id}/comments/{commentId}/reactions", s.handleToggleReaction)
+			r.Delete("/files/{id}/comments/{commentId}/reactions/{emoji}", s.handleRemoveReaction)
+
+			r.Get("/files/{id}/tags", s.handleGetFileTags)
+			r.Post("/files/{id}/tags", s.handleAddFileTags)
+			r.Delete("/files/{id}/tags/{tagId}", s.handleRemoveFileTag)
+			r.Get("/files/{id}/albums", s.handleGetFileAlbums)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.adminMiddleware)

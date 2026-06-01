@@ -12,6 +12,8 @@
         <router-link to="/timeline" class="text-sm" :class="navClass('/timeline')">Timeline</router-link>
         <router-link to="/map" class="text-sm" :class="navClass('/map')">Map</router-link>
         <router-link to="/trash" class="text-sm" :class="navClass('/trash')">Trash</router-link>
+        <router-link to="/albums" class="text-sm" :class="navClass('/albums')">Albums</router-link>
+        <router-link to="/search" class="text-sm" :class="navClass('/search')">Search</router-link>
         <router-link v-if="auth.isAdmin" to="/admin" class="text-sm" :class="navClass('/admin')">Admin</router-link>
       </nav>
       <div class="flex items-center gap-3">
@@ -56,6 +58,8 @@
       <router-link to="/timeline" class="flex flex-col items-center text-xs" :class="navClass('/timeline')">📅<span>Timeline</span></router-link>
       <router-link to="/map" class="flex flex-col items-center text-xs" :class="navClass('/map')">🗺️<span>Map</span></router-link>
       <router-link to="/trash" class="flex flex-col items-center text-xs" :class="navClass('/trash')">🗑<span>Trash</span></router-link>
+      <router-link to="/albums" class="flex flex-col items-center text-xs" :class="navClass('/albums')">📸<span>Albums</span></router-link>
+      <router-link to="/search" class="flex flex-col items-center text-xs" :class="navClass('/search')">🔍<span>Search</span></router-link>
     </nav>
   </div>
 </template>

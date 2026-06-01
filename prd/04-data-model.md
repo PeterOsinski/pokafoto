@@ -257,6 +257,91 @@ CREATE TRIGGER files_au AFTER UPDATE ON files BEGIN
 END;
 ```
 
+### 4.2a Social Features (v3) — Albums, Comments, Reactions, Tags
+
+```sql
+-- migration_012_albums.sql
+CREATE TABLE IF NOT EXISTS albums (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_albums_user ON albums(user_id);
+
+CREATE TABLE IF NOT EXISTS album_items (
+    id               TEXT PRIMARY KEY,
+    album_id         TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+    file_id          TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    added_by_user_id TEXT NOT NULL REFERENCES users(id),
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(album_id, file_id)
+);
+CREATE INDEX idx_album_items_album ON album_items(album_id);
+CREATE INDEX idx_album_items_file ON album_items(file_id);
+
+CREATE TABLE IF NOT EXISTS album_shares (
+    id                  TEXT PRIMARY KEY,
+    album_id            TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+    shared_with_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    permission          TEXT NOT NULL DEFAULT 'view' CHECK(permission IN ('view', 'comment', 'edit')),
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(album_id, shared_with_user_id)
+);
+CREATE INDEX idx_album_shares_album ON album_shares(album_id);
+CREATE INDEX idx_album_shares_user ON album_shares(shared_with_user_id);
+
+-- migration_013_comments_reactions.sql
+CREATE TABLE IF NOT EXISTS comments (
+    id         TEXT PRIMARY KEY,
+    file_id    TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content    TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_comments_file ON comments(file_id);
+CREATE INDEX idx_comments_user ON comments(user_id);
+
+CREATE TABLE IF NOT EXISTS reactions (
+    id         TEXT PRIMARY KEY,
+    comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji      TEXT NOT NULL CHECK(length(emoji) > 0),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(comment_id, user_id, emoji)
+);
+CREATE INDEX idx_reactions_comment ON reactions(comment_id);
+
+-- migration_014_tags.sql
+CREATE TABLE IF NOT EXISTS tags (
+    id   TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS file_tags (
+    file_id          TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    tag_id           TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    added_by_user_id TEXT NOT NULL REFERENCES users(id),
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (file_id, tag_id)
+);
+CREATE INDEX idx_file_tags_tag ON file_tags(tag_id);
+CREATE INDEX idx_file_tags_file ON file_tags(file_id);
+```
+
+### New ERD Relationships
+```
+albums 1──N album_items N──1 files
+albums 1──N album_shares N──1 users
+files   1──N comments    N──1 users
+comments 1──N reactions  N──1 users
+tags    1──N file_tags   N──1 files
+```
+
 ```sql
 -- migrations/003_folders.sql
 -- User-created folder hierarchy for file organization

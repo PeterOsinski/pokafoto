@@ -7,17 +7,31 @@
     ref="lightboxEl"
   >
     <div class="flex items-center justify-between p-3 shrink-0">
-      <button class="text-white text-xl hover:text-[var(--accent)]" @click="$emit('close')">✕</button>
+      <button class="text-white text-xl hover:text-[var(--accent)]" @click="handleClose">✕</button>
       <div class="flex gap-3">
         <button class="text-white text-lg hover:text-[var(--accent)]" @click="prev" :disabled="!hasPrev">◀</button>
         <span class="text-white text-sm self-center">{{ index + 1 }} / {{ total }}</span>
         <button class="text-white text-lg hover:text-[var(--accent)]" @click="next" :disabled="!hasNext">▶</button>
       </div>
-      <button
-        v-if="file.id"
-        @click="downloadFile"
-        class="text-white text-sm hover:text-[var(--accent)]"
-      >⬇ Download</button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="file.id"
+          @click="panel = panel === 'comments' ? '' : 'comments'"
+          class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
+          :class="{ 'bg-white/10': panel === 'comments' }"
+        >💬</button>
+        <button
+          v-if="file.id"
+          @click="panel = panel === 'tags' ? '' : 'tags'"
+          class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
+          :class="{ 'bg-white/10': panel === 'tags' }"
+        >🏷</button>
+        <button
+          v-if="file.id"
+          @click="downloadFile"
+          class="text-white text-sm hover:text-[var(--accent)]"
+        >⬇ Download</button>
+      </div>
       <label
         v-if="file.id && file.thumbnails?.xl"
         class="text-white text-xs flex items-center gap-1 cursor-pointer select-none"
@@ -27,26 +41,58 @@
       </label>
     </div>
 
-    <div
-      class="flex-1 flex items-center justify-center overflow-hidden"
-      @touchstart="onTouchStart"
-      @touchend="onTouchEnd"
-    >
-      <VideoPlayer
-        v-if="file.mediaType === 'video' && videoSrc"
-        :src="videoSrc"
-        :poster="file.videoStill?.url"
-      />
-      <div v-else-if="file.mediaType === 'video' && videoLoading" class="text-[var(--text-secondary)] text-lg">Loading video...</div>
-      <img
-        v-else-if="previewSrc"
-        :key="settings.highResDownload.value ? 'xl' : 'preview'"
-        :src="previewSrc"
-        :alt="file.originalName"
-        class="max-h-full max-w-full object-contain select-none"
-        draggable="false"
-      />
-      <div v-else class="text-[var(--text-secondary)] text-lg">No preview available</div>
+    <div class="flex-1 flex overflow-hidden">
+      <div
+        class="flex-1 flex items-center justify-center overflow-hidden"
+        @touchstart="onTouchStart"
+        @touchend="onTouchEnd"
+      >
+        <VideoPlayer
+          v-if="file.mediaType === 'video' && videoSrc"
+          :src="videoSrc"
+          :poster="file.videoStill?.url"
+        />
+        <div v-else-if="file.mediaType === 'video' && videoLoading" class="text-white/60 text-lg">Loading video...</div>
+        <img
+          v-else-if="previewSrc"
+          :key="settings.highResDownload.value ? 'xl' : 'preview'"
+          :src="previewSrc"
+          :alt="file.originalName"
+          class="max-h-full max-w-full object-contain select-none"
+          draggable="false"
+        />
+        <div v-else class="text-white/60 text-lg">No preview available</div>
+      </div>
+
+      <div v-if="panel" class="w-80 shrink-0 overflow-y-auto p-4 border-l border-white/10" style="background: rgba(0,0,0,0.9)">
+        <template v-if="panel === 'comments'">
+          <h3 class="text-sm font-medium text-white mb-3">Comments</h3>
+          <CommentsSection
+            :comments="comments"
+            :file-id="file?.id || ''"
+            @delete="deleteComment"
+            @toggle-reaction="toggleReaction"
+          />
+          <div v-if="!comments.length && !commentsLoading" class="text-xs text-gray-500 text-center py-4">No comments yet</div>
+          <div v-if="commentsLoading" class="text-xs text-gray-500 text-center py-4">Loading...</div>
+          <form @submit.prevent="addComment" class="mt-4">
+            <textarea
+              v-model="newComment"
+              placeholder="Add a comment..."
+              rows="2"
+              class="w-full px-3 py-2 bg-black/50 border border-white/10 rounded text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-blue-500"
+            ></textarea>
+            <button type="submit" :disabled="!newComment.trim()" class="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs rounded transition-colors">Post</button>
+          </form>
+        </template>
+
+        <template v-else-if="panel === 'tags'">
+          <h3 class="text-sm font-medium text-white mb-3">Tags</h3>
+          <div v-if="tagsLoading" class="text-xs text-gray-500 text-center py-4">Loading...</div>
+          <TagInput v-model="fileTags" placeholder="Add tags..." />
+          <button @click="saveTags" :disabled="tagsSaving" class="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs rounded transition-colors">{{ tagsSaving ? 'Saving...' : 'Save' }}</button>
+        </template>
+      </div>
     </div>
 
     <div class="p-3 shrink-0" style="background: rgba(0,0,0,0.7)">
@@ -76,6 +122,8 @@ import { ref, computed, watch, nextTick } from 'vue'
 import api from '../api/client'
 import { useLocalSettings } from '../composables/useLocalSettings'
 import VideoPlayer from './VideoPlayer.vue'
+import CommentsSection from './CommentsSection.vue'
+import TagInput from './TagInput.vue'
 
 interface FileItem {
   id: string
@@ -122,30 +170,30 @@ const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
 const videoLoading = ref(false)
 const settings = useLocalSettings()
+const panel = ref('')
+const comments = ref<any[]>([])
+const commentsLoading = ref(false)
+const newComment = ref('')
+const fileTags = ref<string[]>([])
+const tagsLoading = ref(false)
+const tagsSaving = ref(false)
 
 const previewSrc = computed(() => {
   const t = props.file?.thumbnails
-  if (!t) { console.log('[previewSrc] no thumbnails'); return '' }
-  const keys = Object.keys(t)
-  console.log('[previewSrc] thumbnails keys:', keys, 'highResDownload:', settings.highResDownload.value)
-  if (settings.highResDownload.value && t.xl) {
-    console.log('[previewSrc] using xl:', t.xl.url)
-    return t.xl.url
-  }
-  console.log('[previewSrc] using preview/md:', t.preview?.url || t.md?.url || '')
+  if (!t) return ''
+  if (settings.highResDownload.value && t.xl) return t.xl.url
   return t.preview?.url || t.md?.url || ''
 })
 
-watch(() => settings.highResDownload.value, (val) => {
-  console.log('[highResDownload] changed to:', val, 'hasXl:', !!props.file?.thumbnails?.xl)
-})
-
 let oldVideoURL = ''
-
 let touchStartX = 0
 let touchStartY = 0
 
 watch(() => props.file, async (file) => {
+  panel.value = ''
+  comments.value = []
+  fileTags.value = []
+
   if (oldVideoURL) {
     URL.revokeObjectURL(oldVideoURL)
     oldVideoURL = ''
@@ -178,8 +226,79 @@ watch(() => props.file, async (file) => {
   } catch {}
 }, { immediate: true })
 
+async function fetchComments() {
+  if (!props.file?.id) return
+  commentsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/comments`)
+    comments.value = res.data.comments || []
+  } catch {
+    comments.value = []
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function fetchTags() {
+  if (!props.file?.id) return
+  tagsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/tags`)
+    fileTags.value = (res.data.tags || []).map((t: any) => t.name)
+  } catch {
+    fileTags.value = []
+  } finally {
+    tagsLoading.value = false
+  }
+}
+
+watch(() => panel.value, (val) => {
+  if (val === 'comments') fetchComments()
+  if (val === 'tags') fetchTags()
+})
+
+async function addComment() {
+  if (!newComment.value.trim() || !props.file?.id) return
+  try {
+    await api.post(`/files/${props.file.id}/comments`, { content: newComment.value.trim() })
+    newComment.value = ''
+    await fetchComments()
+  } catch {}
+}
+
+async function deleteComment(commentId: string) {
+  if (!props.file?.id) return
+  try {
+    await api.delete(`/files/${props.file.id}/comments/${commentId}`)
+    await fetchComments()
+  } catch {}
+}
+
+async function toggleReaction(commentId: string, emoji: string) {
+  if (!props.file?.id) return
+  try {
+    await api.post(`/files/${props.file.id}/comments/${commentId}/reactions`, { emoji })
+    await fetchComments()
+  } catch {}
+}
+
+async function saveTags() {
+  if (!props.file?.id) return
+  tagsSaving.value = true
+  try {
+    await api.post(`/files/${props.file.id}/tags`, { tags: fileTags.value })
+  } catch {} finally {
+    tagsSaving.value = false
+  }
+}
+
+function handleClose() {
+  panel.value = ''
+  emit('close')
+}
+
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key === 'Escape') handleClose()
   if (e.key === 'ArrowLeft' && props.hasPrev) emit('prev')
   if (e.key === 'ArrowRight' && props.hasNext) emit('next')
 }
@@ -196,7 +315,7 @@ function onTouchEnd(e: TouchEvent) {
     if (dx < 0 && props.hasNext) emit('next')
     if (dx > 0 && props.hasPrev) emit('prev')
   }
-  if (Math.abs(dy) > 100 && !exif.value) emit('close')
+  if (Math.abs(dy) > 100 && !exif.value) handleClose()
 }
 
 function prev() { if (props.hasPrev) emit('prev') }

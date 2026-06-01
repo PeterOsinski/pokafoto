@@ -986,3 +986,97 @@ All authenticated endpoints require the `Authorization: Bearer <access_token>` H
 **Rate limiting** (future): Configurable per-endpoint and per-user limits. Returned as `429 Too Many Requests`.
 
 ---
+
+### 5.1.11 Shared Albums (v3)
+
+#### `GET /api/v1/albums`
+List user's own albums + albums shared with user.
+
+**Response:** `200 OK`
+```json
+{
+  "myAlbums": [{ "id": "uuid", "name": "Vacation", "item_count": 42, "owner_id": "uuid", "is_shared": true, "created_at": "..." }],
+  "sharedAlbums": [{ "id": "uuid", "name": "Party", "item_count": 12, "owner_id": "uuid", "owner_name": "bob", "is_shared": true, "created_at": "..." }]
+}
+```
+
+#### `POST /api/v1/albums`
+Create a new album. `{ "name": "Album Name", "description": "optional" }`
+
+#### `GET /api/v1/albums/{id}`
+Get album details with owner info, item count, share list.
+
+#### `PUT /api/v1/albums/{id}`
+Update album name/description (owner only).
+
+#### `DELETE /api/v1/albums/{id}`
+Delete album (owner only).
+
+#### `GET /api/v1/albums/{id}/items`
+List files in an album. Same shape as `GET /api/v1/files`.
+
+#### `POST /api/v1/albums/{id}/items`
+Add files to album. `{ "file_ids": ["uuid", ...] }` — requires edit permission.
+
+#### `DELETE /api/v1/albums/{id}/items/{itemId}`
+Remove file from album — requires edit permission.
+
+#### `POST /api/v1/albums/{id}/shares`
+Share album with user. `{ "username": "bob", "permission": "view|comment|edit" }` — owner only.
+
+#### `DELETE /api/v1/albums/{id}/shares/{shareId}`
+Remove share access — owner only.
+
+### 5.1.12 Comments & Reactions (v3)
+
+#### `GET /api/v1/files/{id}/comments`
+List comments on a file. Returns array with `{ id, user_id, username, content, created_at, reactions[] }`.
+
+#### `POST /api/v1/files/{id}/comments`
+Add a comment. `{ "content": "Great photo!" }` — requires file access.
+
+#### `PUT /api/v1/files/{id}/comments/{commentId}`
+Edit own comment. `{ "content": "Updated" }`
+
+#### `DELETE /api/v1/files/{id}/comments/{commentId}`
+Delete own comment.
+
+#### `POST /api/v1/files/{id}/comments/{commentId}/reactions`
+Toggle emoji reaction. `{ "emoji": "👍" }` — returns `{ "emoji": "👍", "added": true|false }`
+
+#### `DELETE /api/v1/files/{id}/comments/{commentId}/reactions/{emoji}`
+Remove own reaction.
+
+### 5.1.13 Tags (v3)
+
+#### `GET /api/v1/tags?q=prefix`
+List tags matching prefix (for autocomplete). Returns `{ "tags": [{ "id": "uuid", "name": "beach" }] }`
+
+#### `GET /api/v1/files/{id}/tags`
+Get tags on a file.
+
+#### `POST /api/v1/files/{id}/tags`
+Add tags to file. `{ "tags": ["vacation", "beach"] }` — tag owner only.
+
+#### `DELETE /api/v1/files/{id}/tags/{tagId}`
+Remove tag from file — file owner only.
+
+### 5.1.14 Enhanced Search (v3) — Extends `GET /api/v1/search`
+
+New query parameters:
+
+| Param | Type | Description |
+|---|---|---|
+| `q` | string | Full-text search (filename, FTS5) |
+| `size_min` | int | Minimum file size in bytes |
+| `size_max` | int | Maximum file size in bytes |
+| `created_after` | string | ISO 8601 |
+| `created_before` | string | ISO 8601 |
+| `taken_after` | string | ISO 8601 |
+| `taken_before` | string | ISO 8601 |
+| `tags` | string | Comma-separated tag names |
+| `limit` | int | Max results (default 50) |
+
+Response includes `folder_path` field for files in folders.
+
+---

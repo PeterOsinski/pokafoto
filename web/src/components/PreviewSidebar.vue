@@ -54,6 +54,91 @@
           <p class="text-xs text-[var(--text-secondary)]">{{ formatSize(file.sizeBytes) }}</p>
         </div>
 
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Albums</h3>
+          </div>
+          <div v-if="fileAlbumsLoading" class="text-xs text-[var(--text-secondary)]">Loading...</div>
+          <div v-else>
+            <div v-if="fileAlbums.length" class="flex flex-wrap gap-1 mb-2">
+              <span
+                v-for="a in fileAlbums"
+                :key="a.id"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                :class="a.is_shared ? 'bg-green-500/10 text-green-400' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)]'"
+              >
+                {{ a.name }}
+                <span v-if="a.is_shared" title="Shared">🔗</span>
+              </span>
+            </div>
+            <button @click="toggleAddToAlbum" class="text-xs text-[var(--accent)] hover:underline cursor-pointer">
+              {{ showAddToAlbum ? 'Cancel' : '+ Add to album' }}
+            </button>
+            <div v-if="showAddToAlbum" class="mt-2">
+              <div v-if="availableAlbumsLoading" class="text-xs text-[var(--text-secondary)]">Loading...</div>
+              <div v-else-if="!availableAlbums.length" class="text-xs text-[var(--text-secondary)]">No albums available. Create one first.</div>
+              <div v-else class="max-h-32 overflow-y-auto border border-[var(--border-color)] rounded">
+                <button
+                  v-for="a in availableAlbums"
+                  :key="a.id"
+                  @click="addToAlbum(a.id)"
+                  class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                >
+                  {{ a.name }} <span class="text-[var(--text-secondary)]">({{ a.item_count }})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Comments</h3>
+            <span class="text-xs text-[var(--text-secondary)]">{{ sidebarComments.length }}</span>
+          </div>
+          <div v-if="sidebarCommentsLoading" class="text-xs text-[var(--text-secondary)]">Loading...</div>
+          <div v-else>
+            <div v-if="sidebarComments.length" class="mb-2 max-h-40 overflow-y-auto">
+              <div v-for="c in sidebarComments.slice(0, 5)" :key="c.id" class="flex gap-2 mb-2">
+                <div class="flex-1">
+                  <div class="flex items-center gap-1">
+                    <span class="text-xs font-medium text-[var(--text-primary)]">{{ c.username }}</span>
+                    <span class="text-[10px] text-[var(--text-secondary)]">{{ formatDate(c.created_at) }}</span>
+                  </div>
+                  <p class="text-xs text-[var(--text-secondary)]">{{ c.content }}</p>
+                </div>
+              </div>
+              <p v-if="sidebarComments.length > 5" class="text-[10px] text-[var(--text-secondary)]">
+                +{{ sidebarComments.length - 5 }} more
+              </p>
+            </div>
+            <textarea
+              v-model="newSidebarComment"
+              placeholder="Add a comment..."
+              rows="2"
+              class="w-full px-2 py-1.5 text-xs bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 resize-none outline-none focus:border-[var(--accent)]"
+            ></textarea>
+            <button
+              @click="addSidebarComment"
+              :disabled="!newSidebarComment.trim()"
+              class="mt-1 px-2 py-1 text-xs rounded bg-[var(--accent)] text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
+            >Post</button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Tags</h3>
+          <div v-if="sidebarTagsLoading" class="text-xs text-[var(--text-secondary)]">Loading...</div>
+          <div v-else>
+            <TagInput v-model="sidebarTags" placeholder="Add tags..." />
+            <button
+              @click="saveSidebarTags"
+              :disabled="sidebarTagsSaving"
+              class="mt-2 px-2 py-1 text-xs rounded bg-[var(--accent)] text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
+            >{{ sidebarTagsSaving ? 'Saving...' : 'Save' }}</button>
+          </div>
+        </div>
+
         <div v-if="exif" class="space-y-4">
           <div v-if="exif.cameraMake || exif.cameraModel">
             <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Camera & Lens</h3>
@@ -138,6 +223,8 @@ import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import api from '../api/client'
 import { useLocalSettings } from '../composables/useLocalSettings'
 import VideoPlayer from './VideoPlayer.vue'
+import TagInput from './TagInput.vue'
+import { useAlbumStore } from '../stores/albums'
 
 interface FileItem {
   id: string
@@ -191,11 +278,26 @@ const emit = defineEmits<{
 }>()
 
 const settings = useLocalSettings()
+const albumStore = useAlbumStore()
 const sidebarEl = ref<HTMLElement | null>(null)
 const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
 const showRawJson = ref(false)
 const sidebarWidth = ref(settings.sidebarWidth.value)
+
+const fileAlbums = ref<any[]>([])
+const fileAlbumsLoading = ref(false)
+const showAddToAlbum = ref(false)
+const availableAlbums = ref<any[]>([])
+const availableAlbumsLoading = ref(false)
+
+const sidebarComments = ref<any[]>([])
+const sidebarCommentsLoading = ref(false)
+const newSidebarComment = ref('')
+
+const sidebarTags = ref<string[]>([])
+const sidebarTagsLoading = ref(false)
+const sidebarTagsSaving = ref(false)
 
 let oldVideoURL = ''
 let isResizing = false
@@ -217,6 +319,11 @@ const hasTechnical = computed(() => {
 })
 
 watch(() => props.file, async (file) => {
+  showAddToAlbum.value = false
+  fileAlbums.value = []
+  sidebarComments.value = []
+  sidebarTags.value = []
+
   if (oldVideoURL) {
     URL.revokeObjectURL(oldVideoURL)
     oldVideoURL = ''
@@ -235,9 +342,7 @@ watch(() => props.file, async (file) => {
       const res = await api.get(`/download/${file.id}`, { responseType: 'blob' })
       oldVideoURL = URL.createObjectURL(res.data as Blob)
       videoSrc.value = oldVideoURL
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   try {
@@ -246,7 +351,93 @@ watch(() => props.file, async (file) => {
   } catch {
     exif.value = null
   }
+
+  fetchFileAlbums()
+  fetchSidebarComments()
+  fetchSidebarTags()
 }, { immediate: true })
+
+async function fetchFileAlbums() {
+  if (!props.file?.id) return
+  fileAlbumsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/albums`)
+    fileAlbums.value = res.data.albums || []
+  } catch {
+    fileAlbums.value = []
+  } finally {
+    fileAlbumsLoading.value = false
+  }
+}
+
+async function toggleAddToAlbum() {
+  showAddToAlbum.value = !showAddToAlbum.value
+  if (showAddToAlbum.value) {
+    availableAlbumsLoading.value = true
+    try {
+      await albumStore.fetchAlbums()
+      availableAlbums.value = albumStore.myAlbums.filter(
+        a => !fileAlbums.value.some(fa => fa.id === a.id)
+      )
+    } catch {} finally {
+      availableAlbumsLoading.value = false
+    }
+  }
+}
+
+async function addToAlbum(albumId: string) {
+  if (!props.file?.id) return
+  try {
+    await api.post(`/albums/${albumId}/items`, { file_ids: [props.file.id] })
+    showAddToAlbum.value = false
+    await fetchFileAlbums()
+  } catch {}
+}
+
+async function fetchSidebarComments() {
+  if (!props.file?.id) return
+  sidebarCommentsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/comments`)
+    sidebarComments.value = res.data.comments || []
+  } catch {
+    sidebarComments.value = []
+  } finally {
+    sidebarCommentsLoading.value = false
+  }
+}
+
+async function addSidebarComment() {
+  if (!newSidebarComment.value.trim() || !props.file?.id) return
+  try {
+    await api.post(`/files/${props.file.id}/comments`, { content: newSidebarComment.value.trim() })
+    newSidebarComment.value = ''
+    await fetchSidebarComments()
+  } catch {}
+}
+
+async function fetchSidebarTags() {
+  if (!props.file?.id) return
+  sidebarTagsLoading.value = true
+  try {
+    const res = await api.get(`/files/${props.file.id}/tags`)
+    sidebarTags.value = (res.data.tags || []).map((t: any) => t.name)
+  } catch {
+    sidebarTags.value = []
+  } finally {
+    sidebarTagsLoading.value = false
+  }
+}
+
+async function saveSidebarTags() {
+  if (!props.file?.id) return
+  sidebarTagsSaving.value = true
+  try {
+    await api.post(`/files/${props.file.id}/tags`, { tags: sidebarTags.value })
+  } catch {} finally {
+    sidebarTagsSaving.value = false
+  }
+}
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close')
@@ -290,6 +481,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1073741824).toFixed(1)} GB`
 }
 
+function formatDate(d: string): string {
+  return new Date(d).toLocaleDateString()
+}
+
 function formatJson(raw: string): string {
   try {
     return JSON.stringify(JSON.parse(raw), null, 2)
@@ -310,9 +505,7 @@ async function downloadFile() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 onUnmounted(() => {

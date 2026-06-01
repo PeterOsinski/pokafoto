@@ -289,6 +289,114 @@ type SearchResult struct {
 	Total int
 }
 
+type SearchOptions struct {
+	UserID        string
+	Query         string
+	SizeMin       *int64
+	SizeMax       *int64
+	CreatedAfter  *string
+	CreatedBefore *string
+	TakenAfter    *string
+	TakenBefore   *string
+	Tags          []string
+	Limit         int
+	Cursor        string
+}
+
+func (s *FileStore) SearchEnhanced(opts SearchOptions) (*SearchResult, map[string]string, error) {
+	if opts.Limit <= 0 {
+		opts.Limit = 50
+	}
+
+	args := []interface{}{opts.UserID}
+	conditions := []string{"f.user_id = ?", "f.is_deleted = 0"}
+
+	if opts.Query != "" {
+		ftsCondition := "f.rowid IN (SELECT rowid FROM files_fts WHERE files_fts MATCH ?)"
+		conditions = append(conditions, ftsCondition)
+		args = append(args, opts.Query)
+	}
+
+	if opts.SizeMin != nil {
+		conditions = append(conditions, "f.size_bytes >= ?")
+		args = append(args, *opts.SizeMin)
+	}
+	if opts.SizeMax != nil {
+		conditions = append(conditions, "f.size_bytes <= ?")
+		args = append(args, *opts.SizeMax)
+	}
+	if opts.CreatedAfter != nil {
+		conditions = append(conditions, "f.created_at >= ?")
+		args = append(args, *opts.CreatedAfter)
+	}
+	if opts.CreatedBefore != nil {
+		conditions = append(conditions, "f.created_at <= ?")
+		args = append(args, *opts.CreatedBefore)
+	}
+	if opts.TakenAfter != nil {
+		conditions = append(conditions, "f.taken_at >= ?")
+		args = append(args, *opts.TakenAfter)
+	}
+	if opts.TakenBefore != nil {
+		conditions = append(conditions, "f.taken_at <= ?")
+		args = append(args, *opts.TakenBefore)
+	}
+
+	whereClause := strings.Join(conditions, " AND ")
+
+	query := fmt.Sprintf(`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted FROM files f WHERE %s ORDER BY f.created_at DESC LIMIT ?`, whereClause)
+	allArgs := append([]interface{}{}, args...)
+	allArgs = append(allArgs, opts.Limit)
+
+	rows, err := s.db.Query(query, allArgs...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("search enhanced: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*model.File
+	for rows.Next() {
+		f, err := s.scanFileFromRows(rows)
+		if err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+
+	if rows.Err() != nil {
+		return nil, nil, rows.Err()
+	}
+
+	folderPaths := make(map[string]string)
+	for _, f := range files {
+		if f.FolderID != nil && *f.FolderID != "" {
+			folderPaths[f.ID] = s.folderPath(*f.FolderID)
+		}
+	}
+
+	return &SearchResult{Files: files, Total: len(files)}, folderPaths, nil
+}
+
+func (s *FileStore) folderPath(folderID string) string {
+	path := ""
+	current := &folderID
+	for i := 0; i < 10 && current != nil; i++ {
+		var name string
+		var parentID *string
+		err := s.db.QueryRow(`SELECT name, parent_id FROM folders WHERE id = ?`, *current).Scan(&name, &parentID)
+		if err != nil {
+			break
+		}
+		if path == "" {
+			path = name
+		} else {
+			path = name + "/" + path
+		}
+		current = parentID
+	}
+	return path
+}
+
 func (s *FileStore) Search(userID, query string, limit int) (*SearchResult, error) {
 	if limit <= 0 {
 		limit = 50
