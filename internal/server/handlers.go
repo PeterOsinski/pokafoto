@@ -117,6 +117,11 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:    file.UpdatedAt.Format(timeRFC3339),
 		Thumbnails:   buildThumbnailSet(file.ID, file.MediaType),
 		EXIF:         exif,
+		DownloadInfo: &downloadInfoResponse{
+			SizeBytes:     file.SizeBytes,
+			MimeType:      file.MimeType,
+			SupportsRange: true,
+		},
 	}
 
 	writeJSON(w, http.StatusOK, item)
@@ -546,6 +551,16 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
 	if _, err := os.Stat(filePath); err == nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
+		w.Header().Set("Accept-Ranges", "bytes")
+		if file.MimeType != "" {
+			w.Header().Set("Content-Type", file.MimeType)
+		}
+		if file.SizeBytes > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(file.SizeBytes, 10))
+		}
+		if file.SHA256 != "" {
+			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, file.SHA256))
+		}
 		http.ServeFile(w, r, filePath)
 		return
 	}
@@ -1211,6 +1226,13 @@ type fileResponse struct {
 	DeletedAt    *string               `json:"deletedAt,omitempty"`
 	Thumbnails   *thumbnailSetResponse `json:"thumbnails,omitempty"`
 	EXIF         interface{}           `json:"exif,omitempty"`
+	DownloadInfo *downloadInfoResponse `json:"downloadInfo,omitempty"`
+}
+
+type downloadInfoResponse struct {
+	SizeBytes     int64  `json:"sizeBytes"`
+	MimeType      string `json:"mimeType"`
+	SupportsRange bool   `json:"supportsRange"`
 }
 
 type thumbnailSetResponse struct {

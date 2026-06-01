@@ -38,6 +38,7 @@ type Pool struct {
 	thumbnailService *service.ThumbnailService
 	storageService   *service.StorageService
 	uploadJobStore   *store.UploadJobStore
+	chunkStore       *store.ChunkStore
 	eventRecorder    *service.EventRecorder
 	totalWorkers     int
 	wg               sync.WaitGroup
@@ -75,7 +76,7 @@ type JobInfo struct {
 	Progress float64 `json:"progress"`
 }
 
-func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore, eventRecorder *service.EventRecorder) *Pool {
+func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore, chunkStore *store.ChunkStore, eventRecorder *service.EventRecorder) *Pool {
 	workers := cfg.Upload.ConcurrentWorkers
 	if workers <= 0 {
 		workers = 4
@@ -89,6 +90,7 @@ func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.Ex
 		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir()),
 		storageService:   storageService,
 		uploadJobStore:   uploadJobStore,
+		chunkStore:       chunkStore,
 		eventRecorder:    eventRecorder,
 		totalWorkers:     workers,
 		stopCh:           make(chan struct{}),
@@ -279,6 +281,12 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		return
 	}
 
+	if job.UploadMode == model.UploadModeChunked {
+		f.Close()
+		p.processChunkedJob(job)
+		return
+	}
+
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {
 		f.Close()
@@ -337,17 +345,90 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		}
 	}
 
+	p.finishJob(job, f, mimeType, mediaType, sha256Hash)
+}
+
+func (p *Pool) processChunkedJob(job *model.UploadJob) {
+	stage := model.JobStage("assembling")
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.0)
+	p.notifySubscribers(job)
+
+	tempDir := store.ChunkTempDir(p.cfg.OriginalsDir())
+	destPath := filepath.Join(tempDir, "assembled-"+job.ID)
+
+	sha256Hash, err := p.chunkStore.AssembleFile(job.ID, *job.TotalChunks, destPath)
+	if err != nil {
+		p.uploadJobStore.Fail(job.ID, "assembly_error")
+		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
+		p.eventRecorder.Error("upload_error", "Upload failed: chunk assembly error", map[string]interface{}{
+			"job_id":   job.ID,
+			"filename": job.Filename,
+			"error":    err.Error(),
+		})
+		return
+	}
+
+	p.chunkStore.DeleteChunks(job.ID)
+	job.TempPath = destPath
+
+	stage = model.JobStageDedup
+	job.Stage = &stage
+	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.2)
+	p.notifySubscribers(job)
+
+	f, err := os.Open(destPath)
+	if err != nil {
+		os.Remove(destPath)
+		p.uploadJobStore.Fail(job.ID, "cannot_open_assembled")
+		p.notifySubscribers(job)
+		p.failedTotal.Add(1)
+		return
+	}
+
+	mimeType := detectMimeTypeFromFile(f, job.Filename)
+	mediaType := detectMediaType(mimeType)
+
+	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
+		existing, _ := p.fileStore.FindByNameAndSize(job.UserID, job.Filename, job.SizeBytes)
+		if existing != nil {
+			os.Remove(destPath)
+			p.uploadJobStore.Skip(job.ID, "duplicate_name_size", existing.ID)
+			p.notifySubscribers(job)
+			p.skippedTotal.Add(1)
+			return
+		}
+	}
+
+	if !job.SkipNameSizeDedup {
+		existingHash, _ := p.fileStore.FindBySHA256(job.UserID, sha256Hash)
+		if existingHash != nil {
+			os.Remove(destPath)
+			p.uploadJobStore.Skip(job.ID, "duplicate_content", existingHash.ID)
+			p.notifySubscribers(job)
+			p.skippedTotal.Add(1)
+			return
+		}
+	}
+
+	p.finishJob(job, f, mimeType, mediaType, sha256Hash)
+}
+
+func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, mediaType model.MediaType, sha256Hash string) {
+	defer f.Close()
+
 	var exifData *model.ExifData
 	var now = time.Now().UTC()
 
 	if mediaType != model.MediaTypeFile {
-		stage = model.JobStageExif
+		stage := model.JobStageExif
 		job.Stage = &stage
 		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.3)
 		p.notifySubscribers(job)
 		exifData, _ = p.exifService.Extract(job.TempPath)
 	} else {
-		stage = model.JobStageStoring
+		stage := model.JobStageStoring
 		job.Stage = &stage
 		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.3)
 		p.notifySubscribers(job)
@@ -365,7 +446,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		}
 	}
 
-	stage = model.JobStageStoring
+	stage := model.JobStageStoring
 	job.Stage = &stage
 	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.5)
 	p.notifySubscribers(job)
@@ -377,7 +458,6 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	destSubdir := filepath.Join(job.UserID, filepath.Join(pathPrefix, yearMonth))
 	destDir := filepath.Join(p.cfg.OriginalsDir(), destSubdir)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		f.Close()
 		os.Remove(job.TempPath)
 		p.uploadJobStore.Fail(job.ID, "storage_error")
 		p.notifySubscribers(job)
@@ -394,7 +474,6 @@ func (p *Pool) processJob(job *model.UploadJob) {
 
 	destFile, err := os.Create(destPath)
 	if err != nil {
-		f.Close()
 		os.Remove(job.TempPath)
 		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
@@ -407,7 +486,6 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	}
 
 	if _, err := io.Copy(destFile, f); err != nil {
-		f.Close()
 		destFile.Close()
 		os.Remove(job.TempPath)
 		os.Remove(destPath)
@@ -420,7 +498,6 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		})
 		return
 	}
-	f.Close()
 	destFile.Close()
 
 	var takenAt *string

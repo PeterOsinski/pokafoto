@@ -23,9 +23,13 @@ func (s *UploadJobStore) Create(job *model.UploadJob) error {
 	job.CreatedAt = time.Now().UTC()
 	job.UpdatedAt = time.Now().UTC()
 
+	if job.UploadMode == "" {
+		job.UploadMode = model.UploadModeFull
+	}
+
 	_, err := s.db.Exec(
-		`INSERT INTO upload_jobs (id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		job.ID, job.BatchID, job.UserID, job.Filename, job.SizeBytes, job.TempPath, job.FolderID, boolToInt(job.SkipNameSizeDedup), string(job.Status), nil, job.Progress, nil, nil, nil, job.CreatedAt.Format(time.RFC3339), job.UpdatedAt.Format(time.RFC3339),
+		`INSERT INTO upload_jobs (id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.BatchID, job.UserID, job.Filename, job.SizeBytes, job.TempPath, job.FolderID, boolToInt(job.SkipNameSizeDedup), string(job.Status), nil, job.Progress, nil, nil, nil, string(job.UploadMode), job.ChunkSize, job.TotalChunks, job.ResumeToken, job.CreatedAt.Format(time.RFC3339), job.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("insert upload job: %w", err)
@@ -100,14 +104,17 @@ func isSQLiteBusy(err error) bool {
 
 func (s *UploadJobStore) FindByID(id string) (*model.UploadJob, error) {
 	job := &model.UploadJob{}
-	var stage, errorStr, reasonStr, fileID, folderID sql.NullString
+	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString
 	var createdAt, updatedAt string
 	var skipNameSizeDedup int
+	var uploadMode string
+	var chunkSize sql.NullInt64
+	var totalChunks sql.NullInt64
 
 	err := s.db.QueryRow(
-		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs WHERE id = ?`,
+		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE id = ?`,
 		id,
-	).Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &createdAt, &updatedAt)
+	).Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &uploadMode, &chunkSize, &totalChunks, &resumeToken, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -130,6 +137,18 @@ func (s *UploadJobStore) FindByID(id string) (*model.UploadJob, error) {
 	}
 	if folderID.Valid {
 		job.FolderID = &folderID.String
+	}
+	if resumeToken.Valid {
+		job.ResumeToken = &resumeToken.String
+	}
+	job.UploadMode = model.UploadMode(uploadMode)
+	if chunkSize.Valid {
+		cs := chunkSize.Int64
+		job.ChunkSize = &cs
+	}
+	if totalChunks.Valid {
+		tc := int(totalChunks.Int64)
+		job.TotalChunks = &tc
 	}
 	job.SkipNameSizeDedup = skipNameSizeDedup == 1
 	job.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
@@ -195,7 +214,7 @@ func (s *UploadJobStore) SetProcessing(id string) error {
 
 func (s *UploadJobStore) ListByBatch(batchID string) ([]*model.UploadJob, error) {
 	rows, err := s.db.Query(
-		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs WHERE batch_id = ? ORDER BY created_at`,
+		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE batch_id = ? ORDER BY created_at`,
 		batchID,
 	)
 	if err != nil {
@@ -236,7 +255,7 @@ func (s *UploadJobStore) RecoverStuckJobs() (int64, error) {
 func (s *UploadJobStore) ListActiveByUser(userID string) ([]*model.UploadJob, error) {
 	cutoff := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
 	rows, err := s.db.Query(
-		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs WHERE user_id = ? AND (status IN ('queued','processing') OR (status IN ('completed','skipped','failed') AND updated_at > ?)) ORDER BY created_at DESC`,
+		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE user_id = ? AND (status IN ('queued','processing') OR (status IN ('completed','skipped','failed') AND updated_at > ?)) ORDER BY created_at DESC`,
 		userID, cutoff,
 	)
 	if err != nil {
@@ -275,7 +294,7 @@ func (s *UploadJobStore) ListAll(limit, offset int, statusFilter string) ([]*mod
 		return nil, 0, fmt.Errorf("count upload jobs: %w", err)
 	}
 
-	dataQuery := `SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, created_at, updated_at FROM upload_jobs`
+	dataQuery := `SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs`
 	dataArgs := []interface{}{}
 
 	if statusFilter != "" {
@@ -346,17 +365,86 @@ func (s *UploadJobStore) Requeue(id string) error {
 	return nil
 }
 
+func (s *UploadJobStore) FindByResumeToken(token string) (*model.UploadJob, error) {
+	job := &model.UploadJob{}
+	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString
+	var createdAt, updatedAt string
+	var skipNameSizeDedup int
+	var uploadMode string
+	var chunkSize sql.NullInt64
+	var totalChunks sql.NullInt64
+
+	err := s.db.QueryRow(
+		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE resume_token = ?`,
+		token,
+	).Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &uploadMode, &chunkSize, &totalChunks, &resumeToken, &createdAt, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find upload job by resume token: %w", err)
+	}
+
+	if stage.Valid {
+		s := model.JobStage(stage.String)
+		job.Stage = &s
+	}
+	if errorStr.Valid {
+		job.Error = &errorStr.String
+	}
+	if reasonStr.Valid {
+		job.Reason = &reasonStr.String
+	}
+	if fileID.Valid {
+		job.FileID = &fileID.String
+	}
+	if folderID.Valid {
+		job.FolderID = &folderID.String
+	}
+	if resumeToken.Valid {
+		job.ResumeToken = &resumeToken.String
+	}
+	job.UploadMode = model.UploadMode(uploadMode)
+	if chunkSize.Valid {
+		cs := chunkSize.Int64
+		job.ChunkSize = &cs
+	}
+	if totalChunks.Valid {
+		tc := int(totalChunks.Int64)
+		job.TotalChunks = &tc
+	}
+	job.SkipNameSizeDedup = skipNameSizeDedup == 1
+	job.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	job.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+
+	return job, nil
+}
+
+func (s *UploadJobStore) CompleteChunked(id string, totalChunks int) error {
+	_, err := s.db.Exec(
+		`UPDATE upload_jobs SET total_chunks = ?, updated_at = ? WHERE id = ?`,
+		totalChunks, time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("complete chunked upload: %w", err)
+	}
+	return nil
+}
+
 type scannableRow interface {
 	Scan(dest ...interface{}) error
 }
 
 func (s *UploadJobStore) scanJob(row scannableRow) (*model.UploadJob, error) {
 	job := &model.UploadJob{}
-	var stage, errorStr, reasonStr, fileID, folderID sql.NullString
+	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString
 	var createdAt, updatedAt string
 	var skipNameSizeDedup int
+	var uploadMode string
+	var chunkSize sql.NullInt64
+	var totalChunks sql.NullInt64
 
-	err := row.Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &createdAt, &updatedAt)
+	err := row.Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &uploadMode, &chunkSize, &totalChunks, &resumeToken, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("scan upload job: %w", err)
 	}
@@ -376,6 +464,18 @@ func (s *UploadJobStore) scanJob(row scannableRow) (*model.UploadJob, error) {
 	}
 	if folderID.Valid {
 		job.FolderID = &folderID.String
+	}
+	if resumeToken.Valid {
+		job.ResumeToken = &resumeToken.String
+	}
+	job.UploadMode = model.UploadMode(uploadMode)
+	if chunkSize.Valid {
+		cs := chunkSize.Int64
+		job.ChunkSize = &cs
+	}
+	if totalChunks.Valid {
+		tc := int(totalChunks.Int64)
+		job.TotalChunks = &tc
 	}
 	job.SkipNameSizeDedup = skipNameSizeDedup == 1
 	job.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)

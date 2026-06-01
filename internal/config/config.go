@@ -50,9 +50,13 @@ type MediaConfig struct {
 }
 
 type UploadConfig struct {
-	MaxFileSizeMB     int64    `yaml:"max_file_size_mb"`
-	ConcurrentWorkers int      `yaml:"concurrent_workers"`
-	AllowedExtensions []string `yaml:"allowed_extensions"`
+	MaxFileSizeMB         int64    `yaml:"max_file_size_mb"`
+	ConcurrentWorkers     int      `yaml:"concurrent_workers"`
+	AllowedExtensions     []string `yaml:"allowed_extensions"`
+	ChunkSizeMB           int      `yaml:"chunk_size_mb"`
+	ChunkCleanupHours     int      `yaml:"chunk_cleanup_hours"`
+	MaxChunkUploadAgeHours int     `yaml:"max_chunk_upload_age_hours"`
+	ChunkThresholdMB      int      `yaml:"chunk_threshold_mb"`
 }
 
 type MapConfig struct {
@@ -125,9 +129,13 @@ func DefaultConfig() *Config {
 			},
 		},
 		Upload: UploadConfig{
-			MaxFileSizeMB:     10240,
-			ConcurrentWorkers: 4,
-			AllowedExtensions: []string{"*"},
+			MaxFileSizeMB:         10240,
+			ConcurrentWorkers:     4,
+			AllowedExtensions:     []string{"*"},
+			ChunkSizeMB:           5,
+			ChunkCleanupHours:     24,
+			MaxChunkUploadAgeHours: 48,
+			ChunkThresholdMB:      50,
 		},
 		Map: MapConfig{
 			TileSource:       "https://tile.openstreetmap.org/{z}/{x}/{y}.png",

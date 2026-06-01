@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
+import { useChunkedUploadStore } from './chunkedUpload'
 import api from '../api/client'
 
 const MAX_CONCURRENT_UPLOADS = 5
@@ -180,6 +181,28 @@ export const useUploadStore = defineStore('upload', () => {
   async function uploadFiles(fileList: FileList | File[], targetFolderId: string | null, skipNameSizeDedup: boolean) {
     uploadError.value = ''
     const allFiles = Array.from(fileList)
+
+    const chunkedStore = useChunkedUploadStore()
+    const smallFiles: File[] = []
+    const largeFilePromises: Promise<any>[] = []
+
+    for (const file of allFiles) {
+      if (chunkedStore.shouldUseChunked(file)) {
+        largeFilePromises.push(
+          chunkedStore.startChunkedUpload(file, targetFolderId, skipNameSizeDedup),
+        )
+      } else {
+        smallFiles.push(file)
+      }
+    }
+
+    if (smallFiles.length === 0) {
+      if (largeFilePromises.length > 0) {
+        await Promise.allSettled(largeFilePromises)
+      }
+      return
+    }
+
     const fileMap = new Map<string, File>()
     const uploadJobs: UploadJob[] = []
 

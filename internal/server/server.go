@@ -27,6 +27,7 @@ type Server struct {
 	thumbnailStore    *store.ThumbnailStore
 	geoStore          *store.GeoStore
 	uploadJobStore    *store.UploadJobStore
+	chunkStore        *store.ChunkStore
 	settingStore      *store.SettingStore
 	albumStore        *store.AlbumStore
 	albumItemStore    *store.AlbumItemStore
@@ -54,8 +55,9 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		exifStore:       store.NewExifStore(db),
 		thumbnailStore:  store.NewThumbnailStore(db),
 		geoStore:        store.NewGeoStore(db),
-		uploadJobStore:  store.NewUploadJobStore(db),
-		settingStore:    store.NewSettingStore(db),
+		uploadJobStore:   store.NewUploadJobStore(db),
+		chunkStore:       store.NewChunkStore(db),
+		settingStore:     store.NewSettingStore(db),
 		albumStore:      store.NewAlbumStore(db),
 		albumItemStore:  store.NewAlbumItemStore(db),
 		albumShareStore: store.NewAlbumShareStore(db),
@@ -71,7 +73,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		storageService, _ = service.NewStorageService(&config.Config{}) // disabled client
 	}
 
-	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore, s.eventRecorder)
+	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore, s.chunkStore, s.eventRecorder)
 	s.storageService = storageService
 
 	s.s3DeletionPool = NewS3DeletionPool(storageService)
@@ -97,6 +99,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	go NewCacheEvictor(cfg, s.eventRecorder).Start()
 	go s.startTrashCleanup()
 	go s.startEventRetention()
+	go s.startChunkCleanup()
 
 	s.setupRouter()
 	return s
@@ -145,6 +148,10 @@ func (s *Server) setupRouter() {
 			r.Get("/auth/me", s.handleMe)
 
 			r.Post("/upload", s.handleUpload)
+			r.Post("/upload/chunk", s.handleChunkUpload)
+			r.Head("/upload/chunk/{resumeToken}", s.handleChunkUploadResume)
+			r.Get("/upload/chunk/{resumeToken}", s.handleChunkUploadResume)
+			r.Post("/upload/chunk/{resumeToken}/complete", s.handleChunkUploadComplete)
 			r.Post("/upload/check", s.handleUploadCheck)
 			r.Get("/upload/{batchID}/status", s.handleUploadStatus)
 			r.Get("/upload/active", s.handleUploadActiveJobs)
