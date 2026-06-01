@@ -6,6 +6,16 @@
   >
     <span class="text-sm font-medium">{{ count }} selected</span>
     <div class="flex items-center gap-2">
+      <button
+        v-if="count < totalFiles"
+        @click="$emit('selectAll')"
+        class="px-3 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
+      >
+        Select All
+      </button>
+      <button @click="$emit('deselectAll')" class="px-3 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors">
+        Deselect All
+      </button>
       <button @click="$emit('delete')" class="px-3 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors">
         Delete
       </button>
@@ -25,6 +35,7 @@
 <script setup lang="ts">
 defineProps<{
   count: number
+  totalFiles: number
 }>()
 
 defineEmits<{
@@ -32,5 +43,6 @@ defineEmits<{
   move: []
   copy: []
   deselectAll: []
+  selectAll: []
 }>()
 </script>

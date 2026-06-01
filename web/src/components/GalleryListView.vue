@@ -26,24 +26,26 @@
           <span class="text-white text-xs font-bold">&#10003;</span>
         </button>
       </div>
-      <div class="py-2 px-3 w-12 shrink-0 cursor-pointer" @click="$emit('open', i)">
+      <div class="py-2 px-3 shrink-0 flex items-center" @click="$emit('open', i)">
         <img
           v-if="file.thumbnails?.sm?.url"
           :src="file.thumbnails.sm.url"
           :alt="file.originalName"
-          class="w-10 h-10 rounded object-cover"
+          class="rounded object-cover"
+          :style="{ width: listThumbSize + 'px', height: listThumbSize + 'px' }"
           loading="lazy"
         />
-        <div v-else-if="file.mediaType === 'file'" class="w-10 h-10 rounded flex flex-col items-center justify-center text-[var(--text-secondary)]" style="background: var(--bg-elevated)">
+        <div v-else-if="file.mediaType === 'file'" class="rounded flex flex-col items-center justify-center text-[var(--text-secondary)]" :style="{ width: listThumbSize + 'px', height: listThumbSize + 'px', background: 'var(--bg-elevated)' }">
           <span class="text-sm">&#128196;</span>
           <span class="text-[10px] font-mono opacity-60 leading-none">{{ fileExtension(file) }}</span>
         </div>
-        <div v-else class="w-10 h-10 rounded flex items-center justify-center text-lg" style="background: var(--bg-elevated)">
+        <div v-else class="rounded flex items-center justify-center text-lg" :style="{ width: listThumbSize + 'px', height: listThumbSize + 'px', background: 'var(--bg-elevated)' }">
           {{ file.mediaType === 'video' ? '&#9654;' : '&#128196;' }}
         </div>
       </div>
-      <div class="py-2 px-3 font-medium truncate flex-1 min-w-0 cursor-pointer" @click="$emit('open', i)">{{ file.originalName }}</div>
-      <div class="py-2 px-3 text-[var(--text-secondary)] hidden sm:block whitespace-nowrap shrink-0 cursor-pointer" @click="$emit('open', i)">{{ formatDate(file.takenAt) }}</div>
+      <div class="py-2 px-3 font-medium truncate flex-1 min-w-0 cursor-pointer text-left" @click="$emit('open', i)">{{ file.originalName }}</div>
+      <div class="py-2 px-3 text-[var(--text-secondary)] hidden sm:block whitespace-nowrap shrink-0 cursor-pointer text-xs" @click="$emit('open', i)">{{ formatDate(file.takenAt) }}</div>
+      <div class="py-2 px-3 text-[var(--text-secondary)] hidden md:block whitespace-nowrap shrink-0 cursor-pointer text-xs opacity-70" @click="$emit('open', i)">{{ formatDate(file.createdAt) }}</div>
       <div class="py-2 px-3 hidden md:block shrink-0 cursor-pointer" @click="$emit('open', i)">
         <span class="px-2 py-0.5 rounded text-xs" :class="typeBadgeClass(file.mediaType)">
           {{ file.mediaType }}
@@ -55,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -67,15 +70,17 @@ interface FileItem {
   mediaType: string
   durationSec?: number
   takenAt?: string
+  createdAt?: string
   folder_id?: string | null
   thumbnails?: {
     sm?: { url: string; width: number; height: number }
   }
 }
 
-defineProps<{
+const props = defineProps<{
   files: FileItem[]
   thumbSize?: string
+  thumbSizePx: number
   selectedIds: Set<string>
   selectionEnabled: boolean
 }>()
@@ -85,6 +90,13 @@ defineEmits<{
   deselect: [id: string]
   open: [index: number]
 }>()
+
+const listThumbSize = computed(() => {
+  const t = props.thumbSizePx
+  if (t <= 40) return 20
+  if (t >= 400) return 80
+  return Math.round(20 + (t - 40) / 6)
+})
 
 function formatDate(takenAt?: string): string {
   if (!takenAt) return ''

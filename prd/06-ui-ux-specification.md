@@ -136,11 +136,12 @@ The **"All folders"** toggle, when enabled, includes files from all user-created
 **Selection & Batch Operations:**
 - Checkboxes appear on thumbnails when navigating the gallery (always visible when any file is selected, hover-only otherwise)
 - Click to select/deselect individual files
-- Shift+click selects a range between two click positions
+- Shift+click selects a range between two click positions (works across virtual scroll)
 - Selected files show a blue accent border with checkmark
+- **Select All / Deselect All** buttons appear in the ActionBar when files are selected
 - **Action Bar** (sticky, appears when files are selected):
   ```
-  [N selected]  [Delete] [Move] [Copy]  [Clear]
+  [N selected]  [Select All] [Delete] [Move] [Copy]  [Clear]
   ```
 - Delete key triggers batch delete confirmation dialog
 - Move/Copy buttons open a **Folder Picker Dialog** — modal with folder tree and inline "New Folder" creation
@@ -153,6 +154,7 @@ The **"All folders"** toggle, when enabled, includes files from all user-created
 - **Inline creation**: text input + Create/Cancel buttons
 - Root-level folders have no parent; nested folders use `parent_id` self-reference
 - File counts aggregate recursively (parent shows total including children)
+- **Upload is disabled at root level** — the Upload button is only visible when browsing inside a specific folder. Root-level uploads should go through the Gallery view.
 
 **Tiles layout (default):**
 - Top-level shows folder cards with name, file count, folder icon in a responsive grid
@@ -161,10 +163,12 @@ The **"All folders"** toggle, when enabled, includes files from all user-created
 - Files render as thumbnails in a responsive CSS grid below the folder cards
 
 **List layout:**
-- Folder entries appear as rows at the top of a list view, showing folder emoji + name + file count
-- Files appear below the folder entries in a scrollable virtual list with thumbnail, name, date, type, and size columns
+- Folder entries appear as rows at the top of a list view, showing folder emoji + name + file count + **creation date**
+- File and folder names are **left-aligned**
+- Files appear below the folder entries in a scrollable virtual list with thumbnail, name, **taken date**, **upload date**, type, and size columns
 - Click on a folder row navigates into it; click on a file row opens it in Lightbox or FileViewer
 - At root level, all top-level folders appear in the list; inside a folder, immediate subfolders appear first
+- **Thumbnail size in the list row respects the thumbnail slider**
 
 **Calendar layout:**
 - Files are grouped by date taken with sticky date headers, matching the Gallery's Grouped by Day view
@@ -196,6 +200,64 @@ The **"All folders"** toggle, when enabled, includes files from all user-created
 - **Touch**: Swipe left/right for prev/next, pinch to zoom, double-tap to zoom 2x
 - **Mouse**: Click sides for prev/next, scroll to zoom
 - **EXIF panel**: Slides up from bottom on mobile, side panel on desktop
+- **Preview mode toggle**: Users can switch between Lightbox (full-screen overlay) and Sidebar Preview (right sidebar with full EXIF) via a toggle control
+
+### 6.3.8 Sidebar Preview Mode
+
+```
+┌──────────────────────────────────────┬──────────────────────────┐
+│  Main Content Area (files list)      │ ║  Sidebar Preview      │
+│                                      │ ║                        │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐       │ ║  [✕] [< Prev] [Next >]│
+│  │    │ │    │ │    │ │    │       │ ║                        │
+│  └────┘ └────┘ └────┘ └────┘       │ ║  ┌──────────────────┐  │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐       │ ║  │                  │  │
+│  │    │ │    │ │    │ │    │       │ ║  │  Preview Image   │  │
+│  └────┘ └────┘ └────┘ └────┘       │ ║  │                  │  │
+│                                      │ ║  └──────────────────┘  │
+│                                      │ ║                        │
+│                                      │ ║  📷 Camera & Lens      │
+│                                      │ ║  iPhone 15 Pro        │
+│                                      │ ║  Lens: 24mm f/1.78    │
+│                                      │ ║                        │
+│                                      │ ║  ⚙️ Settings           │
+│                                      │ ║  1/2500s · ISO 80     │
+│                                      │ ║  f/1.78 · 6.8mm       │
+│                                      │ ║                        │
+│                                      │ ║  📍 Location           │
+│                                      │ ║  52.2297, 21.0122     │
+│                                      │ ║                        │
+│                                      │ ║  📁 File Info          │
+│                                      │ ║  IMG_1234.jpg         │
+│                                      │ ║  12.5 MB · 4032×3024 │
+│                                      │ ║                        │
+│                                      │ ║  📋 Raw EXIF JSON      │
+│                                      │ ║  [Expand/Collapse]    │
+│                                      │ ║                        │
+│                                      │ ║  [⬇ Download]          │
+└──────────────────────────────────────┴──────────────────────────┘
+```
+
+**Layout:** Resizable right sidebar panel (default 400px, min 300px, max 70vw) overlaid on or beside the main content. Drag handle on left edge (4px, `col-resize` cursor). Width is persisted in localStorage.
+
+**EXIF display sections (when file is media):**
+1. Camera & Lens: make, model, lens make, lens model
+2. Settings: focal length, aperture, shutter speed, ISO, date taken
+3. Location: GPS coordinates with OpenStreetMap link, altitude
+4. File Info: original name, size, MIME type, dimensions, truncated SHA256
+5. Technical: orientation, color space, flash, software
+6. Raw EXIF JSON: collapsible block showing formatted `raw_json` dump
+
+**For non-media files:** Shows file metadata only, with download button.
+
+**For videos:** Embedded VideoPlayer in the preview area, EXIF sections below.
+
+**Toggle:** A preview mode toggle is available in the sort/filter bar or settings area. Persisted in localStorage via `drive:previewMode` as `'lightbox'` (default) or `'sidebar'`.
+
+**Interactions (same as Lightbox for preview area):**
+- **Keyboard**: ← → for prev/next, Esc to close sidebar
+- **Touch**: Swipe left/right for prev/next
+- **Close**: Click ✕ or Esc returns to file list with no preview selected
 
 ### 6.3.3 Timeline View
 

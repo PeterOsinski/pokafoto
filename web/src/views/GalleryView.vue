@@ -2,10 +2,12 @@
   <div>
     <ActionBar
       :count="selectedIds.size"
+      :totalFiles="files.length"
       @delete="showDeleteConfirm = true"
       @move="startMove"
       @copy="startCopy"
       @deselectAll="clearSelection"
+      @selectAll="selectAllFiles"
     />
 
     <FilterBar
@@ -14,6 +16,8 @@
       v-model:layout="settings.layout.value"
       v-model:thumbLevel="settings.thumbLevel.value"
       v-model:includeAllFolders="includeAllFolders"
+      :previewMode="previewMode"
+      @togglePreviewMode="togglePreviewMode"
     />
 
     <div class="flex items-center gap-2 mb-4">
@@ -42,6 +46,7 @@
     <GalleryListView
       v-else-if="layout === 'list'"
       :files="files"
+      :thumbSizePx="settings.thumbSizePx.value"
       :selectedIds="selectedIds"
       :selectionEnabled="selectionEnabled"
       @select="toggleSelect"
@@ -65,6 +70,19 @@
     </div>
 
     <Lightbox
+      v-if="previewMode !== 'sidebar'"
+      :file="lightboxFile"
+      :index="lightboxIndex"
+      :total="files.length"
+      :hasPrev="lightboxIndex > 0"
+      :hasNext="lightboxIndex < files.length - 1"
+      @close="closeLightbox"
+      @prev="goPrev"
+      @next="goNext"
+    />
+
+    <PreviewSidebar
+      v-if="previewMode === 'sidebar' && lightboxFile"
       :file="lightboxFile"
       :index="lightboxIndex"
       :total="files.length"
@@ -121,6 +139,7 @@ import { useRouteQuery } from '../composables/useRouteQuery'
 import { useLocalSettings } from '../composables/useLocalSettings'
 import Lightbox from '../components/Lightbox.vue'
 import FileViewer from '../components/FileViewer.vue'
+import PreviewSidebar from '../components/PreviewSidebar.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
 import GalleryListView from '../components/GalleryListView.vue'
 import GalleryGroupedView from '../components/GalleryGroupedView.vue'
@@ -139,6 +158,7 @@ interface FileItem {
   mediaType: string
   durationSec?: number
   takenAt?: string
+  createdAt?: string
   folder_id?: string | null
   thumbnails?: {
     sm: { url: string; width: number; height: number }
@@ -168,6 +188,7 @@ const settings = useLocalSettings()
 const currentPath = computed(() => pathQuery.value || null)
 const layout = computed(() => settings.layout.value)
 const sortBy = computed(() => settings.sortBy.value)
+const previewMode = computed(() => settings.previewMode.value)
 const mediaType = computed({
   get: () => mediaQuery.value,
   set: (v: string) => { mediaQuery.value = v || null },
@@ -235,10 +256,15 @@ async function loadFiles(reset = true) {
 }
 
 function handleFileClick(index: number) {
-  if (isShiftHeld()) {
+  if (isShiftHeld() && lastClickedIndex.value >= 0) {
     selectRange(index)
   } else {
-    openLightbox(index)
+    lastClickedIndex.value = index
+    if (isShiftHeld()) {
+      toggleSelect(files.value[index].id)
+    } else {
+      openLightbox(index)
+    }
   }
 }
 
@@ -254,6 +280,14 @@ function toggleSelect(id: string) {
 
 function clearSelection() {
   selectedIds.value = new Set()
+}
+
+function selectAllFiles() {
+  selectedIds.value = new Set(files.value.map(f => f.id))
+}
+
+function togglePreviewMode() {
+  settings.previewMode.value = settings.previewMode.value === 'sidebar' ? 'lightbox' : 'sidebar'
 }
 
 function startMove() {
@@ -326,16 +360,12 @@ function selectRange(index: number) {
 }
 
 function openLightbox(index: number) {
-  if (isShiftHeld()) {
-    selectRange(index)
-  } else {
-    const file = files.value[index]
-    if (file) {
-      if (file.mediaType === 'file') {
-        fileViewerFile.value = file
-      } else {
-        photoQuery.value = file.id
-      }
+  const file = files.value[index]
+  if (file) {
+    if (file.mediaType === 'file') {
+      fileViewerFile.value = file
+    } else {
+      photoQuery.value = file.id
     }
   }
 }

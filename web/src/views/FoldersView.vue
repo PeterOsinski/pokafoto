@@ -2,10 +2,12 @@
   <div>
     <ActionBar
       :count="selectedIds.size"
+      :totalFiles="files.length"
       @delete="showDeleteConfirm = true"
       @move="startMove"
       @copy="startCopy"
       @deselectAll="clearSelection"
+      @selectAll="selectAllFiles"
     />
 
     <div class="flex items-center justify-between mb-4">
@@ -20,7 +22,7 @@
         <Breadcrumbs :chain="folderChain" @navigate="navigateTo" />
       </div>
       <div class="flex items-center gap-2">
-        <InlineUpload :folderId="currentFolderId" label="Upload" />
+        <InlineUpload v-if="currentFolderId" :folderId="currentFolderId" label="Upload" />
         <button
           @click="showCreate = true"
           class="px-3 py-1 rounded text-sm text-white"
@@ -77,6 +79,17 @@
         />
         <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 700">L</span>
       </div>
+
+      <button
+        @click="togglePreviewMode"
+        class="flex items-center gap-1 px-3 py-1 rounded text-sm"
+        :style="{ background: 'var(--bg-elevated)', color: settings.previewMode.value === 'sidebar' ? 'var(--accent)' : 'var(--text-secondary)', border: '1px solid ' + (settings.previewMode.value === 'sidebar' ? 'var(--accent)' : 'var(--border-color)') }"
+        :title="settings.previewMode.value === 'sidebar' ? 'Switch to lightbox preview' : 'Switch to sidebar preview'"
+      >
+        <span v-if="settings.previewMode.value === 'sidebar'">&#9638;</span>
+        <span v-else>&#9641;</span>
+        {{ settings.previewMode.value === 'sidebar' ? 'Sidebar' : 'Preview' }}
+      </button>
     </div>
 
     <div v-if="!currentFolderId && folders.children?.length && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
@@ -128,7 +141,8 @@
           style="height: 52px"
         >
           <span class="text-xl w-10 shrink-0">&#128193;</span>
-          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate">{{ child.folder.name }}</span>
+          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">{{ child.folder.name }}</span>
+          <span class="text-xs text-[var(--text-secondary)] shrink-0 hidden sm:block mr-4">{{ formatFolderDate(child.folder.created_at) }}</span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
         </button>
       </div>
@@ -146,6 +160,7 @@
       <GalleryListView
         v-else-if="settings.layout.value === 'list'"
         :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
         :selectedIds="selectedIds"
         :selectionEnabled="selectionEnabled"
         @select="toggleSelect"
@@ -169,6 +184,19 @@
     <div ref="sentinel" class="h-4"></div>
 
     <Lightbox
+      v-if="settings.previewMode.value !== 'sidebar'"
+      :file="lightboxFile"
+      :index="lightboxIndex"
+      :total="files.length"
+      :hasPrev="lightboxIndex > 0"
+      :hasNext="lightboxIndex < files.length - 1"
+      @close="closeLightbox"
+      @prev="goPrev"
+      @next="goNext"
+    />
+
+    <PreviewSidebar
+      v-if="settings.previewMode.value === 'sidebar' && lightboxFile"
       :file="lightboxFile"
       :index="lightboxIndex"
       :total="files.length"
@@ -225,6 +253,7 @@ import { useRouteQuery } from '../composables/useRouteQuery'
 import { useLocalSettings } from '../composables/useLocalSettings'
 import Lightbox from '../components/Lightbox.vue'
 import FileViewer from '../components/FileViewer.vue'
+import PreviewSidebar from '../components/PreviewSidebar.vue'
 import GalleryTileView from '../components/GalleryTileView.vue'
 import GalleryListView from '../components/GalleryListView.vue'
 import GalleryGroupedView from '../components/GalleryGroupedView.vue'
@@ -243,6 +272,7 @@ interface FileItem {
   mediaType: string
   durationSec?: number
   takenAt?: string
+  createdAt?: string
   folder_id?: string | null
   thumbnails?: any
 }
@@ -251,6 +281,7 @@ interface FolderEntry {
   id: string
   name: string
   parent_id: string | null
+  created_at: string
 }
 
 interface FolderTreeNode {
@@ -385,10 +416,15 @@ async function loadFiles(reset = true) {
 }
 
 function handleFileClick(index: number) {
-  if (isShiftHeld()) {
+  if (isShiftHeld() && lastClickedIndex.value >= 0) {
     selectRange(index)
   } else {
-    openLightbox(index)
+    lastClickedIndex.value = index
+    if (isShiftHeld()) {
+      toggleSelect(files.value[index].id)
+    } else {
+      openLightbox(index)
+    }
   }
 }
 
@@ -404,6 +440,10 @@ function toggleSelect(id: string) {
 
 function clearSelection() {
   selectedIds.value = new Set()
+}
+
+function selectAllFiles() {
+  selectedIds.value = new Set(files.value.map(f => f.id))
 }
 
 function startMove() {
@@ -478,16 +518,12 @@ function selectRange(index: number) {
 }
 
 function openLightbox(index: number) {
-  if (isShiftHeld()) {
-    selectRange(index)
-  } else {
-    const file = files.value[index]
-    if (file) {
-      if (file.mediaType === 'file') {
-        fileViewerFile.value = file
-      } else {
-        photoQuery.value = file.id
-      }
+  const file = files.value[index]
+  if (file) {
+    if (file.mediaType === 'file') {
+      fileViewerFile.value = file
+    } else {
+      photoQuery.value = file.id
     }
   }
 }
@@ -533,6 +569,19 @@ function findParent(nodes: FolderTreeNode[], targetId: string): string | null {
     }
   }
   return null
+}
+
+function formatFolderDate(dateStr: string): string {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function togglePreviewMode() {
+  settings.previewMode.value = settings.previewMode.value === 'sidebar' ? 'lightbox' : 'sidebar'
 }
 
 async function createFolder() {

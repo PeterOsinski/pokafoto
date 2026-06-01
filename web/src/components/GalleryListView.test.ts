@@ -21,12 +21,12 @@ function makeFile(id: string, overrides: Record<string, any> = {}) {
 describe('GalleryListView', () => {
   it('is a valid component with files', () => {
     const files = [makeFile('1'), makeFile('2'), makeFile('3')]
-    const wrapper = mount(GalleryListView, { props: { files, selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mount(GalleryListView, { props: { files, thumbSizePx: 100, selectedIds: new Set<string>(), selectionEnabled: true } })
     expect(wrapper.exists()).toBe(true)
   })
 
   it('handles empty files array', () => {
-    const wrapper = mount(GalleryListView, { props: { files: [], selectedIds: new Set<string>(), selectionEnabled: true } })
+    const wrapper = mount(GalleryListView, { props: { files: [], thumbSizePx: 100, selectedIds: new Set<string>(), selectionEnabled: true } })
     expect(wrapper.exists()).toBe(true)
   })
 })

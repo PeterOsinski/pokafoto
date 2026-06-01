@@ -112,6 +112,11 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Swipe navigation | Touch swipe left/right for prev/next | Composable | ❌ Basic touch handlers exist but no swipe gestures |
 | Download button | Single file download + batch ZIP | `web/src/components/DownloadButton.vue` | ❌ Download button is inline in Lightbox, no dedicated component |
 | Delete with confirmation | Soft delete with undo toast | `web/src/components/DeleteButton.vue` | ❌ No dedicated component; batch delete via ActionBar only |
+| Sidebar preview mode | Resizable right sidebar with full EXIF + raw JSON, toggleable with lightbox | `web/src/components/PreviewSidebar.vue` | ⚠️ In progress |
+| Select all/deselect all | Select all loaded files or deselect all from ActionBar | ActionBar, GalleryView, FoldersView | ⚠️ In progress |
+| Shift+click across virtual scroll | Range selection works correctly with RecycleScroller/DynamicScroller | GalleryListView, GalleryTileView, GalleryGroupedView | ⚠️ In progress |
+| List view improvements | Left-aligned names, both upload+taken dates, folder creation dates, thumbnail slider in list view | GalleryListView, FoldersView | ⚠️ In progress |
+| Disable root upload in folders | No upload button when browsing root in FoldersView | FoldersView | ⚠️ In progress |
 
 ### Week 7: Timeline & Map Views — ⚠️ Partial
 

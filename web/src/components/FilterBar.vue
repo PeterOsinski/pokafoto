@@ -52,17 +52,29 @@
       />
       <span :class="includeAllFolders ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'">All folders</span>
     </label>
+
+    <button
+      @click="$emit('togglePreviewMode')"
+      class="flex items-center gap-1 px-3 py-1 rounded text-sm"
+      :style="{ background: 'var(--bg-elevated)', color: previewMode === 'sidebar' ? 'var(--accent)' : 'var(--text-secondary)', border: '1px solid ' + (previewMode === 'sidebar' ? 'var(--accent)' : 'var(--border-color)') }"
+      :title="previewMode === 'sidebar' ? 'Switch to lightbox preview' : 'Switch to sidebar preview'"
+    >
+      <span v-if="previewMode === 'sidebar'">&#9638;</span>
+      <span v-else>&#9641;</span>
+      {{ previewMode === 'sidebar' ? 'Sidebar' : 'Preview' }}
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{ mediaType: string; sortBy: string; layout: string; thumbLevel: number; includeAllFolders: boolean }>()
+defineProps<{ mediaType: string; sortBy: string; layout: string; thumbLevel: number; includeAllFolders: boolean; previewMode: string }>()
 const emit = defineEmits<{
   'update:mediaType': [value: string]
   'update:sortBy': [value: string]
   'update:layout': [value: string]
   'update:thumbLevel': [value: number]
   'update:includeAllFolders': [value: boolean]
+  togglePreviewMode: []
 }>()
 
 const mediaOptions = [
