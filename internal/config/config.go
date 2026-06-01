@@ -137,7 +137,7 @@ func DefaultConfig() *Config {
 		Backup: BackupConfig{
 			Enabled:       false,
 			IntervalH:     24,
-			RetentionDays: 7,
+			RetentionDays: 0,
 		},
 	}
 }
@@ -199,7 +199,7 @@ func Load() *Config {
 		}
 	}
 	if v := os.Getenv("DRIVE_BACKUP_RETENTION_DAYS"); v != "" {
-		if d, err := strconv.Atoi(v); err == nil && d > 0 {
+		if d, err := strconv.Atoi(v); err == nil && d >= 0 {
 			cfg.Backup.RetentionDays = d
 		}
 	}

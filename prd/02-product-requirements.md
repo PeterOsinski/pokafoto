@@ -225,7 +225,7 @@ Upon startup, if `backup.enabled: true` and S3 is available:
 1. The system creates a consistent SQLite snapshot via `VACUUM INTO`
 2. The snapshot is uploaded to S3 under `backups/database/drive-backup-<timestamp>.db`
 3. Each backup run is recorded as a system_events row (backup_success/backup_failure/pruned)
-4. Old backups are pruned according to `backup.retention_days`
+4. Old backups are pruned according to `backup.retention_days` (0 = keep all backups forever)
 5. Backups run automatically on the configured `backup.interval_h` schedule
 6. Admins can view backup status and trigger manual backups from the Admin Panel
 

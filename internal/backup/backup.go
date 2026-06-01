@@ -157,6 +157,10 @@ func (s *Scheduler) RunBackup() {
 }
 
 func (s *Scheduler) pruneOldBackups() {
+	if s.cfg.Backup.RetentionDays <= 0 {
+		return
+	}
+
 	keys, err := s.storage.ListObjects("backups/database/")
 	if err != nil {
 		slog.Warn("backup retention: failed to list S3 objects", "error", err)

@@ -156,8 +156,8 @@ func TestConfig_BackupDefaults_shouldBeDisabled(t *testing.T) {
 	if cfg.Backup.IntervalH != 24 {
 		t.Errorf("expected interval 24, got %d", cfg.Backup.IntervalH)
 	}
-	if cfg.Backup.RetentionDays != 7 {
-		t.Errorf("expected retention 7 days, got %d", cfg.Backup.RetentionDays)
+	if cfg.Backup.RetentionDays != 0 {
+		t.Errorf("expected retention 0 (no expiration), got %d", cfg.Backup.RetentionDays)
 	}
 }
 

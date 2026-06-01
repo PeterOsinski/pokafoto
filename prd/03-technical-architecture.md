@@ -328,7 +328,7 @@ map:
 backup:
   enabled: false                    # Set true to enable auto-backup to S3
   interval_h: 24                    # Hours between backups
-  retention_days: 7                 # Days to keep backups on S3
+  retention_days: 0                 # 0 = no expiration, N = expire after N days
 
 ---
 

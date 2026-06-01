@@ -119,3 +119,17 @@ func TestBackup_LastResult_initialNil(t *testing.T) {
 		t.Error("expected nil last result before any backup")
 	}
 }
+
+func TestBackup_PruneOldBackups_noRetention_skipsPruning(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Backup.RetentionDays = 0
+
+	db := store.OpenTestDB(t)
+	defer db.Close()
+
+	storage, _ := service.NewStorageService(cfg)
+	eventRecorder := service.NewEventRecorder(db)
+
+	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched.pruneOldBackups()
+}
