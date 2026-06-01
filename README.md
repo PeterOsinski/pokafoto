@@ -61,6 +61,9 @@ All configuration is via environment variables.
 | `DRIVE_S3_ACCESS_KEY` | — | S3 access key |
 | `DRIVE_S3_SECRET_KEY` | — | S3 secret key |
 | `DRIVE_S3_REGION` | — | S3 region |
+| `DRIVE_BACKUP_ENABLED` | `false` | Enable automated SQLite backup to S3 |
+| `DRIVE_BACKUP_INTERVAL_H` | `24` | Hours between backups |
+| `DRIVE_BACKUP_RETENTION_DAYS` | `7` | Days to keep backups on S3 |
 
 **Production note**: Set a fixed `DRIVE_JWT_SECRET`. When empty, the server auto-generates one on every restart — this invalidates all existing sessions.
 
@@ -140,6 +143,10 @@ Uploads go through a 5-stage pipeline in `internal/worker/pool.go`:
 | `GET` | `/api/v1/admin/users` | List all users |
 | `DELETE` | `/api/v1/admin/users/{id}` | Delete user |
 | `PUT` | `/api/v1/admin/users/{id}/role` | Change user role |
+| `GET` | `/api/v1/admin/events` | List system events (filterable by type, severity, date) |
+| `GET` | `/api/v1/admin/events/counts` | Event counts grouped by type |
+| `GET` | `/api/v1/admin/backup/status` | Backup config and last result |
+| `POST` | `/api/v1/admin/backup` | Trigger immediate database backup |
 
 ## S3 / MinIO Setup
 
@@ -170,5 +177,47 @@ Backend tests use real `:memory:` SQLite with embedded migrations — no mocking
 
 - **JWT secret**: Set `DRIVE_JWT_SECRET` to a fixed, strong value. Auto-generated secrets change on restart, breaking all sessions.
 - **TLS termination**: Run behind nginx or Caddy for HTTPS.
-- **Backups**: The `./data` directory contains everything — SQLite DB, original files, and thumbnails. Back it up regularly.
+- **Backups**: When `DRIVE_BACKUP_ENABLED=true` and S3 is configured, the SQLite database is automatically snapshotted via `VACUUM INTO` and uploaded to S3 on a schedule. See the Debugging section below for inspecting backup history via `system_events`.
 - **Registration**: Disable after creating users with `DRIVE_ALLOW_REGISTRATION=false`.
+
+## Automated Database Backup
+
+When `DRIVE_BACKUP_ENABLED=true` and S3 is configured, Drive creates scheduled SQLite snapshots via `VACUUM INTO` and uploads them to `backups/database/` on S3. Old backups are automatically pruned based on `DRIVE_BACKUP_RETENTION_DAYS`. Backup status and history are visible in the Admin Panel under **System Logs**.
+
+Trigger an immediate backup from the Admin Panel or via API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/backup \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+## Debugging with System Events
+
+All key system operations are recorded in the `system_events` SQLite table. Events include backup successes/failures, upload errors, S3 connectivity changes, cache evictions, reconciliation runs, and server lifecycle events. Each event has a `severity` (`info`, `warning`, `error`), a human-readable `message`, and a JSON `metadata` blob with context-specific data.
+
+**View events in the Admin Panel** (Admin → System Logs) with filterable tabs by event type and severity.
+
+**Query events directly with sqlite3:**
+
+```bash
+# recent errors
+sqlite3 data/drive.db \
+  "SELECT event_type, substr(message,1,100), created_at FROM system_events \
+   WHERE severity='error' ORDER BY created_at DESC LIMIT 10"
+
+# backup history
+sqlite3 data/drive.db \
+  "SELECT severity, substr(message,1,80), created_at FROM system_events \
+   WHERE event_type LIKE 'backup_%' ORDER BY created_at DESC LIMIT 5"
+
+# upload errors in last 24h
+sqlite3 data/drive.db \
+  "SELECT substr(message,1,120), created_at FROM system_events \
+   WHERE event_type='upload_error' AND created_at >= datetime('now','-1 day') ORDER BY created_at DESC"
+
+# event type distribution
+sqlite3 data/drive.db \
+  "SELECT event_type, COUNT(*) FROM system_events GROUP BY event_type ORDER BY COUNT(*) DESC"
+```
+
+Events are retained for 90 days by default, purged daily.
