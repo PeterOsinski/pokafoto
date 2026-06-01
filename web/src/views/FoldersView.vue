@@ -1,5 +1,207 @@
 <template>
   <div>
+    <div v-if="settings.previewMode.value === 'sidebar' && lightboxFile" :class="{ 'flex': true }">
+      <div class="flex-1 min-w-0">
+
+    <ActionBar
+      :count="selectedIds.size"
+      :totalFiles="files.length"
+      @delete="showDeleteConfirm = true"
+      @move="startMove"
+      @copy="startCopy"
+      @deselectAll="clearSelection"
+      @selectAll="selectAllFiles"
+    />
+
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <button
+          v-if="currentFolderId"
+          @click="navigateUp"
+          class="px-3 py-1 rounded text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+        >
+          &#8592; Back
+        </button>
+        <Breadcrumbs :chain="folderChain" @navigate="navigateTo" />
+      </div>
+      <div class="flex items-center gap-2">
+        <InlineUpload v-if="currentFolderId" :folderId="currentFolderId" label="Upload" />
+        <button
+          @click="showCreate = true"
+          class="px-3 py-1 rounded text-sm text-white"
+          style="background: var(--accent)"
+        >
+          + New Folder
+        </button>
+      </div>
+    </div>
+
+    <div v-if="showCreate" class="flex items-center gap-2 mb-4">
+      <input
+        ref="createInput"
+        v-model="newFolderName"
+        type="text"
+        placeholder="Folder name..."
+        class="flex-1 px-3 py-2 rounded text-sm"
+        style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+        @keyup.enter="createFolder"
+        @keyup.escape="showCreate = false"
+      />
+      <button @click="createFolder" :disabled="!newFolderName.trim()" class="px-3 py-2 rounded text-sm text-white" style="background: var(--accent)" :class="!newFolderName.trim() ? 'opacity-50 cursor-not-allowed' : ''">Create</button>
+      <button @click="showCreate = false" class="px-3 py-2 rounded text-sm text-[var(--text-secondary)]">Cancel</button>
+    </div>
+
+    <div class="flex items-center gap-2 mb-6 flex-wrap">
+      <select :modelValue="settings.sortBy.value" @change="settings.sortBy.value = ($event.target as HTMLSelectElement).value" class="px-3 py-1 rounded text-sm" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)">
+        <option value="taken_at">Date Taken</option>
+        <option value="created_at">Date Uploaded</option>
+        <option value="filename">File Name</option>
+      </select>
+
+      <div class="flex items-center gap-1 rounded-lg p-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
+        <button
+          v-for="opt in layoutOptions"
+          :key="opt.value"
+          :title="opt.label"
+          class="p-1.5 rounded-md transition-colors"
+          :class="opt.value === settings.layout.value ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
+          @click="settings.layout.value = opt.value"
+          v-html="opt.icon"
+        />
+      </div>
+
+      <div class="flex items-center gap-2 px-3 py-1 rounded" style="background: var(--bg-elevated); border: 1px solid var(--border-color)">
+        <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 300">S</span>
+        <input
+          type="range"
+          :value="settings.thumbLevel.value"
+          min="0"
+          max="9"
+          class="thumb-slider"
+          @input="settings.thumbLevel.value = Number(($event.target as HTMLInputElement).value)"
+        />
+        <span class="text-xs text-[var(--text-secondary)]" style="font-weight: 700">L</span>
+      </div>
+
+      <button
+        @click="togglePreviewMode"
+        class="flex items-center gap-1 px-3 py-1 rounded text-sm"
+        :style="{ background: 'var(--bg-elevated)', color: settings.previewMode.value === 'sidebar' ? 'var(--accent)' : 'var(--text-secondary)', border: '1px solid ' + (settings.previewMode.value === 'sidebar' ? 'var(--accent)' : 'var(--border-color)') }"
+        :title="settings.previewMode.value === 'sidebar' ? 'Switch to lightbox preview' : 'Switch to sidebar preview'"
+      >
+        <span v-if="settings.previewMode.value === 'sidebar'">&#9638;</span>
+        <span v-else>&#9641;</span>
+        {{ settings.previewMode.value === 'sidebar' ? 'Sidebar' : 'Preview' }}
+      </button>
+    </div>
+
+    <div v-if="!currentFolderId && folders.children?.length && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+      <button
+        v-for="child in folders.children"
+        :key="child.folder.id"
+        @click="navigateTo(child.folder.id)"
+        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
+        style="border: 1px solid var(--border-color)"
+      >
+        <span class="text-3xl">&#128193;</span>
+        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
+        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+      </button>
+    </div>
+
+    <div v-if="currentFolderId && subfolders.length > 0 && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+      <button
+        v-for="child in subfolders"
+        :key="child.folder.id"
+        @click="navigateTo(child.folder.id)"
+        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
+        style="border: 1px solid var(--border-color)"
+      >
+        <span class="text-3xl">&#128193;</span>
+        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
+        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+      </button>
+    </div>
+
+    <div v-if="!folders.children?.length && !currentFolderId && !loading && settings.layout.value === 'tiles'" class="text-center py-10 text-[var(--text-secondary)]">
+      <p class="text-lg">No folders yet.</p>
+      <p class="mt-1 text-sm">Create a folder to start organizing your files.</p>
+    </div>
+
+    <div v-if="currentFolderId || settings.layout.value !== 'tiles' || (!currentFolderId && folders.children?.length === 0)">
+      <div v-if="files.length === 0 && !loading" class="text-center py-8 text-[var(--text-secondary)]">
+        <p v-if="currentFolderId">No files in this folder.</p>
+        <p v-else-if="!folders.children?.length">No files in this folder.</p>
+        <p v-else>No files to show.</p>
+      </div>
+
+      <div v-if="settings.layout.value === 'list'" class="mb-4">
+        <button
+          v-for="child in listFolders"
+          :key="child.folder.id"
+          @click="navigateTo(child.folder.id)"
+          class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
+          style="height: 52px"
+        >
+          <span class="text-xl w-10 shrink-0">&#128193;</span>
+          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">{{ child.folder.name }}</span>
+          <span class="text-xs text-[var(--text-secondary)] shrink-0 hidden sm:block mr-4">{{ formatFolderDate(child.folder.created_at) }}</span>
+          <span class="text-xs text-[var(--text-secondary)] shrink-0">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        </button>
+      </div>
+
+      <GalleryTileView
+        v-if="settings.layout.value === 'tiles'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+      <GalleryListView
+        v-else-if="settings.layout.value === 'list'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+      <GalleryGroupedView
+        v-else-if="settings.layout.value === 'grouped'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+    </div>
+
+    <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+    <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
+    <div ref="sentinel" class="h-4"></div>
+
+      </div>
+
+      <PreviewSidebar
+        :file="lightboxFile"
+        :index="lightboxIndex"
+        :total="files.length"
+        :hasPrev="lightboxIndex > 0"
+        :hasNext="lightboxIndex < files.length - 1"
+        @close="closeLightbox"
+        @prev="goPrev"
+        @next="goNext"
+      />
+    </div>
+
+    <template v-else>
+
     <ActionBar
       :count="selectedIds.size"
       :totalFiles="files.length"
@@ -195,17 +397,7 @@
       @next="goNext"
     />
 
-    <PreviewSidebar
-      v-if="settings.previewMode.value === 'sidebar' && lightboxFile"
-      :file="lightboxFile"
-      :index="lightboxIndex"
-      :total="files.length"
-      :hasPrev="lightboxIndex > 0"
-      :hasNext="lightboxIndex < files.length - 1"
-      @close="closeLightbox"
-      @prev="goPrev"
-      @next="goNext"
-    />
+    </template>
 
     <FileViewer
       :file="fileViewerFile"

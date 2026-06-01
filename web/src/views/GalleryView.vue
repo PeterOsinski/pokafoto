@@ -1,97 +1,171 @@
 <template>
   <div>
-    <ActionBar
-      :count="selectedIds.size"
-      :totalFiles="files.length"
-      @delete="showDeleteConfirm = true"
-      @move="startMove"
-      @copy="startCopy"
-      @deselectAll="clearSelection"
-      @selectAll="selectAllFiles"
-    />
+    <div v-if="previewMode === 'sidebar' && lightboxFile" :class="{ 'flex': true }">
+      <div class="flex-1 min-w-0">
+        <ActionBar
+          :count="selectedIds.size"
+          :totalFiles="files.length"
+          @delete="showDeleteConfirm = true"
+          @move="startMove"
+          @copy="startCopy"
+          @deselectAll="clearSelection"
+          @selectAll="selectAllFiles"
+        />
 
-    <FilterBar
-      v-model:mediaType="mediaType"
-      v-model:sortBy="settings.sortBy.value"
-      v-model:layout="settings.layout.value"
-      v-model:thumbLevel="settings.thumbLevel.value"
-      v-model:includeAllFolders="includeAllFolders"
-      :previewMode="previewMode"
-      @togglePreviewMode="togglePreviewMode"
-    />
+        <FilterBar
+          v-model:mediaType="mediaType"
+          v-model:sortBy="settings.sortBy.value"
+          v-model:layout="settings.layout.value"
+          v-model:thumbLevel="settings.thumbLevel.value"
+          v-model:includeAllFolders="includeAllFolders"
+          :previewMode="previewMode"
+          @togglePreviewMode="togglePreviewMode"
+        />
 
-    <div class="flex items-center gap-2 mb-4">
-      <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
-    </div>
+        <div class="flex items-center gap-2 mb-4">
+          <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
+        </div>
 
-    <div ref="scrollRef" class="overflow-y-auto" style="flex: 1">
-    <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
-      <p class="text-lg">No photos yet.</p>
-      <p class="mt-2">Upload your first photo to get started.</p>
-      <div class="mt-4 flex justify-center">
-        <InlineUpload label="Upload Photos" :skipNameSizeDedup="false" accept="image/*,video/*" />
+        <div ref="scrollRef" class="overflow-y-auto" style="flex: 1">
+        <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
+          <p class="text-lg">No photos yet.</p>
+          <p class="mt-2">Upload your first photo to get started.</p>
+          <div class="mt-4 flex justify-center">
+            <InlineUpload label="Upload Photos" :skipNameSizeDedup="false" accept="image/*,video/*" />
+          </div>
+        </div>
+
+        <GalleryTileView
+          v-else-if="layout === 'tiles'"
+          :files="files"
+          :thumbSizePx="settings.thumbSizePx.value"
+          :selectedIds="selectedIds"
+          :selectionEnabled="selectionEnabled"
+          @select="toggleSelect"
+          @deselect="toggleSelect"
+          @open="(i: number) => handleFileClick(i)"
+        />
+        <GalleryListView
+          v-else-if="layout === 'list'"
+          :files="files"
+          :thumbSizePx="settings.thumbSizePx.value"
+          :selectedIds="selectedIds"
+          :selectionEnabled="selectionEnabled"
+          @select="toggleSelect"
+          @deselect="toggleSelect"
+          @open="(i: number) => handleFileClick(i)"
+        />
+        <GalleryGroupedView
+          v-else-if="layout === 'grouped'"
+          :files="files"
+          :thumbSizePx="settings.thumbSizePx.value"
+          :selectedIds="selectedIds"
+          :selectionEnabled="selectionEnabled"
+          @select="toggleSelect"
+          @deselect="toggleSelect"
+          @open="(i: number) => handleFileClick(i)"
+        />
+
+        <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+        <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
+        <div ref="sentinel" class="h-4"></div>
+        </div>
       </div>
+
+      <PreviewSidebar
+        :file="lightboxFile"
+        :index="lightboxIndex"
+        :total="files.length"
+        :hasPrev="lightboxIndex > 0"
+        :hasNext="lightboxIndex < files.length - 1"
+        @close="closeLightbox"
+        @prev="goPrev"
+        @next="goNext"
+      />
     </div>
 
-    <GalleryTileView
-      v-else-if="layout === 'tiles'"
-      :files="files"
-      :thumbSizePx="settings.thumbSizePx.value"
-      :selectedIds="selectedIds"
-      :selectionEnabled="selectionEnabled"
-      @select="toggleSelect"
-      @deselect="toggleSelect"
-      @open="(i: number) => handleFileClick(i)"
-    />
-    <GalleryListView
-      v-else-if="layout === 'list'"
-      :files="files"
-      :thumbSizePx="settings.thumbSizePx.value"
-      :selectedIds="selectedIds"
-      :selectionEnabled="selectionEnabled"
-      @select="toggleSelect"
-      @deselect="toggleSelect"
-      @open="(i: number) => handleFileClick(i)"
-    />
-    <GalleryGroupedView
-      v-else-if="layout === 'grouped'"
-      :files="files"
-      :thumbSizePx="settings.thumbSizePx.value"
-      :selectedIds="selectedIds"
-      :selectionEnabled="selectionEnabled"
-      @select="toggleSelect"
-      @deselect="toggleSelect"
-      @open="(i: number) => handleFileClick(i)"
-    />
+    <template v-else>
+      <ActionBar
+        :count="selectedIds.size"
+        :totalFiles="files.length"
+        @delete="showDeleteConfirm = true"
+        @move="startMove"
+        @copy="startCopy"
+        @deselectAll="clearSelection"
+        @selectAll="selectAllFiles"
+      />
 
-    <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
-    <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
-    <div ref="sentinel" class="h-4"></div>
-    </div>
+      <FilterBar
+        v-model:mediaType="mediaType"
+        v-model:sortBy="settings.sortBy.value"
+        v-model:layout="settings.layout.value"
+        v-model:thumbLevel="settings.thumbLevel.value"
+        v-model:includeAllFolders="includeAllFolders"
+        :previewMode="previewMode"
+        @togglePreviewMode="togglePreviewMode"
+      />
 
-    <Lightbox
-      v-if="previewMode !== 'sidebar'"
-      :file="lightboxFile"
-      :index="lightboxIndex"
-      :total="files.length"
-      :hasPrev="lightboxIndex > 0"
-      :hasNext="lightboxIndex < files.length - 1"
-      @close="closeLightbox"
-      @prev="goPrev"
-      @next="goNext"
-    />
+      <div class="flex items-center gap-2 mb-4">
+        <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
+      </div>
 
-    <PreviewSidebar
-      v-if="previewMode === 'sidebar' && lightboxFile"
-      :file="lightboxFile"
-      :index="lightboxIndex"
-      :total="files.length"
-      :hasPrev="lightboxIndex > 0"
-      :hasNext="lightboxIndex < files.length - 1"
-      @close="closeLightbox"
-      @prev="goPrev"
-      @next="goNext"
-    />
+      <div ref="scrollRef" class="overflow-y-auto" style="flex: 1">
+      <div v-if="files.length === 0 && !loading" class="text-center py-20 text-[var(--text-secondary)]">
+        <p class="text-lg">No photos yet.</p>
+        <p class="mt-2">Upload your first photo to get started.</p>
+        <div class="mt-4 flex justify-center">
+          <InlineUpload label="Upload Photos" :skipNameSizeDedup="false" accept="image/*,video/*" />
+        </div>
+      </div>
+
+      <GalleryTileView
+        v-else-if="layout === 'tiles'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+      <GalleryListView
+        v-else-if="layout === 'list'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+      <GalleryGroupedView
+        v-else-if="layout === 'grouped'"
+        :files="files"
+        :thumbSizePx="settings.thumbSizePx.value"
+        :selectedIds="selectedIds"
+        :selectionEnabled="selectionEnabled"
+        @select="toggleSelect"
+        @deselect="toggleSelect"
+        @open="(i: number) => handleFileClick(i)"
+      />
+
+      <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+      <div v-else-if="loadingMore" class="text-center py-4 text-[var(--text-secondary)]">Loading more...</div>
+      <div ref="sentinel" class="h-4"></div>
+      </div>
+
+      <Lightbox
+        v-if="previewMode !== 'sidebar'"
+        :file="lightboxFile"
+        :index="lightboxIndex"
+        :total="files.length"
+        :hasPrev="lightboxIndex > 0"
+        :hasNext="lightboxIndex < files.length - 1"
+        @close="closeLightbox"
+        @prev="goPrev"
+        @next="goNext"
+      />
+    </template>
 
     <FileViewer
       :file="fileViewerFile"

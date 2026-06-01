@@ -2,7 +2,7 @@
   <RecycleScroller
     class="scroller"
     :items="files"
-    :item-size="52"
+    :item-size="rowHeight"
     key-field="id"
     v-slot="{ item: file, index: i }"
     :buffer="300"
@@ -10,7 +10,7 @@
     <div
       class="flex items-center border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors"
       :class="selectedIds.has(file.id) ? 'bg-[var(--accent)]/10' : ''"
-      style="height: 52px"
+      :style="{ height: rowHeight + 'px' }"
     >
       <div v-if="selectionEnabled" class="py-2 px-3 w-8 shrink-0">
         <button
@@ -97,6 +97,8 @@ const listThumbSize = computed(() => {
   if (t >= 400) return 80
   return Math.round(20 + (t - 40) / 6)
 })
+
+const rowHeight = computed(() => Math.max(52, listThumbSize.value + 16))
 
 function formatDate(takenAt?: string): string {
   if (!takenAt) return ''

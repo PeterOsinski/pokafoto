@@ -1,12 +1,12 @@
 <template>
   <div
     v-if="file"
-    class="fixed top-0 right-0 h-full z-50 flex flex-col shadow-2xl"
-    :style="{ width: sidebarWidth + 'px', background: 'var(--bg-surface)' }"
+    class="flex flex-col shadow-2xl shrink-0"
+    :style="{ width: sidebarWidth + 'px', background: 'var(--bg-surface)', height: 'calc(100vh - 4rem)' }"
     @keydown="handleKeydown"
     tabindex="0"
     ref="sidebarEl"
-    style="border-left: 1px solid var(--border-color)"
+    style="border-left: 1px solid var(--border-color); position: relative"
   >
     <div
       class="absolute top-0 left-0 h-full cursor-col-resize z-10 hover:bg-[var(--accent)]/30 transition-colors"
