@@ -11,6 +11,7 @@
         <router-link to="/folders" class="text-sm" :class="navClass('/folders')">Folders</router-link>
         <router-link to="/timeline" class="text-sm" :class="navClass('/timeline')">Timeline</router-link>
         <router-link to="/map" class="text-sm" :class="navClass('/map')">Map</router-link>
+        <router-link to="/trash" class="text-sm" :class="navClass('/trash')">Trash</router-link>
         <router-link v-if="auth.isAdmin" to="/admin" class="text-sm" :class="navClass('/admin')">Admin</router-link>
       </nav>
       <div class="flex items-center gap-3">
@@ -23,6 +24,11 @@
             />
           </div>
           <span class="text-xs text-[var(--text-secondary)] whitespace-nowrap">{{ quotaDisplay }}</span>
+        </div>
+        <div v-if="trashCount > 0" class="hidden sm:flex items-center gap-1">
+          <span class="text-xs text-[var(--text-secondary)] whitespace-nowrap">
+            {{ trashCount }} in trash ({{ formatBytes(trashSizeBytes) }})
+          </span>
         </div>
         <span class="text-sm text-[var(--text-secondary)] hidden sm:inline">{{ auth.user?.username }}</span>
         <button @click="handleLogout" class="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Logout</button>
@@ -49,6 +55,7 @@
       <router-link to="/folders" class="flex flex-col items-center text-xs" :class="navClass('/folders')">📁<span>Folders</span></router-link>
       <router-link to="/timeline" class="flex flex-col items-center text-xs" :class="navClass('/timeline')">📅<span>Timeline</span></router-link>
       <router-link to="/map" class="flex flex-col items-center text-xs" :class="navClass('/map')">🗺️<span>Map</span></router-link>
+      <router-link to="/trash" class="flex flex-col items-center text-xs" :class="navClass('/trash')">🗑<span>Trash</span></router-link>
     </nav>
   </div>
 </template>
@@ -69,6 +76,8 @@ const route = useRoute()
 const showS3Banner = ref(false)
 const usedBytes = ref(0)
 const quotaBytes = ref<number | null>(null)
+const trashCount = ref(0)
+const trashSizeBytes = ref(0)
 
 const quotaDisplay = computed(() => {
   if (quotaBytes.value === null) return ''
@@ -127,6 +136,11 @@ onMounted(async () => {
       }
       const statsRes = await api.get('/stats')
       usedBytes.value = statsRes.data.total_size_bytes || 0
+      try {
+        const trashRes = await api.get('/trash/stats')
+        trashCount.value = trashRes.data.count || 0
+        trashSizeBytes.value = trashRes.data.size_bytes || 0
+      } catch {}
     } catch {}
   }
 })

@@ -45,6 +45,12 @@ const router = createRouter({
       component: () => import('../views/AdminView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
+    {
+      path: '/trash',
+      name: 'trash',
+      component: () => import('../views/TrashView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

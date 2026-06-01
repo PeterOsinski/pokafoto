@@ -364,3 +364,178 @@ func TestHandlers_Health_shouldReturnOK(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
+
+func TestHandlers_Trash_softDeleteAndList(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("trash_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u.ID, "totrash.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	w := testRequest(t, srv, "DELETE", "/api/v1/files/"+f.ID, "", auth)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 on delete, got %d", w.Code)
+	}
+
+	w2 := testRequest(t, srv, "GET", "/api/v1/trash?limit=10", "", auth)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on trash list, got %d", w2.Code)
+	}
+	var trashResp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &trashResp)
+	items := trashResp["items"].([]interface{})
+	if len(items) != 1 {
+		t.Errorf("expected 1 item in trash, got %d", len(items))
+	}
+}
+
+func TestHandlers_Trash_restoreReturnsToGallery(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("restore_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u.ID, "restored.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f.ID, "", auth)
+
+	w := testRequest(t, srv, "POST", "/api/v1/trash/"+f.ID+"/restore", "", auth)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 on restore, got %d", w.Code)
+	}
+
+	w2 := testRequest(t, srv, "GET", "/api/v1/files?limit=10", "", auth)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on list, got %d", w2.Code)
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp)
+	items := resp["items"].([]interface{})
+	if len(items) != 1 {
+		t.Errorf("expected 1 file back in gallery, got %d", len(items))
+	}
+}
+
+func TestHandlers_Trash_statsShouldReturnCountAndSize(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("tstats_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "s1.jpg")
+	f2 := createTestFileForHandler(t, fs, u.ID, "s2.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f1.ID, "", auth)
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f2.ID, "", auth)
+
+	w := testRequest(t, srv, "GET", "/api/v1/trash/stats", "", auth)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var stats map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &stats)
+	if int(stats["count"].(float64)) != 2 {
+		t.Errorf("expected count 2, got %v", stats["count"])
+	}
+	if int(stats["size_bytes"].(float64)) != 2048 {
+		t.Errorf("expected size_bytes 2048, got %v", stats["size_bytes"])
+	}
+}
+
+func TestHandlers_Trash_permanentDeletesFile(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("permtrash_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u.ID, "perm.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f.ID, "", auth)
+
+	w := testRequest(t, srv, "DELETE", "/api/v1/trash/"+f.ID, "", auth)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+
+	exists, _ := fs.FindByID(f.ID)
+	if exists != nil {
+		t.Error("file should be permanently deleted")
+	}
+}
+
+func TestHandlers_Trash_batchRestore(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("batchr_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "br1.jpg")
+	f2 := createTestFileForHandler(t, fs, u.ID, "br2.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+	authJSON := map[string]string{"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f1.ID, "", auth)
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f2.ID, "", auth)
+
+	w := testRequest(t, srv, "POST", "/api/v1/trash/batch-restore", `{"ids":["`+f1.ID+`","`+f2.ID+`"]}`, authJSON)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+
+	g1, _ := fs.FindByID(f1.ID)
+	g2, _ := fs.FindByID(f2.ID)
+	if g1 != nil && g1.IsDeleted {
+		t.Error("f1 should be restored")
+	}
+	if g2 != nil && g2.IsDeleted {
+		t.Error("f2 should be restored")
+	}
+}
+
+func TestHandlers_Trash_emptyRemovesAll(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("empty_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f1 := createTestFileForHandler(t, fs, u.ID, "e1.jpg")
+	f2 := createTestFileForHandler(t, fs, u.ID, "e2.jpg")
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f1.ID, "", auth)
+	testRequest(t, srv, "DELETE", "/api/v1/files/"+f2.ID, "", auth)
+
+	w := testRequest(t, srv, "POST", "/api/v1/trash/empty", "", auth)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+
+	e1, _ := fs.FindByID(f1.ID)
+	e2, _ := fs.FindByID(f2.ID)
+	if e1 != nil || e2 != nil {
+		t.Error("all files should be permanently deleted")
+	}
+}

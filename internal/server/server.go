@@ -15,20 +15,22 @@ import (
 )
 
 type Server struct {
-	cfg            *config.Config
-	db             *store.DB
-	router         *chi.Mux
-	userStore      *store.UserStore
-	sessStore      *store.SessionStore
-	fileStore      *store.FileStore
-	folderStore    *store.FolderStore
-	exifStore      *store.ExifStore
-	thumbnailStore *store.ThumbnailStore
-	geoStore       *store.GeoStore
-	uploadJobStore *store.UploadJobStore
-	settingStore   *store.SettingStore
-	storageService *service.StorageService
-	workerPool     *worker.Pool
+	cfg             *config.Config
+	db              *store.DB
+	router          *chi.Mux
+	userStore       *store.UserStore
+	sessStore       *store.SessionStore
+	fileStore       *store.FileStore
+	folderStore     *store.FolderStore
+	exifStore       *store.ExifStore
+	thumbnailStore  *store.ThumbnailStore
+	geoStore        *store.GeoStore
+	uploadJobStore  *store.UploadJobStore
+	settingStore    *store.SettingStore
+	storageService  *service.StorageService
+	workerPool      *worker.Pool
+	s3DeletionPool  *S3DeletionPool
+	stopCh          chan struct{}
 }
 
 func New(cfg *config.Config, db *store.DB) *Server {
@@ -44,6 +46,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		geoStore:       store.NewGeoStore(db),
 		uploadJobStore: store.NewUploadJobStore(db),
 		settingStore:   store.NewSettingStore(db),
+		stopCh:         make(chan struct{}),
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -55,16 +58,21 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore)
 	s.storageService = storageService
 
+	s.s3DeletionPool = NewS3DeletionPool(storageService)
+
 	s.workerPool.StartReconciler(30 * time.Minute)
 
 	go NewCacheEvictor(cfg).Start()
+	go s.startTrashCleanup()
 
 	s.setupRouter()
 	return s
 }
 
 func (s *Server) Shutdown() {
+	close(s.stopCh)
 	s.workerPool.Shutdown()
+	s.s3DeletionPool.Shutdown()
 }
 
 func (s *Server) setupRouter() {
@@ -133,6 +141,14 @@ func (s *Server) setupRouter() {
 			r.Get("/download/{id}", s.handleDownload)
 			r.Post("/download/batch", s.handleBatchDownload)
 
+			r.Get("/trash", s.handleListTrash)
+			r.Get("/trash/stats", s.handleTrashStats)
+			r.Post("/trash/{id}/restore", s.handleRestoreTrash)
+			r.Post("/trash/batch-restore", s.handleBatchRestoreTrash)
+			r.Delete("/trash/{id}", s.handlePermanentDeleteTrash)
+			r.Post("/trash/batch-permanent-delete", s.handleBatchPermanentDeleteTrash)
+			r.Post("/trash/empty", s.handleEmptyTrash)
+
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.adminMiddleware)
 				r.Get("/users", s.handleAdminListUsers)
@@ -149,6 +165,7 @@ func (s *Server) setupRouter() {
 			r.Get("/jobs", s.handleAdminListJobs)
 			r.Post("/jobs/{id}/retry", s.handleAdminRetryJob)
 			r.Post("/jobs/reconcile", s.handleAdminReconcileJobs)
+			r.Get("/s3-deletion-queue", s.handleAdminS3DeletionQueue)
 			})
 		})
 	})

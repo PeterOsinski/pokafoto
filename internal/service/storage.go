@@ -120,3 +120,19 @@ func (s *StorageService) GetObjectStream(key string) (io.ReadCloser, error) {
 	}
 	return obj, nil
 }
+
+func (s *StorageService) DeleteOriginal(userID, filename string) error {
+	if s.client == nil {
+		return nil
+	}
+	key := fmt.Sprintf("originals/%s/%s", userID, filename)
+	return s.client.RemoveObject(context.Background(), s.cfg.Storage.S3.Bucket, key, minio.RemoveObjectOptions{})
+}
+
+func (s *StorageService) DeleteThumbnail(fileID, size, format string) error {
+	if s.client == nil {
+		return nil
+	}
+	key := fmt.Sprintf("thumbnails/%s/%s.%s", fileID, size, format)
+	return s.client.RemoveObject(context.Background(), s.cfg.Storage.S3.Bucket, key, minio.RemoveObjectOptions{})
+}

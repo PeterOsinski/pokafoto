@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/store"
@@ -516,6 +517,250 @@ func (s *Server) handleBatchDownload(w http.ResponseWriter, r *http.Request) {
 	s.handleBatchDownloadReal(w, r)
 }
 
+func (s *Server) handleListTrash(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	order := r.URL.Query().Get("order")
+	if order == "" {
+		order = "desc"
+	}
+
+	opts := store.FileListOptions{
+		UserID: userID,
+		Cursor: r.URL.Query().Get("cursor"),
+		Limit:  limit,
+		Order:  order,
+	}
+
+	files, nextCursor, total, err := s.fileStore.ListTrash(opts)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list trash")
+		return
+	}
+
+	items := make([]interface{}, 0, len(files))
+	for _, f := range files {
+		item := fileResponse{
+			ID:           f.ID,
+			Filename:     f.Filename,
+			OriginalName: f.OriginalName,
+			Path:         f.Path,
+			SizeBytes:    f.SizeBytes,
+			MimeType:     f.MimeType,
+			MediaType:    string(f.MediaType),
+			Width:        f.Width,
+			Height:       f.Height,
+			DurationSec:  f.DurationSec,
+			TakenAt:      f.TakenAt,
+			FolderID:     f.FolderID,
+			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
+			UpdatedAt:    f.UpdatedAt.Format(timeRFC3339),
+			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
+			DeletedAt:    formatDeletedAt(f.DeletedAt),
+		}
+		items = append(items, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":      items,
+		"nextCursor": nextCursor,
+		"total":      total,
+	})
+}
+
+func (s *Server) handleTrashStats(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	stats, err := s.fileStore.TrashStats(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get trash stats")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":      stats.Count,
+		"size_bytes": stats.SizeBytes,
+	})
+}
+
+func (s *Server) handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
+	fileID := r.PathValue("id")
+	userID := getUserID(r)
+
+	file, err := s.fileStore.FindByID(fileID)
+	if err != nil || file == nil || file.UserID != userID || !file.IsDeleted {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found in trash")
+		return
+	}
+
+	if err := s.fileStore.Restore(fileID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to restore file")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchRestoreTrash(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty ids array")
+		return
+	}
+
+	if err := s.fileStore.BatchRestore(userID, req.IDs); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to restore files")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handlePermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
+	fileID := r.PathValue("id")
+	userID := getUserID(r)
+
+	file, err := s.fileStore.FindByID(fileID)
+	if err != nil || file == nil || file.UserID != userID || !file.IsDeleted {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found in trash")
+		return
+	}
+
+	originalPath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
+	os.Remove(originalPath)
+	thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), file.ID)
+	os.RemoveAll(thumbDir)
+
+	s.enqueueS3Deletion(file.ID, file.UserID, file.Filename)
+
+	if err := s.fileStore.PermanentDelete(fileID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete file")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty ids array")
+		return
+	}
+
+	placeholders := make([]string, len(req.IDs))
+	args := make([]interface{}, 0, len(req.IDs)+1)
+	args = append(args, userID)
+	for i, id := range req.IDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(`SELECT id, user_id, filename FROM files WHERE user_id = ? AND is_deleted = 1 AND id IN (%s)`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to query files")
+		return
+	}
+	defer rows.Close()
+
+	type deleteRec struct {
+		id   string
+		uid  string
+		fn   string
+	}
+	var records []deleteRec
+	for rows.Next() {
+		var id, uid, fn string
+		if err := rows.Scan(&id, &uid, &fn); err != nil {
+			continue
+		}
+		originalPath := filepath.Join(s.cfg.OriginalsDir(), uid, fn)
+		os.Remove(originalPath)
+		thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), id)
+		os.RemoveAll(thumbDir)
+		records = append(records, deleteRec{id, uid, fn})
+	}
+	rows.Close()
+
+	var deleteIDs []string
+	for _, r := range records {
+		s.enqueueS3Deletion(r.id, r.uid, r.fn)
+		deleteIDs = append(deleteIDs, r.id)
+	}
+
+	if len(deleteIDs) > 0 {
+		if err := s.fileStore.BatchPermanentDelete(userID, deleteIDs); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete files")
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	rows, err := s.db.Query(`SELECT id, user_id, filename FROM files WHERE user_id = ? AND is_deleted = 1`, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to query trash")
+		return
+	}
+	defer rows.Close()
+
+	type emptyRecord struct {
+		id  string
+		uid string
+		fn  string
+	}
+	var records []emptyRecord
+	for rows.Next() {
+		var id, uid, fn string
+		if err := rows.Scan(&id, &uid, &fn); err != nil {
+			continue
+		}
+		originalPath := filepath.Join(s.cfg.OriginalsDir(), uid, fn)
+		os.Remove(originalPath)
+		thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), id)
+		os.RemoveAll(thumbDir)
+		records = append(records, emptyRecord{id, uid, fn})
+	}
+	rows.Close()
+
+	var allIDs []string
+	for _, r := range records {
+		s.enqueueS3Deletion(r.id, r.uid, r.fn)
+		allIDs = append(allIDs, r.id)
+	}
+
+	for i := 0; i < len(allIDs); i += 100 {
+		end := i + 100
+		if end > len(allIDs) {
+			end = len(allIDs)
+		}
+		if err := s.fileStore.BatchPermanentDelete(userID, allIDs[i:end]); err != nil {
+			slog.Warn("empty trash chunk failed", "error", err)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminS3DeletionQueue(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"pending": s.s3DeletionPool.PendingCount(),
+	})
+}
+
 func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string  `json:"username"`
@@ -906,6 +1151,7 @@ type fileResponse struct {
 	FolderID     *string               `json:"folder_id,omitempty"`
 	CreatedAt    string                `json:"createdAt"`
 	UpdatedAt    string                `json:"updatedAt,omitempty"`
+	DeletedAt    *string               `json:"deletedAt,omitempty"`
 	Thumbnails   *thumbnailSetResponse `json:"thumbnails,omitempty"`
 	EXIF         interface{}           `json:"exif,omitempty"`
 }
@@ -985,4 +1231,12 @@ func folderIDFromQuery(r *http.Request) *string {
 		*s = v
 	}
 	return s
+}
+
+func formatDeletedAt(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.Format(timeRFC3339)
+	return &s
 }

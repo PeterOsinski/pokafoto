@@ -607,3 +607,231 @@ func containsID(files []*model.File, id string) bool {
 	}
 	return false
 }
+
+func TestFileStore_SoftDelete_shouldSetDeletedAt(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "deleted_at_test.jpg")
+
+	if err := fs.SoftDelete(f.ID); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	found, _ := fs.FindByID(f.ID)
+	if found == nil {
+		t.Fatal("expected file still exists")
+	}
+	if !found.IsDeleted {
+		t.Error("expected is_deleted = true")
+	}
+	if found.DeletedAt == nil {
+		t.Error("expected deleted_at to be set")
+	}
+}
+
+func TestFileStore_Restore_shouldClearDeletedAt(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "restore_test.jpg")
+	fs.SoftDelete(f.ID)
+
+	if err := fs.Restore(f.ID); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	found, _ := fs.FindByID(f.ID)
+	if found == nil {
+		t.Fatal("expected file still exists")
+	}
+	if found.IsDeleted {
+		t.Error("expected is_deleted = false after restore")
+	}
+	if found.DeletedAt != nil {
+		t.Error("expected deleted_at = nil after restore")
+	}
+}
+
+func TestFileStore_ListTrash_shouldShowOnlyDeleted(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "trashed.jpg")
+	f2 := createTestFile(t, fs, user.ID, "active.jpg")
+	fs.SoftDelete(f1.ID)
+
+	files, _, total, err := fs.ListTrash(FileListOptions{
+		UserID: user.ID,
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("list trash: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("expected 1 in trash, got %d", total)
+	}
+	if len(files) != 1 {
+		t.Errorf("expected 1 item, got %d", len(files))
+	}
+	if files[0].ID != f1.ID {
+		t.Error("expected trashed file")
+	}
+	_ = f2
+}
+
+func TestFileStore_TrashStats_shouldSumCorrectly(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	_ = createTestFile(t, fs, user.ID, "active1.jpg")
+	f1 := createTestFile(t, fs, user.ID, "trash1.jpg")
+	f2 := createTestFile(t, fs, user.ID, "trash2.jpg")
+	fs.SoftDelete(f1.ID)
+	fs.SoftDelete(f2.ID)
+
+	stats, err := fs.TrashStats(user.ID)
+	if err != nil {
+		t.Fatalf("trash stats: %v", err)
+	}
+	if stats.Count != 2 {
+		t.Errorf("expected 2 in trash, got %d", stats.Count)
+	}
+	if stats.SizeBytes != 2048 {
+		t.Errorf("expected 2048 bytes, got %d", stats.SizeBytes)
+	}
+}
+
+func TestFileStore_BatchRestore_shouldRestoreMultiple(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "batch1.jpg")
+	f2 := createTestFile(t, fs, user.ID, "batch2.jpg")
+	fs.SoftDelete(f1.ID)
+	fs.SoftDelete(f2.ID)
+
+	if err := fs.BatchRestore(user.ID, []string{f1.ID, f2.ID}); err != nil {
+		t.Fatalf("batch restore: %v", err)
+	}
+
+	r1, _ := fs.FindByID(f1.ID)
+	r2, _ := fs.FindByID(f2.ID)
+	if r1 == nil || r1.IsDeleted {
+		t.Error("f1 should be restored")
+	}
+	if r2 == nil || r2.IsDeleted {
+		t.Error("f2 should be restored")
+	}
+}
+
+func TestFileStore_BatchPermanentDelete_shouldRemoveFromDB(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "perm1.jpg")
+	f2 := createTestFile(t, fs, user.ID, "perm2.jpg")
+	fs.SoftDelete(f1.ID)
+	fs.SoftDelete(f2.ID)
+
+	if err := fs.BatchPermanentDelete(user.ID, []string{f1.ID, f2.ID}); err != nil {
+		t.Fatalf("batch permanent delete: %v", err)
+	}
+
+	r1, _ := fs.FindByID(f1.ID)
+	r2, _ := fs.FindByID(f2.ID)
+	if r1 != nil {
+		t.Error("f1 should be deleted")
+	}
+	if r2 != nil {
+		t.Error("f2 should be deleted")
+	}
+}
+
+func TestFileStore_GetExpiredFiles_shouldReturnExpired(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "expired.jpg")
+	f2 := createTestFile(t, fs, user.ID, "fresh.jpg")
+	fs.SoftDelete(f1.ID)
+	fs.SoftDelete(f2.ID)
+
+	expired, err := fs.GetExpiredFiles("2099-01-01T00:00:00Z", 100)
+	if err != nil {
+		t.Fatalf("get expired: %v", err)
+	}
+	if len(expired) != 2 {
+		t.Errorf("expected 2 expired files, got %d", len(expired))
+	}
+
+	empty, err := fs.GetExpiredFiles("2000-01-01T00:00:00Z", 100)
+	if err != nil {
+		t.Fatalf("get expired: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("expected 0 expired files, got %d", len(empty))
+	}
+}
+
+func TestFileStore_List_shouldNotShowDeleted(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "hidden.jpg")
+	fs.SoftDelete(f.ID)
+
+	_, _, total, err := fs.List(FileListOptions{UserID: user.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total != 0 {
+		t.Errorf("expected 0 files in gallery after delete, got %d", total)
+	}
+}
+
+func TestFileStore_FindBySHA256_shouldNotMatchDeleted(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "dedup_hash.jpg")
+	fs.SoftDelete(f.ID)
+
+	found, _ := fs.FindBySHA256(user.ID, f.SHA256)
+	if found != nil {
+		t.Error("expected nil - deleted files should not match dedup")
+	}
+}
+
+func TestFileStore_FindByNameAndSize_shouldNotMatchDeleted(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "dedup_name.jpg")
+	fs.SoftDelete(f.ID)
+
+	found, _ := fs.FindByNameAndSize(user.ID, f.OriginalName, f.SizeBytes)
+	if found != nil {
+		t.Error("expected nil - deleted files should not match dedup")
+	}
+}

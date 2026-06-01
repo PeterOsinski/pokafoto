@@ -66,13 +66,14 @@ type ServerConfig struct {
 }
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Storage  StorageConfig  `yaml:"storage"`
-	Database DatabaseConfig `yaml:"database"`
-	Auth     AuthConfig     `yaml:"auth"`
-	Media    MediaConfig    `yaml:"media"`
-	Upload   UploadConfig   `yaml:"upload"`
-	Map      MapConfig      `yaml:"map"`
+	Server              ServerConfig   `yaml:"server"`
+	Storage             StorageConfig  `yaml:"storage"`
+	Database            DatabaseConfig `yaml:"database"`
+	Auth                AuthConfig     `yaml:"auth"`
+	Media               MediaConfig    `yaml:"media"`
+	Upload              UploadConfig   `yaml:"upload"`
+	Map                 MapConfig      `yaml:"map"`
+	TrashExpirationDays int            `yaml:"trash_expiration_days"`
 }
 
 func DefaultConfig() *Config {
@@ -125,6 +126,7 @@ func DefaultConfig() *Config {
 			TileSource:       "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 			MaxClusterRadius: 80,
 		},
+		TrashExpirationDays: 30,
 	}
 }
 
@@ -169,6 +171,11 @@ func Load() *Config {
 	if v := os.Getenv("DRIVE_MAX_DISK_USAGE_PCT"); v != "" {
 		if p, err := strconv.Atoi(v); err == nil && p > 0 && p <= 100 {
 			cfg.Storage.MaxDiskUsagePct = p
+		}
+	}
+	if v := os.Getenv("DRIVE_TRASH_EXPIRATION_DAYS"); v != "" {
+		if d, err := strconv.Atoi(v); err == nil && d > 0 {
+			cfg.TrashExpirationDays = d
 		}
 	}
 
