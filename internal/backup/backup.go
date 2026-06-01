@@ -89,6 +89,18 @@ func (s *Scheduler) RunBackup() {
 
 	duration := func() int64 { return time.Since(startedAt).Milliseconds() }
 
+	if err := os.MkdirAll(filepath.Dir(tempPath), 0755); err != nil {
+		slog.Error("backup failed to create temp dir", "error", err)
+		s.eventRecorder.Error("backup_failure", "Failed to create temp directory", map[string]interface{}{
+			"error":       err.Error(),
+			"duration_ms": duration(),
+		})
+		s.mu.Lock()
+		s.lastResult = &LastBackupResult{Status: "failure", Timestamp: startedAt.Format(time.RFC3339), Error: err.Error()}
+		s.mu.Unlock()
+		return
+	}
+
 	if _, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", tempPath)); err != nil {
 		slog.Error("backup VACUUM INTO failed", "error", err)
 		s.eventRecorder.Error("backup_failure", "VACUUM INTO failed", map[string]interface{}{

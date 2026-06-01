@@ -18,4 +18,5 @@ services:
       - DRIVE_S3_ACCESS_KEY=${DRIVE_S3_ACCESS_KEY:-}
       - DRIVE_S3_SECRET_KEY=${DRIVE_S3_SECRET_KEY:-}
       - DRIVE_S3_REGION=${DRIVE_S3_REGION:-pl-waw}
+      - DRIVE_BACKUP_ENABLED=${DRIVE_BACKUP_ENABLED:-false}
     restart: unless-stopped

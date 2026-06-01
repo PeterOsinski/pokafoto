@@ -32,7 +32,7 @@ COPY --from=web-builder /app/dist /app/web/dist
 ENV DRIVE_STORAGE_PATH=/data
 ENV DRIVE_DB_PATH=/data/drive.db
 
-RUN mkdir -p /data
+RUN mkdir -p /data /tmp/kilo
 
 EXPOSE 8080
 
