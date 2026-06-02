@@ -40,6 +40,13 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		Camera:     r.URL.Query().Get("camera"),
 	}
 
+	if opts.FolderID != nil {
+		if !s.checkFolderAccess(*opts.FolderID, userID, r) {
+			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
+			return
+		}
+	}
+
 	if opts.Sort == "" {
 		opts.Sort = "taken_at"
 	}
@@ -95,6 +102,13 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
+	}
+
+	if file.FolderID != nil {
+		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
+			return
+		}
 	}
 
 	exif, _ := s.exifStore.FindByFileID(fileID)
@@ -236,6 +250,11 @@ func (s *Server) handlePermanentDeleteFile(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileID")
 	size := r.PathValue("size")
+
+	if err := s.checkThumbnailAccess(w, r, fileID); err != nil {
+		return
+	}
+
 	thumbPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, size)
 
 	if _, err := os.Stat(thumbPath); err == nil {
@@ -257,6 +276,39 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.fallbackThumbnail(w, r, fileID, size)
+}
+
+func (s *Server) checkThumbnailAccess(w http.ResponseWriter, r *http.Request, fileID string) error {
+	file, err := s.fileStore.FindByID(fileID)
+	if err != nil || file == nil {
+		return nil
+	}
+
+	if file.FolderID == nil {
+		return nil
+	}
+
+	fp, err := s.folderPasswordStore.FindByFolderID(*file.FolderID)
+	if err != nil {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	if now.After(fp.ExpiresAt) {
+		s.folderPasswordStore.DeleteByFolderID(*file.FolderID)
+		return nil
+	}
+
+	unlockToken := r.Header.Get("X-Folder-Unlock-Token")
+	if unlockToken != "" {
+		unlockedFolderID, ok := s.parseFolderUnlockToken(unlockToken)
+		if ok && unlockedFolderID == *file.FolderID {
+			return nil
+		}
+	}
+
+	writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock to view thumbnails")
+	return fmt.Errorf("folder password required")
 }
 
 func (s *Server) fallbackThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
@@ -548,6 +600,13 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
+	}
+
+	if file.FolderID != nil {
+		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
+			return
+		}
 	}
 
 	if file.IsAppManaged {

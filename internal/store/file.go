@@ -1086,3 +1086,46 @@ func (s *FileStore) UpdateSizeAndHash(id string, sizeBytes int64, sha256 string)
 	)
 	return err
 }
+
+func (s *FileStore) ListFilesByFolderID(folderID, cursor string, limit int) ([]*model.File, string, int, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	var cursorCond string
+	var args []interface{}
+	if cursor != "" {
+		cursorCond = "AND id < ?"
+		args = append(args, cursor)
+	}
+	args = append(args, folderID, limit+1)
+
+	rows, err := s.db.Query(
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE folder_id = ? AND is_deleted = 0 `+cursorCond+` ORDER BY taken_at DESC LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list files by folder: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*model.File
+	for rows.Next() {
+		f, err := s.scanFileFromRows(rows)
+		if err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+
+	var total int
+	s.db.QueryRow(`SELECT COUNT(*) FROM files WHERE folder_id = ? AND is_deleted = 0`, folderID).Scan(&total)
+
+	var nextCursor string
+	if len(files) > limit {
+		nextCursor = files[limit-1].ID
+		files = files[:limit]
+	}
+
+	return files, nextCursor, total, rows.Err()
+}

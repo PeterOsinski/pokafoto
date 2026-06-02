@@ -49,6 +49,10 @@
         <span class="text-3xl">&#128193;</span>
         <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
         <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        <div class="flex items-center gap-1 mt-1" @click.stop>
+          <span class="text-xs cursor-pointer hover:scale-110" :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'" @click="openPasswordDialog(child.folder.id)">{{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}</span>
+          <span title="Share" class="text-xs cursor-pointer hover:scale-110" @click="openShareDialog(child.folder.id, child.folder.name)">&#x1F517;</span>
+        </div>
       </button>
     </div>
 
@@ -63,6 +67,10 @@
         <span class="text-3xl">&#128193;</span>
         <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
         <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        <div class="flex items-center gap-1 mt-1" @click.stop>
+          <span class="text-xs cursor-pointer hover:scale-110" :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'" @click="openPasswordDialog(child.folder.id)">{{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}</span>
+          <span title="Share" class="text-xs cursor-pointer hover:scale-110" @click="openShareDialog(child.folder.id, child.folder.name)">&#x1F517;</span>
+        </div>
       </button>
     </div>
 
@@ -91,6 +99,24 @@
     </div>
 
     <div v-if="loading" class="text-center py-8 text-[var(--text-secondary)]">Loading...</div>
+
+    <FolderPasswordDialog
+      :visible="passwordDialog.show"
+      :folderId="passwordDialog.folderId"
+      :mode="passwordDialog.mode"
+      :hasPassword="passwordDialog.hasPassword"
+      :expiresAt="passwordDialog.expiresAt"
+      @close="passwordDialog.show = false"
+      @unlocked="passwordDialog.show = false; loadPasswordStatuses()"
+      @removed="passwordDialog.show = false; loadPasswordStatuses()"
+    />
+
+    <FolderShareDialog
+      :visible="shareDialog.show"
+      :folderId="shareDialog.folderId"
+      :folderName="shareDialog.folderName"
+      @close="shareDialog.show = false"
+    />
   </div>
 </template>
 
@@ -100,7 +126,10 @@ import api from '../api/client'
 import ThumbnailCard from './ThumbnailCard.vue'
 import Breadcrumbs from './Breadcrumbs.vue'
 import InlineUpload from './InlineUpload.vue'
+import FolderPasswordDialog from './FolderPasswordDialog.vue'
+import FolderShareDialog from './FolderShareDialog.vue'
 import { useChunkedUploadStore } from '../stores/chunkedUpload'
+import { useFolderUnlockStore } from '../stores/folderUnlock'
 
 interface FileItem {
   id: string
@@ -155,6 +184,23 @@ const createInput = ref<HTMLInputElement | null>(null)
 const upload = useChunkedUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
+const unlockStore = useFolderUnlockStore()
+const folderPasswordStatus = ref<Record<string, boolean>>({})
+
+const passwordDialog = ref({
+  show: false,
+  folderId: '',
+  mode: 'set' as 'set' | 'unlock' | 'status',
+  hasPassword: false,
+  expiresAt: '',
+})
+
+const shareDialog = ref({
+  show: false,
+  folderId: '',
+  folderName: '',
+})
+
 onMounted(() => {
   refreshInterval = setInterval(() => {
     const completed = upload.consumeCompletedJobs()
@@ -165,6 +211,7 @@ onMounted(() => {
       loadFiles()
     }
   }, 2000)
+  loadPasswordStatuses()
 })
 
 onUnmounted(() => {
@@ -218,6 +265,7 @@ async function loadFolders() {
   try {
     const res = await api.get('/folders')
     folders.value = res.data
+    await loadPasswordStatuses()
   } catch (e) {
     console.error('Failed to load folders', e)
   }
@@ -269,9 +317,48 @@ async function createFolder() {
     newFolderName.value = ''
     showCreate.value = false
     await loadFolders()
+    await loadPasswordStatuses()
   } catch (e) {
     console.error('Failed to create folder', e)
   }
+}
+
+function openPasswordDialog(folderId: string) {
+  const hasPass = folderPasswordStatus.value[folderId]
+  const unlocked = unlockStore.isUnlocked(folderId)
+  passwordDialog.value = {
+    show: true,
+    folderId,
+    mode: hasPass ? (unlocked ? 'status' : 'unlock') : 'set',
+    hasPassword: hasPass,
+    expiresAt: '',
+  }
+}
+
+function openShareDialog(folderId: string, folderName: string) {
+  shareDialog.value = { show: true, folderId, folderName }
+}
+
+async function loadPasswordStatuses() {
+  try {
+    const allIds: string[] = []
+    const collect = (nodes: FolderTreeNode[]) => {
+      for (const n of nodes) {
+        allIds.push(n.folder.id)
+        collect(n.children ?? [])
+      }
+    }
+    collect(folders.value.children ?? [])
+
+    for (const id of allIds) {
+      try {
+        const res = await api.get(`/folders/${id}/password`)
+        folderPasswordStatus.value[id] = res.data.has_password || false
+      } catch {
+        folderPasswordStatus.value[id] = false
+      }
+    }
+  } catch {}
 }
 
 watch(showCreate, (v) => {

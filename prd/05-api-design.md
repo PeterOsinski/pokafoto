@@ -607,6 +607,152 @@ Download multiple files as a ZIP archive.
 
 ---
 
+### 5.1.7b Folder Password Protection
+
+These endpoints require authentication and folder ownership.
+
+#### `POST /api/v1/folders/{id}/password`
+Set or update a password on a folder. The password expires after 30 minutes (configurable). All folder contents become protected — the owner must also unlock to access.
+
+**Request:**
+```json
+{ "password": "secret123" }
+```
+**Response:** `201 Created`
+```json
+{ "message": "Password set for folder", "expires_at": "2026-06-02T16:00:00Z" }
+```
+
+#### `DELETE /api/v1/folders/{id}/password`
+Remove the password protection from a folder.
+
+**Response:** `204 No Content`
+
+#### `POST /api/v1/folders/{id}/unlock`
+Unlock a password-protected folder. Returns a short-lived unlock JWT.
+
+**Request:**
+```json
+{ "password": "secret123" }
+```
+**Response:** `200 OK`
+```json
+{
+  "unlock_token": "eyJhbGciOi...",
+  "expires_at": "2026-06-02T16:00:00Z",
+  "folder_id": "uuid"
+}
+```
+**Error:** `401 Unauthorized` for wrong password. `404 Not Found` if no password set.
+
+#### `GET /api/v1/folders/{id}/password`
+Check if a folder has an active password.
+
+**Response:** `200 OK`
+```json
+{ "has_password": true, "expires_at": "2026-06-02T16:00:00Z" }
+```
+
+---
+
+### 5.1.7c Folder Public Sharing
+
+#### `POST /api/v1/folders/{id}/shares`
+Create a public share link for a folder. Owner-only.
+
+**Request:**
+```json
+{
+  "permissions": "read_upload",
+  "upload_limit_bytes": 104857600,
+  "expires_at": "2026-12-31T23:59:59Z",
+  "password": "optional_password"
+}
+```
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "token": "uuid-token",
+  "share_url": "/share/uuid-token",
+  "folder_id": "uuid",
+  "permissions": "read_upload",
+  "upload_limit_bytes": 104857600,
+  "expires_at": "2026-12-31T23:59:59Z",
+  "has_password": false,
+  "created_at": "2026-06-02T15:00:00Z"
+}
+```
+
+#### `GET /api/v1/folders/{id}/shares`
+List all shares for a folder. Owner-only. Returns `uploaded_bytes` per share.
+
+#### `PUT /api/v1/folders/{id}/shares/{shareId}`
+Update share permissions, limits, expiry, or password. Owner-only.
+
+#### `DELETE /api/v1/folders/{id}/shares/{shareId}`
+Revoke a share link. Owner-only.
+
+---
+
+### 5.1.7d Public Share Access (no authentication required)
+
+All endpoints under `/api/v1/share/{token}` require a valid share session token (obtained via unlock).
+
+#### `GET /api/v1/share/{token}`
+Get share info without authentication.
+
+**Response:** `200 OK`
+```json
+{
+  "needs_password": false,
+  "permissions": "read_upload",
+  "upload_limit_bytes": 104857600,
+  "uploaded_bytes": 0,
+  "expires_at": "2026-12-31T23:59:59Z",
+  "folder_name": "My Folder",
+  "file_count": 10
+}
+```
+
+#### `POST /api/v1/share/{token}/unlock`
+Obtain a share session token (with password if required). No auth needed.
+
+**Request:** `{ "password": "sharepass" }` (if `needs_password` is true, otherwise `{}`)
+**Response:** `200 OK`
+```json
+{
+  "share_session_token": "eyJhbGciOi...",
+  "expires_at": "2026-06-03T15:00:00Z"
+}
+```
+
+#### `GET /api/v1/share/{token}/files`
+List files in shared folder. Requires `X-Share-Session-Token` header.
+#### `GET /api/v1/share/{token}/files/{id}`
+Get file detail. Requires read permission.
+#### `GET /api/v1/share/{token}/download/{id}`
+Download a file. Requires read permission.
+#### `GET /api/v1/share/{token}/thumb/{fileID}/{size}`
+Serve a thumbnail from the shared folder. Requires read permission. Pass share session token via query param `?share_session_token=...`.
+#### `POST /api/v1/share/{token}/upload`
+Upload files to shared folder. Requires upload permission. Enforces `upload_limit_bytes` quota. Multipart form with `files` field.
+#### `DELETE /api/v1/share/{token}/files/{id}`
+Delete a file from shared folder. Requires write permission.
+
+**Error Codes for Shares:**
+| Code | HTTP | Meaning |
+|------|------|---------|
+| `SHARE_NOT_FOUND` | 404 | Share token does not exist |
+| `SHARE_EXPIRED` | 410 | Share link has expired |
+| `SHARE_PASSWORD_REQUIRED` | 403 | Share requires password unlock |
+| `INVALID_SHARE_PASSWORD` | 401 | Wrong share password |
+| `SHARE_TOKEN_REQUIRED` | 403 | Missing share session token |
+| `SHARE_QUOTA_EXCEEDED` | 413 | Upload would exceed share upload limit |
+| `PERMISSION_DENIED` | 403 | Share does not permit this action |
+
+---
+
 ### 5.1.8 Search
 
 #### `GET /api/v1/search`

@@ -69,6 +69,11 @@ const router = createRouter({
       component: () => import('../views/SearchView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/share/:token',
+      name: 'share-public',
+      component: () => import('../views/SharePublicView.vue'),
+    },
   ],
 })
 

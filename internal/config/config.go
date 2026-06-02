@@ -31,9 +31,10 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	AllowRegistration bool   `yaml:"allow_registration"`
-	JWTSecret         string `yaml:"jwt_secret"`
-	SessionDurationH  int    `yaml:"session_duration_hours"`
+	AllowRegistration         bool   `yaml:"allow_registration"`
+	JWTSecret                 string `yaml:"jwt_secret"`
+	SessionDurationH          int    `yaml:"session_duration_hours"`
+	FolderPasswordExpiryMinutes int  `yaml:"folder_password_expiry_minutes"`
 }
 
 type ThumbnailSizeConfig struct {
@@ -112,9 +113,10 @@ func DefaultConfig() *Config {
 			Path: "./data/drive.db",
 		},
 		Auth: AuthConfig{
-			AllowRegistration: false,
-			JWTSecret:         "",
-			SessionDurationH:  72,
+			AllowRegistration:           false,
+			JWTSecret:                   "",
+			SessionDurationH:            72,
+			FolderPasswordExpiryMinutes: 30,
 		},
 		Media: MediaConfig{
 			AutoOrganize:        true,

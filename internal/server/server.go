@@ -16,57 +16,63 @@ import (
 )
 
 type Server struct {
-	cfg               *config.Config
-	db                *store.DB
-	router            *chi.Mux
-	userStore         *store.UserStore
-	sessStore         *store.SessionStore
-	fileStore         *store.FileStore
-	folderStore       *store.FolderStore
-	exifStore         *store.ExifStore
-	thumbnailStore    *store.ThumbnailStore
-	geoStore          *store.GeoStore
-	uploadJobStore    *store.UploadJobStore
-	chunkStore        *store.ChunkStore
-	settingStore      *store.SettingStore
-	albumStore        *store.AlbumStore
-	albumItemStore    *store.AlbumItemStore
-	albumShareStore   *store.AlbumShareStore
-	commentStore      *store.CommentStore
-	reactionStore     *store.ReactionStore
-	tagStore          *store.TagStore
-	docStore          *store.DocumentStore
-	storageService    *service.StorageService
-	workerPool        *worker.Pool
-	s3DeletionPool    *S3DeletionPool
-	eventRecorder     *service.EventRecorder
-	systemEventsStore *store.SystemEventsStore
-	backupScheduler   *backup.Scheduler
-	stopCh            chan struct{}
+	cfg                 *config.Config
+	db                  *store.DB
+	router              *chi.Mux
+	userStore           *store.UserStore
+	sessStore           *store.SessionStore
+	fileStore           *store.FileStore
+	folderStore         *store.FolderStore
+	exifStore           *store.ExifStore
+	thumbnailStore      *store.ThumbnailStore
+	geoStore            *store.GeoStore
+	uploadJobStore      *store.UploadJobStore
+	chunkStore          *store.ChunkStore
+	settingStore        *store.SettingStore
+	albumStore          *store.AlbumStore
+	albumItemStore      *store.AlbumItemStore
+	albumShareStore     *store.AlbumShareStore
+	commentStore        *store.CommentStore
+	reactionStore       *store.ReactionStore
+	tagStore            *store.TagStore
+	docStore            *store.DocumentStore
+	folderPasswordStore *store.FolderPasswordStore
+	folderShareStore    *store.FolderShareStore
+	shareUploadStore    *store.ShareUploadStore
+	storageService      *service.StorageService
+	workerPool          *worker.Pool
+	s3DeletionPool      *S3DeletionPool
+	eventRecorder       *service.EventRecorder
+	systemEventsStore   *store.SystemEventsStore
+	backupScheduler     *backup.Scheduler
+	stopCh              chan struct{}
 }
 
 func New(cfg *config.Config, db *store.DB) *Server {
 	s := &Server{
-		cfg:             cfg,
-		db:              db,
-		userStore:       store.NewUserStore(db),
-		sessStore:       store.NewSessionStore(db),
-		fileStore:       store.NewFileStore(db),
-		folderStore:     store.NewFolderStore(db),
-		exifStore:       store.NewExifStore(db),
-		thumbnailStore:  store.NewThumbnailStore(db),
-		geoStore:        store.NewGeoStore(db),
-		uploadJobStore:   store.NewUploadJobStore(db),
-		chunkStore:       store.NewChunkStore(db),
-		settingStore:     store.NewSettingStore(db),
-		albumStore:      store.NewAlbumStore(db),
-		albumItemStore:  store.NewAlbumItemStore(db),
-		albumShareStore: store.NewAlbumShareStore(db),
-		commentStore:    store.NewCommentStore(db),
-		reactionStore:   store.NewReactionStore(db),
-		tagStore:        store.NewTagStore(db),
-		docStore:        store.NewDocumentStore(db),
-		stopCh:          make(chan struct{}),
+		cfg:                cfg,
+		db:                 db,
+		userStore:          store.NewUserStore(db),
+		sessStore:          store.NewSessionStore(db),
+		fileStore:          store.NewFileStore(db),
+		folderStore:        store.NewFolderStore(db),
+		exifStore:          store.NewExifStore(db),
+		thumbnailStore:     store.NewThumbnailStore(db),
+		geoStore:           store.NewGeoStore(db),
+		uploadJobStore:     store.NewUploadJobStore(db),
+		chunkStore:         store.NewChunkStore(db),
+		settingStore:       store.NewSettingStore(db),
+		albumStore:         store.NewAlbumStore(db),
+		albumItemStore:     store.NewAlbumItemStore(db),
+		albumShareStore:    store.NewAlbumShareStore(db),
+		commentStore:       store.NewCommentStore(db),
+		reactionStore:      store.NewReactionStore(db),
+		tagStore:           store.NewTagStore(db),
+		docStore:           store.NewDocumentStore(db),
+		folderPasswordStore: store.NewFolderPasswordStore(db),
+		folderShareStore:    store.NewFolderShareStore(db),
+		shareUploadStore:    store.NewShareUploadStore(db),
+		stopCh:             make(chan struct{}),
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -102,6 +108,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	go s.startTrashCleanup()
 	go s.startEventRetention()
 	go s.startChunkCleanup()
+	go s.startFolderPasswordCleanup()
 
 	s.setupRouter()
 	return s
@@ -125,7 +132,7 @@ func (s *Server) setupRouter() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Folder-Unlock-Token", "X-Share-Session-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -133,6 +140,15 @@ func (s *Server) setupRouter() {
 
 	r.Get("/api/v1/health", s.handleHealth)
 	r.Get("/api/v1/auth/config", s.handleAuthConfig)
+
+	r.Get("/api/v1/share/{token}", s.handleShareInfo)
+	r.Post("/api/v1/share/{token}/unlock", s.handleShareUnlock)
+	r.Get("/api/v1/share/{token}/files", s.handleShareListFiles)
+	r.Get("/api/v1/share/{token}/files/{id}", s.handleShareGetFile)
+	r.Get("/api/v1/share/{token}/download/{id}", s.handleShareDownload)
+	r.Get("/api/v1/share/{token}/thumb/{fileID}/{size}", s.handleShareThumbnail)
+	r.Post("/api/v1/share/{token}/upload", s.handleShareUpload)
+	r.Delete("/api/v1/share/{token}/files/{id}", s.handleShareDeleteFile)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", s.handleRegister)
@@ -172,6 +188,14 @@ func (s *Server) setupRouter() {
 			r.Post("/folders", s.handleCreateFolder)
 			r.Put("/folders/{id}", s.handleRenameFolder)
 			r.Delete("/folders/{id}", s.handleDeleteFolder)
+			r.Post("/folders/{id}/password", s.handleSetFolderPassword)
+			r.Delete("/folders/{id}/password", s.handleRemoveFolderPassword)
+			r.Post("/folders/{id}/unlock", s.handleUnlockFolder)
+			r.Get("/folders/{id}/password", s.handleGetFolderPasswordStatus)
+			r.Post("/folders/{id}/shares", s.handleCreateShare)
+			r.Get("/folders/{id}/shares", s.handleListShares)
+			r.Put("/folders/{id}/shares/{shareId}", s.handleUpdateShare)
+			r.Delete("/folders/{id}/shares/{shareId}", s.handleDeleteShare)
 
 			r.Get("/search", s.handleSearch)
 
@@ -291,5 +315,16 @@ func (s *Server) startEventRetention() {
 		} else if deleted > 0 {
 			slog.Info("purged old system events", "deleted", deleted)
 		}
+	}
+}
+
+func (s *Server) startFolderPasswordCleanup() {
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-time.After(5 * time.Minute):
+		}
+		s.folderPasswordStore.DeleteExpired()
 	}
 }

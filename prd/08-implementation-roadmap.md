@@ -235,7 +235,20 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Navigation | Albums and Search routes with nav items | `web/src/router/`, `App.vue` | ✅ |
 | Tests | 4 new test files (album, comment, reaction, tag stores) | `internal/store/*_test.go` | ✅ |
 
-## 8.5 Phase 3 — Differentiators (Weeks 13-20) — ❌ 0% Complete
+## 8.5a Phase 2.5 — Folder Security & Public Sharing (Week 19b) — ✅ Complete
+
+| Task | Details | Deliverable | Status |
+|---|---|---|---|
+| Folder password tables + migration | `folder_passwords`, `folder_shares`, `share_uploads` tables | `migration_017_folder_shares.sql` | ✅ |
+| Go models | FolderPassword, FolderShare, ShareUpload structs | `internal/model/folder_password.go`, `folder_share.go`, `share_upload.go` | ✅ |
+| Store layer | FolderPasswordStore, FolderShareStore, ShareUploadStore with tests | `internal/store/folder_password*.go`, `folder_share*.go`, `share_upload*.go` | ✅ |
+| Folder password middleware | JWT-based unlock tokens, separate signing key, expiry enforcement, `checkFolderAccess` check | `internal/server/middleware.go` | ✅ |
+| Folder password handlers | Set/remove/unlock/status endpoints with tests | `internal/server/folder_password.go`, `folder_password_test.go` | ✅ |
+| Folder share handlers | Create/list/update/delete share links with tests | `internal/server/folder_share.go`, `folder_password_test.go` | ✅ |
+| Public share access handlers | Share info, unlock, list files, get file, download, thumbnails, upload, delete — all public | `internal/server/share_access.go`, `folder_password_test.go` | ✅ |
+| Secured existing endpoints | Thumbnails, downloads, file GET, file list, upload, chunk upload all check folder password | `internal/server/handlers.go`, `upload.go`, `chunk_upload.go` | ✅ |
+| Route registration | Share routes (public + authenticated), background password cleanup goroutine | `internal/server/server.go` | ✅ |
+| Test coverage | 18 handler tests + 15 store tests for password/share features | `internal/store/*_test.go`, `internal/server/folder_password_test.go` | ✅ |
 
 ### Weeks 13-14: AI Tagging — ❌
 

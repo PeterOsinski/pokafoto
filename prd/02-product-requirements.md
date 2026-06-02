@@ -157,6 +157,30 @@
 | S-01-legacy | As a user, I can generate a shareable link to an album or individual photo | P3 |
 | S-02-legacy | As a user, shared links can be password-protected and time-limited | P3 |
 
+### Folder Password Protection (v2.5)
+| ID | User Story | Priority |
+|---|---|---|
+| FP-01 | As a user, I can set a password on a folder that protects all its contents (files, thumbnails, downloads) | P0 |
+| FP-02 | As a user, I must provide the folder password to access its contents — even for myself as the folder owner | P0 |
+| FP-03 | As a user, the folder password expires after 30 minutes of inactivity (configurable), requiring re-entry | P0 |
+| FP-04 | As a user, I can remove the folder password at any time | P1 |
+| FP-05 | As a user, thumbnails from password-protected folders are also protected — no unauthenticated access | P0 |
+| FP-06 | As a user, downloads and file previews from password-protected folders require the unlock token | P0 |
+
+### Folder Public Sharing (v2.5)
+| ID | User Story | Priority |
+|---|---|---|
+| PS-01 | As a user, I can share a folder publicly without requiring account registration from recipients | P0 |
+| PS-02 | As a user, I can set share permissions: read-only, read+upload, or read+upload+delete | P0 |
+| PS-03 | As a user, I can set an expiration date when the share link stops working | P0 |
+| PS-04 | As a user, I can set an upload size limit (e.g., 100MB total) for shared folders with upload permission | P0 |
+| PS-05 | As a user, the upload limit is enforced server-side — uploads exceeding the quota are rejected immediately | P0 |
+| PS-06 | As a user, I can password-protect the share link for an extra layer of security | P1 |
+| PS-07 | As a user, I can list, update, and revoke share links for a folder | P0 |
+| PS-08 | As a public recipient, I can browse, preview, and download files from a shared folder (with a session token) | P0 |
+| PS-09 | As a public recipient, I can upload files to a shared folder if the share permits it, up to the quota limit | P0 |
+| PS-10 | As a public recipient, I can delete files from a shared folder if the share permits write access | P0 |
+
 ---
 
 ## 2.2 Functional Requirements

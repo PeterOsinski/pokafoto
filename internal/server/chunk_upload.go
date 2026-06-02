@@ -70,6 +70,13 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 		folderID := r.Header.Get("X-Folder-ID")
 		skipDedup := r.Header.Get("X-Skip-Name-Size-Dedup") == "true"
 
+		if folderID != "" {
+			if !s.checkFolderAccess(folderID, getUserID(r), r) {
+				writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock to upload")
+				return
+			}
+		}
+
 		if filename == "" || totalSizeStr == "" || totalChunksStr == "" {
 			writeError(w, http.StatusBadRequest, "MISSING_HEADERS", "X-Filename, X-Total-Size, and X-Total-Chunks required for new upload")
 			return

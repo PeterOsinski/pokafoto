@@ -45,6 +45,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	folderID := folderIDFromForm(r)
+	if folderID != nil {
+		if !s.checkFolderAccess(*folderID, userID, r) {
+			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock to upload")
+			return
+		}
+	}
+
 	batchID := uuid.New().String()
 	jobs := make([]map[string]interface{}, 0, len(files))
 
