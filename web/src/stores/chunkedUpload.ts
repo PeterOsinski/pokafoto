@@ -215,19 +215,16 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
       const workers = Math.min(MAX_CONCURRENT_CHUNKS, queued.length)
       await Promise.all(Array.from({ length: workers }, () => worker()))
 
-      const currentJob = jobs.value.find(j => j.uploadId === job.uploadId) || job
-      const storedCount = currentJob.storedChunks.length
-      if (storedCount >= totalChunks) {
-        updateJob(job.uploadId, { status: 'assembling' })
+      const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
+        upload_id: job.uploadId,
+      })
+      console.log('[chunkedUpload] complete response:', completeRes.data)
 
-        const completeRes = await api.post(`/upload/chunk/${currentJob.resumeToken}/complete`, {
-          upload_id: job.uploadId,
-        })
-
-        if (completeRes.data.status === 'assembling' && completeRes.data.missing_chunks.length === 0) {
-          updateJob(job.uploadId, { status: 'processing' })
-          await pollForCompletion(job.uploadId, completeRes.data.job_id)
-        }
+      const storedCount = completeRes.data.stored_chunks || 0
+      const missingChunks = completeRes.data.missing_chunks || []
+      if (storedCount >= totalChunks && missingChunks.length === 0) {
+        updateJob(job.uploadId, { status: 'processing' })
+        await pollForCompletion(job.uploadId, completeRes.data.job_id)
       }
     } catch (e: any) {
       console.error('[chunkedUpload] startChunkedUpload error:', e?.message || e, e?.response?.status, e?.response?.data)
