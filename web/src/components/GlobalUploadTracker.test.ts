@@ -125,4 +125,28 @@ describe('GlobalUploadTracker', () => {
 
     expect(wrapper.text()).toContain('Retry')
   })
+
+  it('shows aggregate sizes in header when collapsed', async () => {
+    const upload = useChunkedUploadStore()
+    const MB = 1024 * 1024
+    upload.addJob(makeJob({ uploadId: 'job-a', filename: 'a.bin', totalSize: 3 * MB, status: 'uploading', uploadedBytes: 1 * MB }))
+    upload.addJob(makeJob({ uploadId: 'job-b', filename: 'b.bin', totalSize: 7 * MB, status: 'uploading', uploadedBytes: 4 * MB }))
+
+    const wrapper = mount(GlobalUploadTracker)
+
+    expect(wrapper.text()).toContain('5.0 MB / 10.0 MB')
+    expect(wrapper.text()).toContain('files')
+  })
+
+  it('shows per-job sizes in expanded view', async () => {
+    const MB = 1024 * 1024
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-c', filename: 'photo.png', totalSize: 2 * MB, status: 'uploading', uploadedBytes: 1 * MB }))
+
+    const wrapper = await mountExpanded()
+
+    expect(wrapper.text()).toContain('photo.png')
+    expect(wrapper.text()).toContain('1.0 MB')
+    expect(wrapper.text()).toContain('2.0 MB')
+  })
 })

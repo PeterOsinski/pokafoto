@@ -17,6 +17,9 @@
         </template>
         <template v-else>Uploads</template>
       </span>
+      <span v-if="totalUploadSize > 0" class="text-xs text-[var(--text-secondary)]">
+        {{ formatBytes(uploadedTotalSize) }} / {{ formatBytes(totalUploadSize) }}
+      </span>
       <span class="text-xs text-[var(--text-secondary)]">
         {{ expanded ? '&#9660;' : '&#9650;' }}
       </span>
@@ -29,10 +32,13 @@
         class="py-1.5 text-sm"
       >
         <div class="flex items-center gap-3">
-          <span class="truncate flex-1 text-[var(--text-primary)] text-xs">{{ job.filename }}</span>
+          <div class="flex-1 min-w-0">
+            <span class="truncate block text-[var(--text-primary)] text-xs">{{ job.filename }}</span>
+            <span class="text-[var(--text-secondary)] block" style="font-size: 0.625rem">{{ formatBytes(job.uploadedBytes || 0) }} / {{ formatBytes(job.totalSize) }}</span>
+          </div>
           <div
             v-if="(job.status === 'processing' || job.status === 'uploading' || job.status === 'assembling') && job.progress !== undefined"
-            class="w-16 h-1 rounded-full overflow-hidden"
+            class="w-16 h-1 rounded-full overflow-hidden shrink-0"
             style="background: var(--bg-elevated)"
           >
             <div
@@ -117,6 +123,8 @@ interface DisplayJob {
   progress?: number
   error?: string
   isChunked: boolean
+  totalSize: number
+  uploadedBytes: number
 }
 
 const allJobs = computed<DisplayJob[]>(() =>
@@ -127,6 +135,8 @@ const allJobs = computed<DisplayJob[]>(() =>
     progress: j.totalSize > 0 ? j.uploadedBytes / j.totalSize : 0,
     error: j.error,
     isChunked: true,
+    totalSize: j.totalSize,
+    uploadedBytes: j.uploadedBytes,
   })),
 )
 
@@ -165,16 +175,18 @@ const aggregateProgress = computed(() => {
     j.status === 'uploading' || j.status === 'processing' || j.status === 'assembling',
   )
   if (activeJobs.length === 0) return 0
-  const totalBytes = activeJobs.reduce((sum, j) => {
-    const chunkedJob = chunked.jobs.find(c => c.uploadId === j.key)
-    return sum + (chunkedJob?.totalSize || 0)
-  }, 0)
-  const uploadedBytes = activeJobs.reduce((sum, j) => {
-    const chunkedJob = chunked.jobs.find(c => c.uploadId === j.key)
-    return sum + (chunkedJob?.uploadedBytes || 0)
-  }, 0)
+  const totalBytes = activeJobs.reduce((sum, j) => sum + j.totalSize, 0)
+  const uploadedBytes = activeJobs.reduce((sum, j) => sum + j.uploadedBytes, 0)
   return totalBytes > 0 ? uploadedBytes / totalBytes : 0
 })
+
+const totalUploadSize = computed(() =>
+  allJobs.value.reduce((sum, j) => sum + j.totalSize, 0),
+)
+
+const uploadedTotalSize = computed(() =>
+  allJobs.value.reduce((sum, j) => sum + j.uploadedBytes, 0),
+)
 
 const sortedJobs = computed(() => {
   const order: Record<string, number> = {
@@ -197,5 +209,17 @@ function statusLabel(job: DisplayJob) {
   if (job.status === 'uploading' && job.progress !== undefined) return `${Math.round(job.progress * 100)}%`
   if (job.status === 'assembling') return 'assembling'
   return job.status
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let val = bytes
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  return val.toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
 }
 </script>

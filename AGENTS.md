@@ -174,3 +174,77 @@ When adding new features, record significant outcomes via `eventRecorder.Info/Wa
 ### Retention
 
 Events are retained for 90 days. A background goroutine in `server.go` purges entries older than 90 days once every 24 hours.
+
+## Incident Triage
+
+### Schema Quick Reference
+
+Three tables are essential for upload diagnostics. Full schema at `prd/04-data-model.md`.
+
+| Table | Purpose | Key columns |
+|---|---|---|
+| `upload_jobs` | Upload lifecycle tracking | `id`, `filename`, `size_bytes`, `status`, `upload_mode`, `total_chunks`, `chunk_size`, `error`, `reason`, `resume_token`, `created_at`, `updated_at` |
+| `upload_chunks` | Per-chunk storage records | `upload_id`, `chunk_index`, `chunk_size`, `offset`, `status`, `chunk_sha256`, `temp_path`, `created_at` |
+| `system_events` | System-wide events/errors | `event_type`, `severity`, `message`, `metadata` (JSON), `created_at` |
+
+### Upload Error Triage Workflow
+
+1. **Identify the file/job** — query `upload_jobs` by filename:
+   ```bash
+   sqlite3 data/drive.db "SELECT id, filename, size_bytes, status, upload_mode, total_chunks, error, created_at FROM upload_jobs WHERE filename LIKE '%FILENAME%' ORDER BY created_at DESC"
+   ```
+
+2. **Check system events** for server-side errors related to the upload:
+   ```bash
+   sqlite3 data/drive.db "SELECT event_type, severity, substr(message,1,120), created_at FROM system_events WHERE (message LIKE '%FILENAME%' OR json_extract(metadata,'$.filename') LIKE '%FILENAME%') ORDER BY created_at DESC"
+   ```
+
+3. **Check chunk records** (for chunked uploads) — find missing chunks:
+   ```bash
+   sqlite3 data/drive.db "SELECT uc.chunk_index, uc.status, uc.chunk_size, uc.created_at FROM upload_chunks uc WHERE uc.upload_id = 'JOB_ID' ORDER BY uc.chunk_index"
+   ```
+   Compare against `total_chunks` from step 1 to identify gaps.
+
+4. **Identify the error origin** — trace the error message back to source code by function name:
+   - `"Network error during chunk upload"` → `web/src/stores/chunkedUpload.ts`, function `startChunkedUpload` (catch block inside the concurrent worker loop where `uploadChunk` throws on non-422 errors)
+   - `"Chunk hash mismatch"` → `internal/server/chunk_upload.go`, function `handleChunkUpload` (server returns 422 when SHA-256 of received body doesn't match `X-Chunk-SHA256` header)
+   - `"assembly_error"` → `internal/worker/pool.go`, function `processChunkedJob` (worker calls `chunkStore.AssembleFile` which fails if any chunk file is missing from disk)
+   - `"upload_expired"` → `internal/store/chunk.go`, function `CleanupOldUploads` (background cleanup marks queued/processing chunked jobs older than `max_chunk_upload_age_hours` as failed)
+
+5. **Cross-reference timing** — overlap timestamps across `upload_jobs`, `upload_chunks`, and `system_events` to reconstruct the event sequence.
+
+6. **Check infrastructure** — disk space (`df -h`), S3 connectivity, and server restarts.
+
+### Chunked Upload Data Flow
+
+```
+Browser (chunkedUpload.ts)
+  → POST /api/v1/upload/chunk (with X-Filename, X-Total-Size, X-Total-Chunks headers)
+  → handleChunkUpload (chunk_upload.go) writes chunk file to disk + upload_chunks row
+  → POST /api/v1/upload/chunk/{token}/complete
+  → handleChunkUploadComplete (chunk_upload.go) validates all chunks present, notifies worker pool
+  → worker pool (pool.go) → processChunkedJob assembles chunks → standard processing pipeline
+```
+
+With `MAX_CONCURRENT_CHUNKS=3`, chunks are uploaded in parallel batches of 3. If any chunk fails with a non-422 error, the frontend marks the entire upload as failed with `"Network error during chunk upload"`.
+
+### Common Upload Error Categories
+
+| Symptom | Likely Cause | Check |
+|---|---|---|
+| Job `status=queued` with partial chunks | Client network drop during transfer | Check `upload_chunks` for gaps vs `total_chunks` |
+| Multiple queued jobs for same file | Retry after failure, both abandoned | Count `queued` jobs for filename |
+| `error="upload_expired"` | Chunks not completed within `max_chunk_upload_age_hours` | Check config `upload.max_chunk_upload_age_hours` |
+| All chunked uploads failing | S3 or storage path issue | Check `system_events` for s3_disconnect, disk space |
+| Chunk hash mismatches | Corrupted transfer or client-side mutation | Server returns 422 with expected/actual hashes |
+| No events in system_events | Error occurred client-side only (frontend network error, server never saw failure) | Check browser console / network tab |
+
+### Code Trace Map
+
+| Error/Endpoint | Frontend | Server | Worker/Store |
+|---|---|---|---|
+| `"Network error during chunk upload"` | `chunkedUpload.ts` `startChunkedUpload` (catch block in concurrent worker loop) | N/A (client-side) | N/A |
+| Chunk upload failure | `chunkedUpload.ts` `uploadChunk` (throws on error, returns false on 422) | `chunk_upload.go` `handleChunkUpload` | `chunk.go` `CreateChunkRecord` |
+| Resume/recovery | `chunkedUpload.ts` `checkResume` / `resumeUpload` | `chunk_upload.go` `handleChunkUploadResume` | — |
+| Assembly + processing | `chunkedUpload.ts` `pollForCompletion` (WebSocket polling) | — | `pool.go` `processChunkedJob` |
+| Standard (non-chunked) upload | `upload.ts` | `upload.go` `handleUpload` | `pool.go` worker loop |

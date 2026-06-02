@@ -92,12 +92,13 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
       if (idx >= 0) {
         const job = jobs.value[idx]
         if (update.progress !== undefined) {
-          jobs.value[idx] = {
-            ...job,
-            uploadedBytes: update.progress * job.totalSize,
-            error: update.error,
+            const newBytes = Math.min(Math.round(update.progress * job.totalSize), job.totalSize)
+            jobs.value[idx] = {
+              ...job,
+              uploadedBytes: Math.max(job.uploadedBytes, newBytes),
+              error: update.error,
+            }
           }
-        }
         if (update.status === 'completed' || (update.status === 'skipped' && update.file_id)) {
           if (update.file_id) {
             completedJobs.value.push({
@@ -166,9 +167,10 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         const idx = jobs.value.findIndex(j => j.uploadId === aj.job_id)
         if (idx >= 0) {
           const job = jobs.value[idx]
-          if (aj.progress !== undefined) {
-            jobs.value[idx] = { ...job, uploadedBytes: aj.progress * job.totalSize }
-          }
+        if (aj.progress !== undefined) {
+              const newBytes = Math.min(Math.round(aj.progress * job.totalSize), job.totalSize)
+              jobs.value[idx] = { ...job, uploadedBytes: Math.max(job.uploadedBytes, newBytes) }
+            }
         }
       }
     } catch {
@@ -248,7 +250,8 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
     if (idx >= 0) {
       jobs.value[idx] = { ...jobs.value[idx], ...updates }
       if (updates.storedChunks) {
-        jobs.value[idx].uploadedBytes = updates.storedChunks.length * jobs.value[idx].chunkSize
+        const computedBytes = Math.min(updates.storedChunks.length * jobs.value[idx].chunkSize, jobs.value[idx].totalSize)
+        jobs.value[idx].uploadedBytes = Math.max(jobs.value[idx].uploadedBytes, computedBytes)
       }
       if (updates.status) {
         persistActiveTokens()
@@ -293,7 +296,8 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
           if (idx >= 0) {
             const chunkProgress = Math.min(progressEvent.loaded / progressEvent.total, 0.99)
             const priorBytes = chunkIndex * job.chunkSize
-            jobs.value[idx].uploadedBytes = priorBytes + Math.round(chunkProgress * blob.size)
+            const newBytes = Math.min(priorBytes + Math.round(chunkProgress * blob.size), job.totalSize)
+            jobs.value[idx].uploadedBytes = Math.max(jobs.value[idx].uploadedBytes, newBytes)
           }
         },
       })
@@ -314,7 +318,6 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
       updateJob(job.uploadId || data.upload_id, {
         storedChunks: data.stored_chunks,
-        uploadedBytes: data.stored_chunks.length * job.chunkSize,
       })
 
       return true
@@ -588,7 +591,10 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         }
         if (found.progress !== undefined) {
           const job = jobs.value.find(j => j.uploadId === uploadId)
-          if (job) updateJob(uploadId, { uploadedBytes: found.progress * job.totalSize })
+          if (job) {
+            const newBytes = Math.min(Math.round(found.progress * job.totalSize), job.totalSize)
+            updateJob(uploadId, { uploadedBytes: Math.max(job.uploadedBytes, newBytes) })
+          }
         }
       } catch {
         // continue polling
