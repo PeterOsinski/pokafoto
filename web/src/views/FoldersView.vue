@@ -136,6 +136,12 @@
       </div>
 
       <div v-if="settings.layout.value === 'list'" class="mb-4">
+        <div class="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-xs font-semibold uppercase tracking-wide select-none px-3">
+          <span class="w-10 shrink-0" />
+          <span class="flex-1 min-w-0 py-2 px-3">Name</span>
+          <span class="py-2 px-3 hidden sm:block whitespace-nowrap shrink-0 mr-4">Created</span>
+          <span class="py-2 px-3 shrink-0">Files</span>
+        </div>
         <button
           v-for="child in listFolders"
           :key="child.folder.id"
@@ -335,6 +341,12 @@
       </div>
 
       <div v-if="settings.layout.value === 'list'" class="mb-4">
+        <div class="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-xs font-semibold uppercase tracking-wide select-none px-3">
+          <span class="w-10 shrink-0" />
+          <span class="flex-1 min-w-0 py-2 px-3">Name</span>
+          <span class="py-2 px-3 hidden sm:block whitespace-nowrap shrink-0 mr-4">Created</span>
+          <span class="py-2 px-3 shrink-0">Files</span>
+        </div>
         <button
           v-for="child in listFolders"
           :key="child.folder.id"
@@ -766,11 +778,14 @@ function findParent(nodes: FolderTreeNode[], targetId: string): string | null {
 
 function formatFolderDate(dateStr: string): string {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  const d = new Date(dateStr)
+  const dd = d.getDate().toString().padStart(2, '0')
+  const mm = (d.getMonth() + 1).toString().padStart(2, '0')
+  const yy = d.getFullYear().toString().slice(-2)
+  const hh = d.getHours().toString().padStart(2, '0')
+  const min = d.getMinutes().toString().padStart(2, '0')
+  const ss = d.getSeconds().toString().padStart(2, '0')
+  return `${dd}/${mm}/${yy} ${hh}:${min}:${ss}`
 }
 
 function togglePreviewMode() {
