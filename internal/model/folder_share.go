@@ -15,6 +15,7 @@ type FolderShare struct {
 	FolderID         string          `json:"folder_id" db:"folder_id"`
 	Token            string          `json:"token" db:"token"`
 	Permissions      SharePermission `json:"permissions" db:"permissions"`
+	IncludeSubdirs   bool            `json:"include_subdirs" db:"include_subdirs"`
 	UploadLimitBytes *int64          `json:"upload_limit_bytes,omitempty" db:"upload_limit_bytes"`
 	ExpiresAt        *time.Time      `json:"expires_at,omitempty" db:"expires_at"`
 	HasPassword      bool            `json:"has_password" db:"has_password"`

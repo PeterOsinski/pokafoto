@@ -28,6 +28,13 @@
               </select>
             </div>
 
+            <div>
+              <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                <input type="checkbox" v-model="newShare.includeSubdirs" class="accent-[var(--accent)] rounded" />
+                Include subdirectories
+              </label>
+            </div>
+
             <div v-if="newShare.permissions !== 'read'">
               <label class="text-xs text-[var(--text-secondary)] block mb-1">Upload Limit (MB, optional)</label>
               <input
@@ -91,6 +98,7 @@
                   {{ share.permissions }}
                 </span>
                 <span v-if="share.has_password" class="text-xs">&#x1F512;</span>
+                <span v-if="share.include_subdirs" class="text-xs text-[var(--text-secondary)]">subdirs</span>
               </div>
               <span class="text-xs text-[var(--text-secondary)] block truncate">
                 /share/{{ share.token.substring(0, 8) }}...
@@ -173,6 +181,7 @@ interface Share {
   id: string
   token: string
   permissions: string
+  include_subdirs?: boolean
   upload_limit_bytes?: number | null
   uploaded_bytes?: number
   has_password: boolean
@@ -187,6 +196,7 @@ const editingShare = ref<Share | null>(null)
 
 const newShare = ref({
   permissions: 'read',
+  includeSubdirs: false,
   uploadLimitMb: null as number | null,
   password: '',
   expiresAt: '',
@@ -209,7 +219,7 @@ async function createShare() {
   creating.value = true
   createError.value = ''
   try {
-    const body: any = { permissions: newShare.value.permissions }
+    const body: any = { permissions: newShare.value.permissions, include_subdirs: newShare.value.includeSubdirs }
     if (newShare.value.uploadLimitMb) {
       body.upload_limit_bytes = newShare.value.uploadLimitMb * 1024 * 1024
     }
@@ -217,7 +227,7 @@ async function createShare() {
     if (newShare.value.expiresAt) body.expires_at = newShare.value.expiresAt + ':00Z'
 
     await api.post(`/folders/${props.folderId}/shares`, body)
-    newShare.value = { permissions: 'read', uploadLimitMb: null, password: '', expiresAt: '' }
+    newShare.value = { permissions: 'read', includeSubdirs: false, uploadLimitMb: null, password: '', expiresAt: '' }
     await fetchShares()
   } catch (err: any) {
     createError.value = err?.response?.data?.error?.message || 'Failed to create share'

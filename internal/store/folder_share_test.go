@@ -191,7 +191,7 @@ func TestFolderShareStore_Update_shouldChangePermissions(t *testing.T) {
 	var newLimit *int64
 	var newExpiry *time.Time
 	var newHash *string
-	err := shs.Update(share.ID, model.ShareReadWrite, newLimit, newExpiry, false, newHash)
+	err := shs.Update(share.ID, model.ShareReadWrite, share.IncludeSubdirs, newLimit, newExpiry, false, newHash)
 	if err != nil {
 		t.Fatalf("update share: %v", err)
 	}

@@ -176,3 +176,29 @@ func (s *FolderStore) Delete(id string) error {
 	}
 	return nil
 }
+
+func (s *FolderStore) FindByParentID(parentID string) ([]*model.Folder, error) {
+	rows, err := s.db.Query(
+		`SELECT id, user_id, name, parent_id, created_at, updated_at FROM folders WHERE parent_id = ? ORDER BY name`, parentID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find folders by parent: %w", err)
+	}
+	defer rows.Close()
+
+	var folders []*model.Folder
+	for rows.Next() {
+		f := &model.Folder{}
+		var parentID *string
+		var createdAt, updatedAt string
+		if err := rows.Scan(&f.ID, &f.UserID, &f.Name, &parentID, &createdAt, &updatedAt); err != nil {
+			continue
+		}
+		f.ParentID = parentID
+		f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+		folders = append(folders, f)
+	}
+
+	return folders, rows.Err()
+}

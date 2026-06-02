@@ -733,3 +733,256 @@ func TestFolderShare_Download_wrongFolder_should404(t *testing.T) {
 		t.Errorf("expected 404 for file in wrong folder, got %d", dlW.Code)
 	}
 }
+
+func TestShareSubdir_CreateShare_shouldIncludeSubdirsFlag(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("sdirs_cr_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared", nil)
+
+	_ = generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	shared := store.NewFolderShareStore(db)
+	s := &model.FolderShare{
+		FolderID:         f.ID,
+		Permissions:      model.ShareReadWrite,
+		IncludeSubdirs:   true,
+		UploadLimitBytes: nil,
+		HasPassword:      false,
+	}
+	if err := shared.Create(s); err != nil {
+		t.Fatalf("failed to create share: %v", err)
+	}
+	if !s.IncludeSubdirs {
+		t.Error("expected include_subdirs to be true")
+	}
+
+	found, err := shared.FindByID(s.ID)
+	if err != nil {
+		t.Fatalf("failed to find share: %v", err)
+	}
+	if !found.IncludeSubdirs {
+		t.Error("expected found share to have include_subdirs=true")
+	}
+}
+
+func TestShareSubdir_ListFolders_shouldReturnSubfolders(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("sdirs_ls_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Root", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	createW := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read_write","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var createResp map[string]interface{}
+	json.Unmarshal(createW.Body.Bytes(), &createResp)
+	shareToken := createResp["token"].(string)
+
+	subID := f.ID
+	folders.Create(u.ID, "Sub A", &subID)
+	folders.Create(u.ID, "Sub B", &subID)
+
+	unlockW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/unlock", `{}`, map[string]string{"Content-Type": "application/json"})
+	var unlockResp map[string]interface{}
+	json.Unmarshal(unlockW.Body.Bytes(), &unlockResp)
+	sessionToken := unlockResp["share_session_token"].(string)
+
+	listW := testRequest(t, srv, "GET", "/api/v1/share/"+shareToken+"/folders", "", map[string]string{
+		"X-Share-Session-Token": sessionToken,
+	})
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", listW.Code, listW.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(listW.Body.Bytes(), &resp)
+	items := resp["folders"].([]interface{})
+	if len(items) != 2 {
+		t.Errorf("expected 2 subfolders, got %d", len(items))
+	}
+}
+
+func TestShareSubdir_CreateFolder_shouldRequireWritePermission(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("sdirs_cf_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared ReadOnly", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	createW := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var createResp map[string]interface{}
+	json.Unmarshal(createW.Body.Bytes(), &createResp)
+	shareToken := createResp["token"].(string)
+
+	unlockW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/unlock", `{}`, map[string]string{"Content-Type": "application/json"})
+	var unlockResp map[string]interface{}
+	json.Unmarshal(unlockW.Body.Bytes(), &unlockResp)
+	sessionToken := unlockResp["share_session_token"].(string)
+
+	makeW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/folders", `{"name":"New"}`, map[string]string{
+		"X-Share-Session-Token": sessionToken,
+		"Content-Type":          "application/json",
+	})
+	if makeW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for read-only share creating folder, got %d", makeW.Code)
+	}
+}
+
+func TestShareSubdir_DeleteFolder_shouldRequireWritePermission(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("sdirs_df_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared ReadOnly", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	createW := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var createResp map[string]interface{}
+	json.Unmarshal(createW.Body.Bytes(), &createResp)
+	shareToken := createResp["token"].(string)
+
+	unlockW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/unlock", `{}`, map[string]string{"Content-Type": "application/json"})
+	var unlockResp map[string]interface{}
+	json.Unmarshal(unlockW.Body.Bytes(), &unlockResp)
+	sessionToken := unlockResp["share_session_token"].(string)
+
+	delW := testRequest(t, srv, "DELETE", "/api/v1/share/"+shareToken+"/folders/some-id", "", map[string]string{
+		"X-Share-Session-Token": sessionToken,
+	})
+	if delW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for read-only share deleting folder, got %d", delW.Code)
+	}
+}
+
+func TestShareSubdir_ListFilesInSubdirectory_shouldWork(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	filestore := store.NewFileStore(db)
+	u, _ := us.Create("sdirs_lf_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Root", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	createW := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read_write","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var createResp map[string]interface{}
+	json.Unmarshal(createW.Body.Bytes(), &createResp)
+	shareToken := createResp["token"].(string)
+
+	rootID := f.ID
+	sub, _ := folders.Create(u.ID, "Subfolder", &rootID)
+
+	file := &model.File{
+		UserID:       u.ID,
+		Filename:     "sub_file.jpg",
+		OriginalName: "sub_file.jpg",
+		Path:         "",
+		SizeBytes:    200,
+		MimeType:     "image/jpeg",
+		SHA256:       uuid.NewString(),
+		MediaType:    model.MediaTypePhoto,
+		FolderID:     &sub.ID,
+	}
+	filestore.Create(file)
+
+	unlockW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/unlock", `{}`, map[string]string{"Content-Type": "application/json"})
+	var unlockResp map[string]interface{}
+	json.Unmarshal(unlockW.Body.Bytes(), &unlockResp)
+	sessionToken := unlockResp["share_session_token"].(string)
+
+	listW := testRequest(t, srv, "GET", "/api/v1/share/"+shareToken+"/files?folder_id="+sub.ID, "", map[string]string{
+		"X-Share-Session-Token": sessionToken,
+	})
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", listW.Code, listW.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(listW.Body.Bytes(), &resp)
+	items := resp["items"].([]interface{})
+	if len(items) != 1 {
+		t.Errorf("expected 1 file in subdirectory, got %d", len(items))
+	}
+}
+
+func TestShareSubdir_RejectFolderOutsideTree(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	filestore := store.NewFileStore(db)
+	u, _ := us.Create("sdirs_rj_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Root", nil)
+	f2, _ := folders.Create(u.ID, "Unrelated Folder", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	createW := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read_write","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var createResp map[string]interface{}
+	json.Unmarshal(createW.Body.Bytes(), &createResp)
+	shareToken := createResp["token"].(string)
+
+	file := &model.File{
+		UserID:       u.ID,
+		Filename:     "unrelated.jpg",
+		OriginalName: "unrelated.jpg",
+		Path:         "",
+		SizeBytes:    100,
+		MimeType:     "image/jpeg",
+		SHA256:       uuid.NewString(),
+		MediaType:    model.MediaTypePhoto,
+		FolderID:     &f2.ID,
+	}
+	filestore.Create(file)
+
+	unlockW := testRequest(t, srv, "POST", "/api/v1/share/"+shareToken+"/unlock", `{}`, map[string]string{"Content-Type": "application/json"})
+	var unlockResp map[string]interface{}
+	json.Unmarshal(unlockW.Body.Bytes(), &unlockResp)
+	sessionToken := unlockResp["share_session_token"].(string)
+
+	listW := testRequest(t, srv, "GET", "/api/v1/share/"+shareToken+"/files?folder_id="+f2.ID, "", map[string]string{
+		"X-Share-Session-Token": sessionToken,
+	})
+	if listW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for folder outside share tree, got %d: %s", listW.Code, listW.Body.String())
+	}
+
+	delW := testRequest(t, srv, "DELETE", "/api/v1/share/"+shareToken+"/folders/"+f2.ID, "", map[string]string{
+		"X-Share-Session-Token": sessionToken,
+	})
+	if delW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for deleting folder outside share tree, got %d", delW.Code)
+	}
+}

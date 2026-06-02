@@ -44,17 +44,37 @@ func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
 	uploadedBytes, _ := s.shareUploadStore.SumByShareID(share.ID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"needs_password":   share.HasPassword,
-		"permissions":      string(share.Permissions),
+		"needs_password":    share.HasPassword,
+		"permissions":       string(share.Permissions),
+		"include_subdirs":   share.IncludeSubdirs,
 		"upload_limit_bytes": share.UploadLimitBytes,
-		"uploaded_bytes":   uploadedBytes,
-		"expires_at":       func() interface{} {
-			if share.ExpiresAt == nil { return nil }
+		"uploaded_bytes":    uploadedBytes,
+		"expires_at": func() interface{} {
+			if share.ExpiresAt == nil {
+				return nil
+			}
 			return share.ExpiresAt.Format(time.RFC3339)
 		}(),
 		"folder_name": folder.Name,
 		"file_count":  fileCount,
 	})
+}
+
+func (s *Server) isFolderInShareTree(folderID, shareFolderID string) bool {
+	if folderID == shareFolderID {
+		return true
+	}
+	for i := 0; i < 50; i++ {
+		f, err := s.folderStore.FindByID(folderID)
+		if err != nil || f == nil || f.ParentID == nil || *f.ParentID == "" {
+			return false
+		}
+		if *f.ParentID == shareFolderID {
+			return true
+		}
+		folderID = *f.ParentID
+	}
+	return false
 }
 
 func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +160,16 @@ func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 		limit = 100
 	}
 
-	files, _, _, err := s.fileStore.ListFilesByFolderID(share.FolderID, r.URL.Query().Get("cursor"), limit)
+	targetFolderID := share.FolderID
+	if subID := r.URL.Query().Get("folder_id"); subID != "" {
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(subID, share.FolderID) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
+			return
+		}
+		targetFolderID = subID
+	}
+
+	files, _, _, err := s.fileStore.ListFilesByFolderID(targetFolderID, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list files")
 		return
@@ -194,8 +223,10 @@ func (s *Server) handleShareGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
-		return
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -244,8 +275,10 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
-		return
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+			return
+		}
 	}
 
 	if file.IsAppManaged {
@@ -327,8 +360,10 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
-		return
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+			return
+		}
 	}
 
 	thumbPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, size)
@@ -392,6 +427,15 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetFolderID := share.FolderID
+	if targetID := r.FormValue("folder_id"); targetID != "" {
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(targetID, share.FolderID) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
+			return
+		}
+		targetFolderID = targetID
+	}
+
 	batchID := uuid.New().String()
 	jobs := make([]map[string]interface{}, 0, len(formFiles))
 
@@ -433,7 +477,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 			Filename:         fh.Filename,
 			SizeBytes:        fh.Size,
 			TempPath:         tempFile.Name(),
-			FolderID:         &share.FolderID,
+			FolderID:         &targetFolderID,
 			SkipNameSizeDedup: true,
 			Status:           model.JobStatusQueued,
 			Progress:         0,
@@ -498,12 +542,182 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
-		return
+		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+			return
+		}
 	}
 
 	if err := s.fileStore.SoftDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete file")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	share, err := s.folderShareStore.FindByToken(token)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
+		return
+	}
+
+	if share.ExpiresAt != nil && time.Now().UTC().After(*share.ExpiresAt) {
+		writeError(w, http.StatusGone, "SHARE_EXPIRED", "Share link has expired")
+		return
+	}
+
+	if !share.IncludeSubdirs {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "This share does not include subdirectories")
+		return
+	}
+
+	_, ok := s.checkShareAccess(r, model.ShareRead)
+	if !ok {
+		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required")
+		return
+	}
+
+	parentID := r.URL.Query().Get("parent_id")
+	if parentID == "" {
+		parentID = share.FolderID
+	} else if !s.isFolderInShareTree(parentID, share.FolderID) {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
+		return
+	}
+
+	folders, err := s.folderStore.FindByParentID(parentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list folders")
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(folders))
+	for _, f := range folders {
+		files, _, _, _ := s.fileStore.ListFilesByFolderID(f.ID, "", 0)
+		fileCount := 0
+		if files != nil {
+			fileCount = len(files)
+		}
+		items = append(items, map[string]interface{}{
+			"id":         f.ID,
+			"name":       f.Name,
+			"parent_id":  f.ParentID,
+			"file_count": fileCount,
+			"created_at": f.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"folders": items,
+	})
+}
+
+func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	share, err := s.folderShareStore.FindByToken(token)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
+		return
+	}
+
+	if share.ExpiresAt != nil && time.Now().UTC().After(*share.ExpiresAt) {
+		writeError(w, http.StatusGone, "SHARE_EXPIRED", "Share link has expired")
+		return
+	}
+
+	if !share.IncludeSubdirs {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "This share does not include subdirectories")
+		return
+	}
+
+	_, ok := s.checkShareAccess(r, model.ShareReadWrite)
+	if !ok {
+		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit write operations")
+		return
+	}
+
+	var req struct {
+		Name     string `json:"name"`
+		ParentID string `json:"parent_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Folder name is required")
+		return
+	}
+
+	parentID := share.FolderID
+	if req.ParentID != "" {
+		if !s.isFolderInShareTree(req.ParentID, share.FolderID) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
+			return
+		}
+		parentID = req.ParentID
+	}
+
+	folder, err := s.folderStore.FindByID(share.FolderID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Shared folder not found")
+		return
+	}
+
+	newFolder, err := s.folderStore.Create(folder.UserID, req.Name, &parentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create folder")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":        newFolder.ID,
+		"name":      newFolder.Name,
+		"parent_id": newFolder.ParentID,
+	})
+}
+
+func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	folderID := r.PathValue("id")
+
+	share, err := s.folderShareStore.FindByToken(token)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
+		return
+	}
+
+	if share.ExpiresAt != nil && time.Now().UTC().After(*share.ExpiresAt) {
+		writeError(w, http.StatusGone, "SHARE_EXPIRED", "Share link has expired")
+		return
+	}
+
+	if !share.IncludeSubdirs {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "This share does not include subdirectories")
+		return
+	}
+
+	_, ok := s.checkShareAccess(r, model.ShareReadWrite)
+	if !ok {
+		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit write operations")
+		return
+	}
+
+	if !s.isFolderInShareTree(folderID, share.FolderID) {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
+		return
+	}
+
+	if folderID == share.FolderID {
+		writeError(w, http.StatusBadRequest, "CANNOT_DELETE_ROOT", "Cannot delete the root shared folder")
+		return
+	}
+
+	if err := s.folderStore.Delete(folderID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete folder")
 		return
 	}
 

@@ -15,13 +15,13 @@
       </div>
       <div class="flex items-center gap-2">
         <button
-          v-if="file.id"
+          v-if="file.id && !hideSocial"
           @click="panel = panel === 'comments' ? '' : 'comments'"
           class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
           :class="{ 'bg-white/10': panel === 'comments' }"
         >💬</button>
         <button
-          v-if="file.id"
+          v-if="file.id && !hideSocial"
           @click="panel = panel === 'tags' ? '' : 'tags'"
           class="text-white text-sm hover:text-[var(--accent)] px-2 py-1 rounded"
           :class="{ 'bg-white/10': panel === 'tags' }"
@@ -156,6 +156,8 @@ const props = defineProps<{
   total: number
   hasPrev: boolean
   hasNext: boolean
+  hideSocial?: boolean
+  downloadUrl?: string
 }>()
 
 const emit = defineEmits<{
@@ -335,6 +337,10 @@ function formatSize(bytes: number): string {
 async function downloadFile() {
   if (!props.file?.id) return
   try {
+    if (props.downloadUrl) {
+      window.open(props.downloadUrl, '_blank')
+      return
+    }
     const res = await api.get(`/download/${props.file.id}`, { responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')

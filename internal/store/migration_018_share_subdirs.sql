@@ -1,0 +1,1 @@
+ALTER TABLE folder_shares ADD COLUMN include_subdirs INTEGER NOT NULL DEFAULT 0;

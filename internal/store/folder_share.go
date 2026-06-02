@@ -29,8 +29,8 @@ func (s *FolderShareStore) Create(share *model.FolderShare) error {
 	}
 
 	_, err := s.db.Exec(
-		`INSERT INTO folder_shares (id, folder_id, token, permissions, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		share.ID, share.FolderID, share.Token, string(share.Permissions), share.UploadLimitBytes, expiresAtStr, boolToInt(share.HasPassword), share.PasswordHash, share.CreatedAt.Format(time.RFC3339), share.UpdatedAt.Format(time.RFC3339),
+		`INSERT INTO folder_shares (id, folder_id, token, permissions, include_subdirs, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		share.ID, share.FolderID, share.Token, string(share.Permissions), boolToInt(share.IncludeSubdirs), share.UploadLimitBytes, expiresAtStr, boolToInt(share.HasPassword), share.PasswordHash, share.CreatedAt.Format(time.RFC3339), share.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("insert folder share: %w", err)
@@ -41,19 +41,19 @@ func (s *FolderShareStore) Create(share *model.FolderShare) error {
 
 func (s *FolderShareStore) FindByID(id string) (*model.FolderShare, error) {
 	return s.scanShare(s.db.QueryRow(
-		`SELECT id, folder_id, token, permissions, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE id = ?`, id,
+		`SELECT id, folder_id, token, permissions, include_subdirs, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE id = ?`, id,
 	))
 }
 
 func (s *FolderShareStore) FindByToken(token string) (*model.FolderShare, error) {
 	return s.scanShare(s.db.QueryRow(
-		`SELECT id, folder_id, token, permissions, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE token = ?`, token,
+		`SELECT id, folder_id, token, permissions, include_subdirs, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE token = ?`, token,
 	))
 }
 
 func (s *FolderShareStore) ListByFolder(folderID string) ([]*model.FolderShare, error) {
 	rows, err := s.db.Query(
-		`SELECT id, folder_id, token, permissions, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE folder_id = ? ORDER BY created_at DESC`, folderID,
+		`SELECT id, folder_id, token, permissions, include_subdirs, upload_limit_bytes, expires_at, has_password, password_hash, created_at, updated_at FROM folder_shares WHERE folder_id = ? ORDER BY created_at DESC`, folderID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list folder shares: %w", err)
@@ -72,7 +72,7 @@ func (s *FolderShareStore) ListByFolder(folderID string) ([]*model.FolderShare, 
 	return shares, rows.Err()
 }
 
-func (s *FolderShareStore) Update(id string, permissions model.SharePermission, uploadLimitBytes *int64, expiresAt *time.Time, hasPassword bool, passwordHash *string) error {
+func (s *FolderShareStore) Update(id string, permissions model.SharePermission, includeSubdirs bool, uploadLimitBytes *int64, expiresAt *time.Time, hasPassword bool, passwordHash *string) error {
 	var expiresAtStr *string
 	if expiresAt != nil {
 		v := expiresAt.Format(time.RFC3339)
@@ -81,8 +81,8 @@ func (s *FolderShareStore) Update(id string, permissions model.SharePermission, 
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	_, err := s.db.Exec(
-		`UPDATE folder_shares SET permissions = ?, upload_limit_bytes = ?, expires_at = ?, has_password = ?, password_hash = ?, updated_at = ? WHERE id = ?`,
-		string(permissions), uploadLimitBytes, expiresAtStr, boolToInt(hasPassword), passwordHash, now, id,
+		`UPDATE folder_shares SET permissions = ?, include_subdirs = ?, upload_limit_bytes = ?, expires_at = ?, has_password = ?, password_hash = ?, updated_at = ? WHERE id = ?`,
+		string(permissions), boolToInt(includeSubdirs), uploadLimitBytes, expiresAtStr, boolToInt(hasPassword), passwordHash, now, id,
 	)
 	if err != nil {
 		return fmt.Errorf("update folder share: %w", err)
@@ -100,13 +100,13 @@ func (s *FolderShareStore) Delete(id string) error {
 
 func (s *FolderShareStore) scanShare(row interface{ Scan(...interface{}) error }) (*model.FolderShare, error) {
 	var id, folderID, token, permissions string
+	var includeSubdirs, hasPassword int
 	var uploadLimitBytes *int64
 	var expiresAtStr *string
-	var hasPassword int
 	var passwordHash *string
 	var createdAtStr, updatedAtStr string
 
-	err := row.Scan(&id, &folderID, &token, &permissions, &uploadLimitBytes, &expiresAtStr, &hasPassword, &passwordHash, &createdAtStr, &updatedAtStr)
+	err := row.Scan(&id, &folderID, &token, &permissions, &includeSubdirs, &uploadLimitBytes, &expiresAtStr, &hasPassword, &passwordHash, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, fmt.Errorf("scan folder share: %w", err)
 	}
@@ -116,6 +116,7 @@ func (s *FolderShareStore) scanShare(row interface{ Scan(...interface{}) error }
 		FolderID:         folderID,
 		Token:            token,
 		Permissions:      model.SharePermission(permissions),
+		IncludeSubdirs:   includeSubdirs == 1,
 		UploadLimitBytes: uploadLimitBytes,
 		HasPassword:      hasPassword == 1,
 		PasswordHash:     passwordHash,
@@ -133,13 +134,13 @@ func (s *FolderShareStore) scanShare(row interface{ Scan(...interface{}) error }
 
 func scanShareFromRows(rows interface{ Scan(...interface{}) error }) (*model.FolderShare, error) {
 	var id, folderID, token, permissions string
+	var includeSubdirs, hasPassword int
 	var uploadLimitBytes *int64
 	var expiresAtStr *string
-	var hasPassword int
 	var passwordHash *string
 	var createdAtStr, updatedAtStr string
 
-	err := rows.Scan(&id, &folderID, &token, &permissions, &uploadLimitBytes, &expiresAtStr, &hasPassword, &passwordHash, &createdAtStr, &updatedAtStr)
+	err := rows.Scan(&id, &folderID, &token, &permissions, &includeSubdirs, &uploadLimitBytes, &expiresAtStr, &hasPassword, &passwordHash, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, fmt.Errorf("scan folder share: %w", err)
 	}
@@ -149,6 +150,7 @@ func scanShareFromRows(rows interface{ Scan(...interface{}) error }) (*model.Fol
 		FolderID:         folderID,
 		Token:            token,
 		Permissions:      model.SharePermission(permissions),
+		IncludeSubdirs:   includeSubdirs == 1,
 		UploadLimitBytes: uploadLimitBytes,
 		HasPassword:      hasPassword == 1,
 		PasswordHash:     passwordHash,

@@ -54,7 +54,7 @@
           <p class="text-xs text-[var(--text-secondary)]">{{ formatSize(file.sizeBytes) }}</p>
         </div>
 
-        <div>
+        <div v-if="!hideSocial">
           <div class="flex items-center justify-between mb-1">
             <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Albums</h3>
           </div>
@@ -91,7 +91,7 @@
           </div>
         </div>
 
-        <div>
+        <div v-if="!hideSocial">
           <div class="flex items-center justify-between mb-1">
             <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Comments</h3>
             <span class="text-xs text-[var(--text-secondary)]">{{ sidebarComments.length }}</span>
@@ -126,7 +126,7 @@
           </div>
         </div>
 
-        <div>
+        <div v-if="!hideSocial">
           <h3 class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Tags</h3>
           <div v-if="sidebarTagsLoading" class="text-xs text-[var(--text-secondary)]">Loading...</div>
           <div v-else>
@@ -269,6 +269,7 @@ const props = defineProps<{
   total: number
   hasPrev: boolean
   hasNext: boolean
+  hideSocial?: boolean
 }>()
 
 const emit = defineEmits<{

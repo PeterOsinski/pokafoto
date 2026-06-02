@@ -432,6 +432,7 @@ CREATE TABLE IF NOT EXISTS folder_shares (
     folder_id           TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
     token               TEXT NOT NULL UNIQUE,
     permissions         TEXT NOT NULL DEFAULT 'read' CHECK(permissions IN ('read', 'read_upload', 'read_write')),
+    include_subdirs     INTEGER NOT NULL DEFAULT 0,
     upload_limit_bytes  INTEGER,
     expires_at          TEXT,
     has_password        INTEGER NOT NULL DEFAULT 0,

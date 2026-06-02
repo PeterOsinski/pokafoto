@@ -11,6 +11,7 @@ import (
 
 type createShareRequest struct {
 	Permissions      string `json:"permissions"`
+	IncludeSubdirs   bool   `json:"include_subdirs"`
 	UploadLimitBytes *int64 `json:"upload_limit_bytes"`
 	ExpiresAt        string `json:"expires_at"`
 	Password         string `json:"password"`
@@ -53,6 +54,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	share := &model.FolderShare{
 		FolderID:         folderID,
 		Permissions:      permissions,
+		IncludeSubdirs:   req.IncludeSubdirs,
 		UploadLimitBytes: req.UploadLimitBytes,
 		HasPassword:      req.Password != "",
 	}
@@ -87,6 +89,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		"share_url":        "/share/" + share.Token,
 		"folder_id":        share.FolderID,
 		"permissions":      string(share.Permissions),
+		"include_subdirs":  share.IncludeSubdirs,
 		"upload_limit_bytes": share.UploadLimitBytes,
 		"expires_at":       req.ExpiresAt,
 		"has_password":     share.HasPassword,
@@ -120,6 +123,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 			"id":               share.ID,
 			"token":            share.Token,
 			"permissions":      string(share.Permissions),
+			"include_subdirs":  share.IncludeSubdirs,
 			"upload_limit_bytes": share.UploadLimitBytes,
 			"has_password":     share.HasPassword,
 			"created_at":       share.CreatedAt.Format(time.RFC3339),
@@ -191,6 +195,11 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		uploadLimitBytes = share.UploadLimitBytes
 	}
 
+	includeSubdirs := req.IncludeSubdirs
+	if !req.IncludeSubdirs {
+		includeSubdirs = share.IncludeSubdirs
+	}
+
 	hasPassword := share.HasPassword
 	var passwordHash *string = share.PasswordHash
 	if req.Password != "" {
@@ -204,7 +213,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		hasPassword = true
 	}
 
-	if err := s.folderShareStore.Update(shareID, permissions, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
+	if err := s.folderShareStore.Update(shareID, permissions, includeSubdirs, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update share")
 		return
 	}

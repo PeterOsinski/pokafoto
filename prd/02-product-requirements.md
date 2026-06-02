@@ -180,6 +180,8 @@
 | PS-08 | As a public recipient, I can browse, preview, and download files from a shared folder (with a session token) | P0 |
 | PS-09 | As a public recipient, I can upload files to a shared folder if the share permits it, up to the quota limit | P0 |
 | PS-10 | As a public recipient, I can delete files from a shared folder if the share permits write access | P0 |
+| PS-11 | As a user, I can optionally include subdirectories when creating a share, allowing recipients to navigate the full folder tree | P0 |
+| PS-12 | As a public recipient, I can create and delete subfolders within a shared folder when the share permits write access and subdirectories are included | P0 |
 
 ---
 

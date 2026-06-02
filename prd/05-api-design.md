@@ -664,6 +664,7 @@ Create a public share link for a folder. Owner-only.
 ```json
 {
   "permissions": "read_upload",
+  "include_subdirs": true,
   "upload_limit_bytes": 104857600,
   "expires_at": "2026-12-31T23:59:59Z",
   "password": "optional_password"
@@ -677,6 +678,7 @@ Create a public share link for a folder. Owner-only.
   "share_url": "/share/uuid-token",
   "folder_id": "uuid",
   "permissions": "read_upload",
+  "include_subdirs": true,
   "upload_limit_bytes": 104857600,
   "expires_at": "2026-12-31T23:59:59Z",
   "has_password": false,
@@ -707,6 +709,7 @@ Get share info without authentication.
 {
   "needs_password": false,
   "permissions": "read_upload",
+  "include_subdirs": true,
   "upload_limit_bytes": 104857600,
   "uploaded_bytes": 0,
   "expires_at": "2026-12-31T23:59:59Z",
@@ -714,6 +717,15 @@ Get share info without authentication.
   "file_count": 10
 }
 ```
+
+#### `GET /api/v1/share/{token}/folders`
+List subfolders in shared folder. Only available when `include_subdirs` is true. Accepts `?parent_id=` query param. Requires `X-Share-Session-Token` header with read permission.
+
+#### `POST /api/v1/share/{token}/folders`
+Create a subfolder within the shared folder tree. Requires `include_subdirs=true` AND `read_write` permission. Body: `{ "name": "New Folder", "parent_id": "optional-parent-id" }`
+
+#### `DELETE /api/v1/share/{token}/folders/{id}`
+Delete a subfolder (not the root shared folder). Requires `include_subdirs=true` AND `read_write` permission. Folder must be within the shared folder tree.
 
 #### `POST /api/v1/share/{token}/unlock`
 Obtain a share session token (with password if required). No auth needed.
@@ -728,7 +740,7 @@ Obtain a share session token (with password if required). No auth needed.
 ```
 
 #### `GET /api/v1/share/{token}/files`
-List files in shared folder. Requires `X-Share-Session-Token` header.
+List files in shared folder. Requires `X-Share-Session-Token` header. Accepts `?folder_id=` query param to list files in a subfolder (requires `include_subdirs=true`).
 #### `GET /api/v1/share/{token}/files/{id}`
 Get file detail. Requires read permission.
 #### `GET /api/v1/share/{token}/download/{id}`
@@ -736,7 +748,7 @@ Download a file. Requires read permission.
 #### `GET /api/v1/share/{token}/thumb/{fileID}/{size}`
 Serve a thumbnail from the shared folder. Requires read permission. Pass share session token via query param `?share_session_token=...`.
 #### `POST /api/v1/share/{token}/upload`
-Upload files to shared folder. Requires upload permission. Enforces `upload_limit_bytes` quota. Multipart form with `files` field.
+Upload files to shared folder. Requires upload permission. Enforces `upload_limit_bytes` quota. Multipart form with `files` field and optional `folder_id` field (for subdirectory uploads, requires `include_subdirs=true`).
 #### `DELETE /api/v1/share/{token}/files/{id}`
 Delete a file from shared folder. Requires write permission.
 

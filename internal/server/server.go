@@ -149,6 +149,9 @@ func (s *Server) setupRouter() {
 	r.Get("/api/v1/share/{token}/thumb/{fileID}/{size}", s.handleShareThumbnail)
 	r.Post("/api/v1/share/{token}/upload", s.handleShareUpload)
 	r.Delete("/api/v1/share/{token}/files/{id}", s.handleShareDeleteFile)
+	r.Get("/api/v1/share/{token}/folders", s.handleShareListFolders)
+	r.Post("/api/v1/share/{token}/folders", s.handleShareCreateFolder)
+	r.Delete("/api/v1/share/{token}/folders/{id}", s.handleShareDeleteFolder)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", s.handleRegister)
