@@ -24,8 +24,8 @@ func (s *FileStore) Create(file *model.File) error {
 	file.UpdatedAt = time.Now().UTC()
 
 	_, err := s.db.Exec(
-		`INSERT INTO files (id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		file.ID, file.UserID, file.Filename, file.OriginalName, file.Path, file.SizeBytes, file.MimeType, file.SHA256, file.MediaType, file.Width, file.Height, file.DurationSec, file.TakenAt, file.FolderID, file.CreatedAt.Format(time.RFC3339), file.UpdatedAt.Format(time.RFC3339), boolToInt(file.IsDeleted), nil,
+		`INSERT INTO files (id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted, deleted_at, is_app_managed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		file.ID, file.UserID, file.Filename, file.OriginalName, file.Path, file.SizeBytes, file.MimeType, file.SHA256, file.MediaType, file.Width, file.Height, file.DurationSec, file.TakenAt, file.FolderID, file.CreatedAt.Format(time.RFC3339), file.UpdatedAt.Format(time.RFC3339), boolToInt(file.IsDeleted), nil, boolToInt(file.IsAppManaged),
 	)
 	if err != nil {
 		return fmt.Errorf("insert file: %w", err)
@@ -36,21 +36,21 @@ func (s *FileStore) Create(file *model.File) error {
 
 func (s *FileStore) FindByID(id string) (*model.File, error) {
 	return s.scanFile(s.db.QueryRow(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE id = ?`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE id = ?`,
 		id,
 	))
 }
 
 func (s *FileStore) FindBySHA256(userID, sha256 string) (*model.File, error) {
 	return s.scanFile(s.db.QueryRow(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE sha256 = ? AND user_id = ? AND is_deleted = 0`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE sha256 = ? AND user_id = ? AND is_deleted = 0`,
 		sha256, userID,
 	))
 }
 
 func (s *FileStore) FindByNameAndSize(userID, name string, size int64) (*model.File, error) {
 	return s.scanFile(s.db.QueryRow(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE original_name = ? AND size_bytes = ? AND user_id = ? AND is_deleted = 0 LIMIT 1`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE original_name = ? AND size_bytes = ? AND user_id = ? AND is_deleted = 0 LIMIT 1`,
 		name, size, userID,
 	))
 }
@@ -151,7 +151,7 @@ func (s *FileStore) List(opts FileListOptions) ([]*model.File, string, int, erro
 	}
 
 	query := fmt.Sprintf(
-		`SELECT files.id, files.user_id, files.filename, files.original_name, files.path, files.size_bytes, files.mime_type, files.sha256, files.media_type, files.width, files.height, files.duration_sec, files.taken_at, files.folder_id, files.created_at, files.updated_at, files.deleted_at, files.is_deleted FROM files WHERE %s ORDER BY %s %s LIMIT ?`,
+		`SELECT files.id, files.user_id, files.filename, files.original_name, files.path, files.size_bytes, files.mime_type, files.sha256, files.media_type, files.width, files.height, files.duration_sec, files.taken_at, files.folder_id, files.created_at, files.updated_at, files.deleted_at, files.is_deleted, files.is_app_managed FROM files WHERE %s ORDER BY %s %s LIMIT ?`,
 		whereClause, orderBy, opts.Order,
 	)
 	args = append(args, opts.Limit+1)
@@ -245,6 +245,9 @@ func (s *FileStore) ListDirs(userID string, allFolders bool) (*DirEntry, error) 
 	for rows.Next() {
 		var path string
 		if err := rows.Scan(&path); err != nil {
+			continue
+		}
+		if strings.HasPrefix(path, "_") {
 			continue
 		}
 		pathCount[path]++
@@ -355,7 +358,7 @@ func (s *FileStore) SearchEnhanced(opts SearchOptions) (*SearchResult, map[strin
 
 	whereClause := strings.Join(conditions, " AND ")
 
-	query := fmt.Sprintf(`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted FROM files f WHERE %s ORDER BY f.created_at DESC LIMIT ?`, whereClause)
+	query := fmt.Sprintf(`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted, f.is_app_managed FROM files f WHERE %s ORDER BY f.created_at DESC LIMIT ?`, whereClause)
 	allArgs := append([]interface{}{}, args...)
 	allArgs = append(allArgs, opts.Limit)
 
@@ -413,7 +416,7 @@ func (s *FileStore) Search(userID, query string, limit int) (*SearchResult, erro
 		limit = 50
 	}
 
-	fullQuery := `SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted FROM files f
+	fullQuery := `SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted, f.is_app_managed FROM files f
 		INNER JOIN files_fts ON f.rowid = files_fts.rowid
 		WHERE files_fts MATCH ? AND f.user_id = ? AND f.is_deleted = 0
 		ORDER BY rank LIMIT ?`
@@ -501,8 +504,9 @@ func (s *FileStore) scanFile(row interface{ Scan(dest ...interface{}) error }) (
 	var createdAt, updatedAt string
 	var deletedAt sql.NullString
 	var isDeleted int
+	var isAppManaged int
 
-	err := row.Scan(&f.ID, &f.UserID, &f.Filename, &f.OriginalName, &f.Path, &f.SizeBytes, &f.MimeType, &f.SHA256, &f.MediaType, &width, &height, &durationSec, &takenAt, &folderID, &createdAt, &updatedAt, &deletedAt, &isDeleted)
+	err := row.Scan(&f.ID, &f.UserID, &f.Filename, &f.OriginalName, &f.Path, &f.SizeBytes, &f.MimeType, &f.SHA256, &f.MediaType, &width, &height, &durationSec, &takenAt, &folderID, &createdAt, &updatedAt, &deletedAt, &isDeleted, &isAppManaged)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -530,6 +534,7 @@ func (s *FileStore) scanFile(row interface{ Scan(dest ...interface{}) error }) (
 	f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	f.IsDeleted = isDeleted == 1
+	f.IsAppManaged = isAppManaged == 1
 	if deletedAt.Valid {
 		t, _ := time.Parse(time.RFC3339, deletedAt.String)
 		f.DeletedAt = &t
@@ -551,8 +556,9 @@ func (s *FileStore) scanFileFromRows(row scannable) (*model.File, error) {
 	var createdAt, updatedAt string
 	var deletedAt sql.NullString
 	var isDeleted int
+	var isAppManaged int
 
-	err := row.Scan(&f.ID, &f.UserID, &f.Filename, &f.OriginalName, &f.Path, &f.SizeBytes, &f.MimeType, &f.SHA256, &f.MediaType, &width, &height, &durationSec, &takenAt, &folderID, &createdAt, &updatedAt, &deletedAt, &isDeleted)
+	err := row.Scan(&f.ID, &f.UserID, &f.Filename, &f.OriginalName, &f.Path, &f.SizeBytes, &f.MimeType, &f.SHA256, &f.MediaType, &width, &height, &durationSec, &takenAt, &folderID, &createdAt, &updatedAt, &deletedAt, &isDeleted, &isAppManaged)
 	if err != nil {
 		return nil, fmt.Errorf("scan file: %w", err)
 	}
@@ -577,6 +583,7 @@ func (s *FileStore) scanFileFromRows(row scannable) (*model.File, error) {
 	f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	f.IsDeleted = isDeleted == 1
+	f.IsAppManaged = isAppManaged == 1
 	if deletedAt.Valid {
 		t, _ := time.Parse(time.RFC3339, deletedAt.String)
 		f.DeletedAt = &t
@@ -605,7 +612,7 @@ func (s *FileStore) FindByNameAndSizeBatch(userID string, nameSizes []FileRecord
 	args = append(args, userID)
 
 	query := fmt.Sprintf(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE (original_name, size_bytes) IN (%s) AND user_id = ? AND is_deleted = 0`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE (original_name, size_bytes) IN (%s) AND user_id = ? AND is_deleted = 0`,
 		strings.Join(placeholders, ", "),
 	)
 
@@ -805,7 +812,7 @@ func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]
 	}
 
 	selectQuery := fmt.Sprintf(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE user_id = ? AND is_deleted = 0 AND id IN (%s)`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE user_id = ? AND is_deleted = 0 AND id IN (%s)`,
 		strings.Join(placeholders, ", "),
 	)
 
@@ -841,11 +848,12 @@ func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]
 			FolderID:     folderID,
 			CreatedAt:    time.Now().UTC(),
 			UpdatedAt:    time.Now().UTC(),
+			IsAppManaged:  src.IsAppManaged,
 		}
 
 		_, err = s.db.Exec(
-			`INSERT INTO files (id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
-			copy.ID, copy.UserID, copy.Filename, copy.OriginalName, copy.Path, copy.SizeBytes, copy.MimeType, copy.SHA256, copy.MediaType, copy.Width, copy.Height, copy.DurationSec, copy.TakenAt, copy.FolderID, now, now,
+			`INSERT INTO files (id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, is_deleted, deleted_at, is_app_managed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)`,
+			copy.ID, copy.UserID, copy.Filename, copy.OriginalName, copy.Path, copy.SizeBytes, copy.MimeType, copy.SHA256, copy.MediaType, copy.Width, copy.Height, copy.DurationSec, copy.TakenAt, copy.FolderID, now, now, boolToInt(copy.IsAppManaged),
 		)
 		if err != nil {
 			continue
@@ -859,7 +867,7 @@ func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]
 
 func (s *FileStore) FindPhotosMissingThumbnails() ([]*model.File, error) {
 	rows, err := s.db.Query(
-		`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted FROM files f WHERE f.media_type IN ('photo', 'video') AND f.is_deleted = 0 AND (NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id AND t.size = 'preview') OR NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id)) ORDER BY f.created_at DESC`,
+		`SELECT f.id, f.user_id, f.filename, f.original_name, f.path, f.size_bytes, f.mime_type, f.sha256, f.media_type, f.width, f.height, f.duration_sec, f.taken_at, f.folder_id, f.created_at, f.updated_at, f.deleted_at, f.is_deleted, f.is_app_managed FROM files f WHERE f.media_type IN ('photo', 'video') AND f.is_deleted = 0 AND (NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id AND t.size = 'preview') OR NOT EXISTS (SELECT 1 FROM thumbnails t WHERE t.file_id = f.id)) ORDER BY f.created_at DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find photos missing thumbnails: %w", err)
@@ -950,7 +958,7 @@ func (s *FileStore) ListTrash(opts FileListOptions) ([]*model.File, string, int,
 	}
 
 	query := fmt.Sprintf(
-		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted FROM files WHERE %s ORDER BY deleted_at %s LIMIT ?`,
+		`SELECT id, user_id, filename, original_name, path, size_bytes, mime_type, sha256, media_type, width, height, duration_sec, taken_at, folder_id, created_at, updated_at, deleted_at, is_deleted, is_app_managed FROM files WHERE %s ORDER BY deleted_at %s LIMIT ?`,
 		whereClause, opts.Order,
 	)
 	args = append(args, opts.Limit+1)
@@ -1069,4 +1077,12 @@ func (s *FileStore) BatchPermanentDelete(userID string, ids []string) error {
 		return fmt.Errorf("batch permanent delete: %w", err)
 	}
 	return nil
+}
+
+func (s *FileStore) UpdateSizeAndHash(id string, sizeBytes int64, sha256 string) error {
+	_, err := s.db.Exec(
+		`UPDATE files SET size_bytes = ?, sha256 = ?, updated_at = ? WHERE id = ?`,
+		sizeBytes, sha256, time.Now().UTC().Format(time.RFC3339), id,
+	)
+	return err
 }

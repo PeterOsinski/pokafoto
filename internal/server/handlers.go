@@ -70,6 +70,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 			FolderID:     f.FolderID,
 			CreatedAt:    f.CreatedAt.Format(timeRFC3339),
 			Thumbnails:   buildThumbnailSet(f.ID, f.MediaType),
+			IsAppManaged: f.IsAppManaged,
 		}
 		items = append(items, item)
 	}
@@ -122,6 +123,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 			MimeType:      file.MimeType,
 			SupportsRange: true,
 		},
+		IsAppManaged: file.IsAppManaged,
 	}
 
 	writeJSON(w, http.StatusOK, item)
@@ -545,6 +547,19 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+		return
+	}
+
+	if file.IsAppManaged {
+		doc, err := s.docStore.FindByFileID(fileID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "Document content not found")
+			return
+		}
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
+		w.Header().Set("Content-Type", file.MimeType)
+		w.Header().Set("Content-Length", strconv.Itoa(len(doc.Content)))
+		w.Write([]byte(doc.Content))
 		return
 	}
 
@@ -1227,6 +1242,7 @@ type fileResponse struct {
 	Thumbnails   *thumbnailSetResponse `json:"thumbnails,omitempty"`
 	EXIF         interface{}           `json:"exif,omitempty"`
 	DownloadInfo *downloadInfoResponse `json:"downloadInfo,omitempty"`
+	IsAppManaged bool                  `json:"isAppManaged"`
 }
 
 type downloadInfoResponse struct {

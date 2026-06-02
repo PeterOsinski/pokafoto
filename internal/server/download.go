@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request) {
@@ -43,16 +44,24 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-		f, err := os.Open(filePath)
+		entryName := file.OriginalName
+		writer, err := zw.Create(entryName)
 		if err != nil {
 			continue
 		}
 
-		entryName := file.OriginalName
-		writer, err := zw.Create(entryName)
+		if file.IsAppManaged {
+			doc, err := s.docStore.FindByFileID(fileID)
+			if err != nil {
+				continue
+			}
+			io.Copy(writer, strings.NewReader(doc.Content))
+			continue
+		}
+
+		filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
+		f, err := os.Open(filePath)
 		if err != nil {
-			f.Close()
 			continue
 		}
 

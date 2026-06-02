@@ -127,4 +127,32 @@ describe('ThumbnailCard', () => {
       expect(wrapper.find('img').exists()).toBe(true)
     })
   })
+
+  describe('app-managed document indicator', () => {
+    it('shows DOC badge for app-managed files', async () => {
+      const file = makeFile({
+        mediaType: 'file',
+        isAppManaged: true,
+        mimeType: 'text/markdown',
+        thumbnails: undefined,
+      })
+      const wrapper = mount(ThumbnailCard, { props: { file } })
+      await waitForIO()
+
+      expect(wrapper.text()).toContain('DOC')
+    })
+
+    it('does not show DOC badge for regular files', async () => {
+      const file = makeFile({
+        mediaType: 'file',
+        isAppManaged: false,
+        mimeType: 'text/plain',
+        thumbnails: undefined,
+      })
+      const wrapper = mount(ThumbnailCard, { props: { file } })
+      await waitForIO()
+
+      expect(wrapper.text()).not.toContain('DOC')
+    })
+  })
 })

@@ -29,4 +29,5 @@ type File struct {
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 	IsDeleted    bool       `json:"is_deleted" db:"is_deleted"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	IsAppManaged bool       `json:"is_app_managed" db:"is_app_managed"`
 }

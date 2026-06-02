@@ -207,16 +207,15 @@
     </div>
 
     <template v-else>
-
-    <ActionBar
-      :count="selectedIds.size"
-      :totalFiles="files.length"
-      @delete="showDeleteConfirm = true"
-      @move="startMove"
-      @copy="startCopy"
-      @deselectAll="clearSelection"
-      @selectAll="selectAllFiles"
-    />
+      <ActionBar
+        :count="selectedIds.size"
+        :totalFiles="files.length"
+        @delete="showDeleteConfirm = true"
+        @move="startMove"
+        @copy="startCopy"
+        @deselectAll="clearSelection"
+        @selectAll="selectAllFiles"
+      />
 
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
@@ -231,6 +230,36 @@
       </div>
       <div class="flex items-center gap-2">
         <InlineUpload v-if="currentFolderId" :folderId="currentFolderId" label="Upload" />
+        <div class="relative">
+          <button
+            @click="showNewDocInput = !showNewDocInput"
+            class="px-3 py-1 rounded text-sm text-white"
+            style="background: var(--accent-secondary, #8b5cf6)"
+          >
+            + New Document
+          </button>
+          <div
+            v-if="showNewDocInput"
+            class="absolute top-full left-0 mt-1 p-2 rounded shadow-lg z-30 flex gap-2"
+            style="background: var(--bg-surface); border: 1px solid var(--border-color)"
+          >
+            <input
+              v-model="newDocName"
+              placeholder="Document name"
+              class="px-2 py-1 rounded text-sm bg-black/30 text-white border border-white/10 outline-none focus:border-[var(--accent)]"
+              @keydown.enter="createDocument"
+              @keydown.escape="showNewDocInput = false"
+            />
+            <button
+              @click="createDocument"
+              :disabled="!newDocName.trim() || creatingDoc"
+              class="px-3 py-1 rounded text-sm text-white disabled:opacity-50"
+              style="background: var(--accent)"
+            >
+              Create
+            </button>
+          </div>
+        </div>
         <button
           @click="showCreate = true"
           class="px-3 py-1 rounded text-sm text-white"
@@ -479,6 +508,7 @@ interface FileItem {
   takenAt?: string
   createdAt?: string
   folder_id?: string | null
+  isAppManaged?: boolean
   thumbnails?: any
 }
 
@@ -508,6 +538,9 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const showCreate = ref(false)
 const newFolderName = ref('')
+const showNewDocInput = ref(false)
+const newDocName = ref('')
+const creatingDoc = ref(false)
 const createInput = ref<HTMLInputElement | null>(null)
 const sentinel = ref<HTMLElement | null>(null)
 
@@ -735,6 +768,31 @@ function openLightbox(index: number) {
 
 function closeFileViewer() {
   fileViewerFile.value = null
+}
+
+async function createDocument() {
+  const name = newDocName.value.trim()
+  if (!name || creatingDoc.value) return
+  creatingDoc.value = true
+  try {
+    const res = await api.post('/documents', { name, folder_id: currentFolderId.value || null })
+    const newFile: FileItem = {
+      id: res.data.id,
+      originalName: name + '.md',
+      filename: '_app_documents/' + name + '.md',
+      sizeBytes: 0,
+      mimeType: 'text/markdown',
+      mediaType: 'file',
+      isAppManaged: true,
+    }
+    files.value.unshift(newFile)
+    fileViewerFile.value = newFile
+    showNewDocInput.value = false
+    newDocName.value = ''
+  } catch {
+  } finally {
+    creatingDoc.value = false
+  }
 }
 
 function closeLightbox() {

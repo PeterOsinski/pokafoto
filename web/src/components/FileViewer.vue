@@ -45,7 +45,13 @@
         </div>
 
         <template v-else>
-          <PdfViewer v-if="viewerType === 'pdf'" :blobUrl="blobUrl" />
+          <DocumentEditor
+            v-if="file.isAppManaged"
+            :fileId="file.id"
+            :originalName="file.originalName"
+            @close="$emit('close')"
+          />
+          <PdfViewer v-else-if="viewerType === 'pdf'" :blobUrl="blobUrl" />
           <JsonViewer v-else-if="viewerType === 'json'" :content="textContent" />
           <MarkdownViewer v-else-if="viewerType === 'markdown'" :content="textContent" />
           <CsvViewer v-else-if="viewerType === 'csv'" :content="textContent" />
@@ -96,6 +102,7 @@ import api from '../api/client'
 import PdfViewer from './viewers/PdfViewer.vue'
 import JsonViewer from './viewers/JsonViewer.vue'
 import MarkdownViewer from './viewers/MarkdownViewer.vue'
+import DocumentEditor from './DocumentEditor.vue'
 import CsvViewer from './viewers/CsvViewer.vue'
 import TextViewer from './viewers/TextViewer.vue'
 import CommentsSection from './CommentsSection.vue'
@@ -106,6 +113,7 @@ interface FileItem {
   originalName: string
   sizeBytes: number
   mimeType: string
+  isAppManaged?: boolean
 }
 
 type ViewerType = 'pdf' | 'json' | 'markdown' | 'csv' | 'text'

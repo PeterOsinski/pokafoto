@@ -35,6 +35,7 @@ type Server struct {
 	commentStore      *store.CommentStore
 	reactionStore     *store.ReactionStore
 	tagStore          *store.TagStore
+	docStore          *store.DocumentStore
 	storageService    *service.StorageService
 	workerPool        *worker.Pool
 	s3DeletionPool    *S3DeletionPool
@@ -64,6 +65,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		commentStore:    store.NewCommentStore(db),
 		reactionStore:   store.NewReactionStore(db),
 		tagStore:        store.NewTagStore(db),
+		docStore:        store.NewDocumentStore(db),
 		stopCh:          make(chan struct{}),
 	}
 
@@ -217,6 +219,11 @@ func (s *Server) setupRouter() {
 			r.Post("/files/{id}/tags", s.handleAddFileTags)
 			r.Delete("/files/{id}/tags/{tagId}", s.handleRemoveFileTag)
 			r.Get("/files/{id}/albums", s.handleGetFileAlbums)
+
+			r.Post("/documents", s.handleCreateDocument)
+			r.Get("/documents/{file_id}", s.handleGetDocument)
+			r.Put("/documents/{file_id}", s.handleUpdateDocument)
+			r.Delete("/documents/{file_id}", s.handleDeleteDocument)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.adminMiddleware)

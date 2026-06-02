@@ -107,6 +107,36 @@
 
       <div class="flex items-center gap-2 mb-4">
         <InlineUpload label="Upload" :skipNameSizeDedup="false" accept="image/*,video/*" />
+        <div class="relative">
+          <button
+            @click="showNewDocInput = !showNewDocInput"
+            class="px-3 py-1 rounded text-sm text-white"
+            style="background: var(--accent-secondary, #8b5cf6)"
+          >
+            + New Document
+          </button>
+          <div
+            v-if="showNewDocInput"
+            class="absolute top-full left-0 mt-1 p-2 rounded shadow-lg z-30 flex gap-2"
+            style="background: var(--bg-surface); border: 1px solid var(--border-color)"
+          >
+            <input
+              v-model="newDocName"
+              placeholder="Document name"
+              class="px-2 py-1 rounded text-sm bg-black/30 text-white border border-white/10 outline-none focus:border-[var(--accent)]"
+              @keydown.enter="createDocument"
+              @keydown.escape="showNewDocInput = false"
+            />
+            <button
+              @click="createDocument"
+              :disabled="!newDocName.trim()"
+              class="px-3 py-1 rounded text-sm text-white disabled:opacity-50"
+              style="background: var(--accent)"
+            >
+              Create
+            </button>
+          </div>
+        </div>
       </div>
 
       <div ref="scrollRef" class="overflow-y-auto" style="flex: 1">
@@ -235,6 +265,7 @@ interface FileItem {
   takenAt?: string
   createdAt?: string
   folder_id?: string | null
+  isAppManaged?: boolean
   thumbnails?: {
     sm: { url: string; width: number; height: number }
     lg: { url: string; width: number; height: number }
@@ -278,6 +309,9 @@ const selectedIds = ref(new Set<string>())
 const lastClickedIndex = ref(-1)
 const selectionEnabled = ref(true)
 const showDeleteConfirm = ref(false)
+const showNewDocInput = ref(false)
+const newDocName = ref('')
+const creatingDoc = ref(false)
 
 const upload = useChunkedUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
@@ -447,6 +481,32 @@ function openLightbox(index: number) {
 
 function closeFileViewer() {
   fileViewerFile.value = null
+}
+
+async function createDocument() {
+  const name = newDocName.value.trim()
+  if (!name || creatingDoc.value) return
+  creatingDoc.value = true
+  try {
+    const res = await api.post('/documents', { name, folder_id: null })
+    const newFile: FileItem = {
+      id: res.data.id,
+      originalName: name + '.md',
+      filename: '_app_documents/' + name + '.md',
+      sizeBytes: 0,
+      mimeType: 'text/markdown',
+      mediaType: 'file',
+      isAppManaged: true,
+    }
+    files.value.unshift(newFile)
+    total.value++
+    fileViewerFile.value = newFile
+    showNewDocInput.value = false
+    newDocName.value = ''
+  } catch {
+  } finally {
+    creatingDoc.value = false
+  }
 }
 
 function closeLightbox() {

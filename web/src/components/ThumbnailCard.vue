@@ -33,7 +33,8 @@
       <div v-if="loadError" class="w-full h-full flex flex-col items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
         <span v-if="file.mediaType === 'video'">&#9654;</span>
         <span v-else-if="file.mediaType === 'file'" class="flex flex-col items-center gap-1">
-          <span class="text-2xl">&#128196;</span>
+          <span v-if="file.isAppManaged" class="text-2xl">&#128221;</span>
+          <span v-else class="text-2xl">&#128196;</span>
           <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
         </span>
         <span v-else>&#128196;</span>
@@ -46,8 +47,15 @@
           <span class="text-3xl">&#9654;</span>
         </template>
         <template v-else-if="file.mediaType === 'file'">
-          <span class="text-2xl">&#128196;</span>
-          <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
+          <span v-if="file.isAppManaged" class="flex flex-col items-center gap-1">
+            <span class="text-2xl">&#128221;</span>
+            <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
+            <span class="text-[10px] px-1 py-0.5 rounded" style="background: var(--accent); color: white">DOC</span>
+          </span>
+          <span v-else class="flex flex-col items-center gap-1">
+            <span class="text-2xl">&#128196;</span>
+            <span class="text-xs font-mono opacity-60">{{ fileExtension }}</span>
+          </span>
         </template>
         <template v-else>
           <span class="text-3xl">&#128196;</span>
@@ -74,6 +82,7 @@ interface FileItem {
   durationSec?: number
   takenAt?: string
   folder_id?: string | null
+  isAppManaged?: boolean
   thumbnails?: {
     sm?: { url: string; width: number; height: number }
     lg?: { url: string; width: number; height: number }
