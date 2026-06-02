@@ -500,6 +500,7 @@ onMounted(() => {
       try {
         const res = await api.get(`/files/${job.file_id}`)
         const newFile = res.data as FileItem
+        if (files.value.some(f => f.id === newFile.id)) continue
         if (sortBy.value === 'taken_at' || sortBy.value === 'created_at') {
           files.value.unshift(newFile)
         } else {

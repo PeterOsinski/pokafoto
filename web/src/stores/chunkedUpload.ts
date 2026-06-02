@@ -44,6 +44,23 @@ function clearTokens() {
   localStorage.removeItem('chunked_uploads')
 }
 
+function loadConsumedFileIds(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem('consumed_file_ids')
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function persistConsumedFileIds(ids: Set<string>) {
+  try {
+    sessionStorage.setItem('consumed_file_ids', JSON.stringify([...ids]))
+  } catch {
+    // best-effort
+  }
+}
+
 export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
   const jobs = ref<ChunkedUploadJob[]>([])
   const completedJobs = ref<{ file_id: string; filename: string; folder_id: string | null }[]>([])
@@ -147,11 +164,13 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
   async function fetchActiveJobs() {
     try {
+      const consumedIds = loadConsumedFileIds()
       const res = await api.get('/upload/active')
       const activeJobs: any[] = res.data.jobs || []
       for (const aj of activeJobs) {
         if (aj.status === 'completed' || aj.status === 'skipped') {
           if (aj.file_id) {
+            if (consumedIds.has(aj.file_id)) continue
             const alreadyCompleted = completedJobs.value.some(cj => cj.file_id === aj.file_id)
             if (!alreadyCompleted) {
               completedJobs.value.push({
@@ -628,6 +647,11 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
   function consumeCompletedJobs(): { file_id: string; filename: string; folder_id: string | null }[] {
     const drained = [...completedJobs.value]
+    const consumedIds = loadConsumedFileIds()
+    for (const j of drained) {
+      consumedIds.add(j.file_id)
+    }
+    persistConsumedFileIds(consumedIds)
     completedJobs.value = []
     return drained
   }
