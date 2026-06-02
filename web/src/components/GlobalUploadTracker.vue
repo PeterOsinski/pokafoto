@@ -53,7 +53,7 @@
             Restart
           </button>
           <button
-            v-if="job.status === 'failed'"
+            v-if="job.status === 'failed' && job.error !== 'upload_expired'"
             @click="chunked.retryUpload(job.key)"
             class="text-xs px-1.5 py-0.5 rounded hover:bg-[var(--accent)] hover:text-white shrink-0"
             style="color: var(--accent); border: 1px solid var(--accent)"

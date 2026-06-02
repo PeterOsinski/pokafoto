@@ -266,6 +266,12 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	if job.UploadMode == model.UploadModeChunked {
 		stored, err := p.chunkStore.GetStoredChunkCount(job.ID)
 		if err != nil || job.TotalChunks == nil || stored < *job.TotalChunks {
+			if time.Since(job.CreatedAt) > 1*time.Hour {
+				p.uploadJobStore.Fail(job.ID, "upload_expired")
+				p.notifySubscribers(job)
+				p.failedTotal.Add(1)
+				return
+			}
 			p.uploadJobStore.SetStatus(job.ID, model.JobStatusQueued)
 			return
 		}

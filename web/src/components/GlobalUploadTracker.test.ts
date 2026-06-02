@@ -107,4 +107,22 @@ describe('GlobalUploadTracker', () => {
 
     expect(wrapper.text()).toContain('Restart all')
   })
+
+  it('does not show Retry button for expired jobs', async () => {
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-exp', filename: 'expired.jpg', status: 'failed', error: 'upload_expired' }))
+
+    const wrapper = await mountExpanded()
+
+    expect(wrapper.text()).not.toContain('Retry')
+  })
+
+  it('shows Retry button for non-expired failed jobs', async () => {
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-net', filename: 'network.jpg', status: 'failed', error: 'network error' }))
+
+    const wrapper = await mountExpanded()
+
+    expect(wrapper.text()).toContain('Retry')
+  })
 })

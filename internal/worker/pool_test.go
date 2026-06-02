@@ -775,7 +775,7 @@ func TestDetectMimeTypeFromFile_tinyFilesShouldNotPanic(t *testing.T) {
 }
 }
 
-func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore, *store.UploadJobStore, *store.ChunkStore, string, func()) {
+func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore, *store.UploadJobStore, *store.ChunkStore, *store.DB, string, func()) {
 	t.Helper()
 
 	cfg := config.DefaultConfig()
@@ -796,7 +796,7 @@ func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore
 	}
 
 	pool := NewPool(cfg, fs, es, ts, nil, ujs, cs, nil)
-	return pool, cfg, fs, ujs, cs, u.ID, func() {
+	return pool, cfg, fs, ujs, cs, db, u.ID, func() {
 		pool.Shutdown()
 	}
 }
@@ -842,7 +842,7 @@ func createChunkedJob(t *testing.T, cfg *config.Config, ujs *store.UploadJobStor
 }
 
 func TestPool_ChunkedJob_shouldAssembleAndComplete(t *testing.T) {
-	_, cfg, fs, ujs, cs, userID, cleanup := setupChunkedTestPool(t)
+	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
 	chunkData := []byte("hello world chunked test data for assembly verification")
@@ -885,7 +885,7 @@ func TestPool_ChunkedJob_shouldAssembleAndComplete(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_singleChunk_shouldComplete(t *testing.T) {
-	_, cfg, fs, ujs, cs, userID, cleanup := setupChunkedTestPool(t)
+	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
 	chunkData := []byte("single chunk file data")
@@ -917,7 +917,7 @@ func TestPool_ChunkedJob_singleChunk_shouldComplete(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
-	_, _, _, ujs, _, userID, cleanup := setupChunkedTestPool(t)
+	_, _, _, ujs, _, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
 	job := &model.UploadJob{
@@ -953,6 +953,67 @@ func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	t.Errorf("expected status queued after retries, got %s", finalStatus)
+}
+
+func TestPool_ChunkedJob_oldIncomplete_shouldExpire(t *testing.T) {
+	_, _, _, ujs, cs, db, userID, cleanup := setupChunkedTestPool(t)
+	defer cleanup()
+
+	chunkSize := len([]byte("data"))
+	tc := 2
+	csInt := int64(chunkSize)
+
+	oldTime := time.Now().UTC().Add(-2 * time.Hour)
+	oldTimeStr := oldTime.Format(time.RFC3339)
+
+	job := &model.UploadJob{
+		BatchID:           "expired-batch",
+		UserID:            userID,
+		Filename:          "expired.dat",
+		SizeBytes:         int64(chunkSize * tc),
+		TempPath:          os.TempDir(),
+		Status:            model.JobStatusQueued,
+		UploadMode:        model.UploadModeChunked,
+		TotalChunks:       &tc,
+		ChunkSize:         &csInt,
+		SkipNameSizeDedup: true,
+	}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	cs.CreateChunkRecord(job.ID, 0, int64(chunkSize), 0, "", "/tmp/expired_c0")
+
+	db.Exec(`UPDATE upload_jobs SET created_at = ? WHERE id = ?`, oldTimeStr, job.ID)
+
+	var finalStatus model.JobStatus
+	var finalError string
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for expiry, status=%s error=%s", finalStatus, finalError)
+		default:
+		}
+		j, err := ujs.FindByID(job.ID)
+		if err != nil {
+			t.Fatalf("find job: %v", err)
+		}
+		if j == nil {
+			t.Fatal("job not found")
+		}
+		finalStatus = j.Status
+		if j.Error != nil {
+			finalError = *j.Error
+		}
+		if finalStatus == model.JobStatusFailed {
+			if finalError != "upload_expired" {
+				t.Errorf("expected upload_expired, got %s", finalError)
+			}
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 func intPtr(n int) *int { return &n }
