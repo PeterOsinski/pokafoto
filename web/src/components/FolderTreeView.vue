@@ -100,7 +100,7 @@ import api from '../api/client'
 import ThumbnailCard from './ThumbnailCard.vue'
 import Breadcrumbs from './Breadcrumbs.vue'
 import InlineUpload from './InlineUpload.vue'
-import { useUploadStore } from '../stores/upload'
+import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
 interface FileItem {
   id: string
@@ -152,7 +152,7 @@ const showCreate = ref(false)
 const newFolderName = ref('')
 const createInput = ref<HTMLInputElement | null>(null)
 
-const upload = useUploadStore()
+const upload = useChunkedUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {

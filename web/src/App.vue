@@ -68,13 +68,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
-import { useUploadStore } from './stores/upload'
+import { useChunkedUploadStore } from './stores/chunkedUpload'
 import DirectoryTree from './components/DirectoryTree.vue'
 import GlobalUploadTracker from './components/GlobalUploadTracker.vue'
 import api from './api/client'
 
 const auth = useAuthStore()
-const upload = useUploadStore()
+const upload = useChunkedUploadStore()
 const router = useRouter()
 const route = useRoute()
 const showS3Banner = ref(false)
@@ -125,6 +125,7 @@ function handleLogout() {
 onMounted(async () => {
   await auth.fetchMe()
   upload.connectWS()
+  upload.checkAndResumeAll()
   try {
     const res = await api.get('/health')
     if (res.data.s3_connected === false) {

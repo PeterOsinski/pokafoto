@@ -23,7 +23,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useUploadStore } from '../stores/upload'
+import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
 const props = withDefaults(defineProps<{
   folderId?: string | null
@@ -37,7 +37,7 @@ const props = withDefaults(defineProps<{
   accept: '*',
 })
 
-const upload = useUploadStore()
+const upload = useChunkedUploadStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 
 function triggerUpload() {

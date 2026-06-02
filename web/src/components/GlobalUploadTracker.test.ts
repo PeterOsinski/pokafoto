@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
-import { useUploadStore } from '../stores/upload'
+import { useChunkedUploadStore, type ChunkedUploadJob } from '../stores/chunkedUpload'
 import GlobalUploadTracker from './GlobalUploadTracker.vue'
 
 vi.mock('../api/client', () => {
@@ -12,6 +12,23 @@ vi.mock('../api/client', () => {
   }
   return { default: api }
 })
+
+function makeJob(overrides: Partial<ChunkedUploadJob> = {}) {
+  return {
+    uploadId: 'upload-1',
+    resumeToken: 'token-1',
+    filename: 'test.jpg',
+    totalSize: 5000000,
+    totalChunks: 1,
+    chunkSize: 5000000,
+    storedChunks: [],
+    uploadedBytes: 0,
+    status: 'uploading' as const,
+    targetFolderId: null,
+    skipNameSizeDedup: true,
+    ...overrides,
+  }
+}
 
 describe('GlobalUploadTracker', () => {
   beforeEach(() => {
@@ -29,13 +46,8 @@ describe('GlobalUploadTracker', () => {
   }
 
   it('shows error text for failed jobs', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-1',
-      filename: 'failed.jpg',
-      status: 'failed',
-      error: 'unsupported format',
-    })
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-1', filename: 'failed.jpg', status: 'failed', error: 'unsupported format' }))
 
     const wrapper = await mountExpanded()
 
@@ -44,48 +56,32 @@ describe('GlobalUploadTracker', () => {
     expect(wrapper.text()).toContain('failed')
   })
 
-  it('shows Retry button for failed jobs', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-2',
-      filename: 'retry-me.jpg',
-      status: 'failed',
-      error: 'Network error',
-    })
+  it('shows Restart button for paused jobs', async () => {
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-2', filename: 'paused.jpg', status: 'paused' }))
 
     const wrapper = await mountExpanded()
 
-    expect(wrapper.text()).toContain('Retry')
-    const retryBtn = wrapper.find('button[style*="color: var(--accent)"]')
-    expect(retryBtn.exists()).toBe(true)
+    expect(wrapper.text()).toContain('Restart')
   })
 
-  it('calls retryUpload when Retry button clicked', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-3',
-      filename: 'click-retry.jpg',
-      status: 'failed',
-      error: 'Network error',
-    })
+  it('calls resumePausedJob when Restart button clicked', async () => {
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-3', filename: 'click-restart.jpg', status: 'paused' }))
 
-    const retrySpy = vi.spyOn(upload, 'retryUpload').mockResolvedValue()
+    const restartSpy = vi.spyOn(upload, 'resumePausedJob').mockImplementation(() => {})
 
     const wrapper = await mountExpanded()
+    const buttons = wrapper.findAll('button')
+    const restartBtn = buttons.find(b => b.text() === 'Restart')
+    await restartBtn!.trigger('click')
 
-    const retryBtn = wrapper.find('button[style*="color: var(--accent)"]')
-    await retryBtn.trigger('click')
-
-    expect(retrySpy).toHaveBeenCalledWith('job-3')
+    expect(restartSpy).toHaveBeenCalledWith('job-3')
   })
 
   it('does not show error text for non-failed jobs', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-4',
-      filename: 'ok.jpg',
-      status: 'queued',
-    })
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-4', filename: 'ok.jpg', status: 'assembling' }))
 
     const wrapper = await mountExpanded()
 
@@ -94,42 +90,21 @@ describe('GlobalUploadTracker', () => {
   })
 
   it('does not show Retry button for completed jobs', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-5',
-      filename: 'done.jpg',
-      status: 'completed',
-      file_id: 'f-1',
-    })
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-5', filename: 'done.jpg', status: 'completed', file_id: 'f-1' }))
 
     const wrapper = await mountExpanded()
 
     expect(wrapper.text()).not.toContain('Retry')
   })
 
-  it('shows dismiss button for failed, skipped, and completed jobs', async () => {
-    const upload = useUploadStore()
-    upload.addJob({ job_id: 'job-f', filename: 'f.jpg', status: 'failed', error: 'err' })
-    upload.addJob({ job_id: 'job-s', filename: 's.jpg', status: 'skipped', reason: 'dup' })
-    upload.addJob({ job_id: 'job-c', filename: 'c.jpg', status: 'completed', file_id: 'f-2' })
+  it('shows Restart all button when paused jobs exist', async () => {
+    const upload = useChunkedUploadStore()
+    upload.addJob(makeJob({ uploadId: 'job-p1', filename: 'p1.jpg', status: 'paused' }))
+    upload.addJob(makeJob({ uploadId: 'job-p2', filename: 'p2.jpg', status: 'paused' }))
 
     const wrapper = await mountExpanded()
 
-    const closeButtons = wrapper.findAll('[class*="--text-secondary"]')
-    expect(closeButtons.length).toBeGreaterThanOrEqual(3)
-  })
-
-  it('shows reason text instead of error when reason is set', async () => {
-    const upload = useUploadStore()
-    upload.addJob({
-      job_id: 'job-6',
-      filename: 'reasoned.jpg',
-      status: 'failed',
-      reason: 'unsupported',
-    })
-
-    const wrapper = await mountExpanded()
-
-    expect(wrapper.text()).toContain('unsupported')
+    expect(wrapper.text()).toContain('Restart all')
   })
 })

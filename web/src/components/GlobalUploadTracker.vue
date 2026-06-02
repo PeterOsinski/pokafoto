@@ -9,13 +9,13 @@
       class="flex items-center justify-between w-full px-4 py-2 text-sm cursor-pointer hover:bg-[var(--bg-elevated)]"
     >
       <span class="text-[var(--text-primary)] font-medium">
-        Uploads
-        <span v-if="activeCount > 0" class="text-[var(--accent)]">
-          ({{ activeCount }} active)
-        </span>
-        <span v-if="completedCount > 0 && activeCount === 0" class="text-[var(--success)]">
-          ({{ completedCount }} complete)
-        </span>
+        <template v-if="!expanded && hasActive && activeCount > 0">
+          {{ Math.round(aggregateProgress * 100) }}% &middot; {{ activeCount }}/{{ allJobs.length }} files
+        </template>
+        <template v-else-if="!expanded && completedCount > 0">
+          {{ completedCount }} done &#x2713;
+        </template>
+        <template v-else>Uploads</template>
       </span>
       <span class="text-xs text-[var(--text-secondary)]">
         {{ expanded ? '&#9660;' : '&#9650;' }}
@@ -45,43 +45,68 @@
             {{ statusLabel(job) }}
           </span>
           <button
-            v-if="job.status === 'failed' && !job.isChunked"
-            @click="upload.retryUpload(job.key)"
+            v-if="job.status === 'paused' && job.isChunked"
+            @click="chunked.resumePausedJob(job.key)"
+            class="text-xs px-1.5 py-0.5 rounded hover:bg-[var(--accent)] hover:text-white shrink-0"
+            style="color: var(--accent); border: 1px solid var(--accent)"
+          >
+            Restart
+          </button>
+          <button
+            v-if="job.status === 'failed'"
+            @click="chunked.retryUpload(job.key)"
             class="text-xs px-1.5 py-0.5 rounded hover:bg-[var(--accent)] hover:text-white shrink-0"
             style="color: var(--accent); border: 1px solid var(--accent)"
           >
             Retry
           </button>
           <button
-            v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'completed'"
-            @click="upload.removeJob(job.key); chunked.removeJob(job.key)"
+            v-if="job.status === 'failed' || job.status === 'completed' || job.status === 'paused' || job.status === 'uploading'"
+            @click="chunked.removeJob(job.key)"
             class="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             &#x2715;
           </button>
         </div>
-        <div v-if="job.status === 'failed' && (job.error || job.reason)" class="text-xs mt-0.5 truncate" :class="'text-[var(--error)]'" :title="job.error || job.reason">
-          {{ job.error || job.reason }}
+        <div v-if="job.error" class="text-xs mt-0.5 truncate text-[var(--error)]" :title="job.error">
+          {{ job.error }}
         </div>
       </div>
 
-      <button
-        v-if="activeCount === 0 && jobsWithDone.length > 0"
-        @click="upload.clearCompleted()"
-        class="mt-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      >
-        Clear all
-      </button>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button
+          v-if="pausedCount > 0"
+          @click="chunked.resumeAllPausedJobs()"
+          class="text-xs px-2 py-1 rounded hover:bg-[var(--accent)] hover:text-white"
+          style="color: var(--accent); border: 1px solid var(--accent)"
+        >
+          Restart all
+        </button>
+        <button
+          v-if="pendingCount > 0"
+          @click="chunked.abortAll()"
+          class="text-xs px-2 py-1 rounded hover:bg-[var(--error)] hover:text-white"
+          style="color: var(--error); border: 1px solid var(--error)"
+        >
+          Abort all
+        </button>
+        <button
+          v-if="finishedCount > 0 && activeCount === 0"
+          @click="chunked.clearCompleted()"
+          class="text-xs px-2 py-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          style="border: 1px solid var(--border-color)"
+        >
+          Clear all
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useUploadStore } from '../stores/upload'
 import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
-const upload = useUploadStore()
 const chunked = useChunkedUploadStore()
 const expanded = ref(false)
 
@@ -90,52 +115,71 @@ interface DisplayJob {
   filename: string
   status: string
   progress?: number
-  stage?: string
   error?: string
-  reason?: string
   isChunked: boolean
 }
 
-const allJobs = computed<DisplayJob[]>(() => {
-  const regular = upload.jobs.map(j => ({
-    key: j.job_id,
-    filename: j.filename,
-    status: j.status,
-    progress: j.progress,
-    stage: j.stage,
-    error: j.error,
-    reason: j.reason,
-    isChunked: false,
-  }))
-  const chunkedJobs = chunked.jobs.map(j => ({
+const allJobs = computed<DisplayJob[]>(() =>
+  chunked.jobs.map(j => ({
     key: j.uploadId,
     filename: j.filename,
     status: j.status,
-    progress: j.uploadedBytes / Math.max(j.totalSize, 1),
-    stage: j.status === 'assembling' ? 'assembling' : j.status,
+    progress: j.totalSize > 0 ? j.uploadedBytes / j.totalSize : 0,
     error: j.error,
-    reason: undefined,
     isChunked: true,
-  }))
-  return [...regular, ...chunkedJobs]
-})
-
-const jobsWithDone = computed(() =>
-  allJobs.value.filter(j => j.status === 'completed' || j.status === 'skipped')
+  })),
 )
 
 const activeCount = computed(() =>
-  allJobs.value.filter(j => j.status === 'uploading' || j.status === 'processing' || j.status === 'assembling' || j.status === 'queued').length
+  allJobs.value.filter(j =>
+    j.status === 'uploading' || j.status === 'processing' ||
+    j.status === 'assembling',
+  ).length,
 )
 
 const completedCount = computed(() =>
-  allJobs.value.filter(j => j.status === 'completed' || j.status === 'skipped').length
+  allJobs.value.filter(j => j.status === 'completed').length,
 )
+
+const pausedCount = computed(() =>
+  allJobs.value.filter(j => j.status === 'paused').length,
+)
+
+const pendingCount = computed(() =>
+  allJobs.value.filter(j =>
+    j.status === 'uploading' || j.status === 'processing' ||
+    j.status === 'assembling' || j.status === 'paused',
+  ).length,
+)
+
+const finishedCount = computed(() =>
+  allJobs.value.filter(j =>
+    j.status === 'completed' || j.status === 'failed',
+  ).length,
+)
+
+const hasActive = computed(() => activeCount.value > 0)
+
+const aggregateProgress = computed(() => {
+  const activeJobs = allJobs.value.filter(j =>
+    j.status === 'uploading' || j.status === 'processing' || j.status === 'assembling',
+  )
+  if (activeJobs.length === 0) return 0
+  const totalBytes = activeJobs.reduce((sum, j) => {
+    const chunkedJob = chunked.jobs.find(c => c.uploadId === j.key)
+    return sum + (chunkedJob?.totalSize || 0)
+  }, 0)
+  const uploadedBytes = activeJobs.reduce((sum, j) => {
+    const chunkedJob = chunked.jobs.find(c => c.uploadId === j.key)
+    return sum + (chunkedJob?.uploadedBytes || 0)
+  }, 0)
+  return totalBytes > 0 ? uploadedBytes / totalBytes : 0
+})
 
 const sortedJobs = computed(() => {
   const order: Record<string, number> = {
-    uploading: 0, processing: 1, assembling: 1, queued: 2,
-    paused: 3, failed: 4, completed: 5, skipped: 6,
+    uploading: 0, processing: 1, assembling: 1,
+    paused: 2, failed: 3, completed: 4,
   }
   return [...allJobs.value]
     .sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5))
@@ -145,14 +189,12 @@ const sortedJobs = computed(() => {
 function statusClass(status: string) {
   if (status === 'completed') return 'text-[var(--success)]'
   if (status === 'failed') return 'text-[var(--error)]'
-  if (status === 'skipped') return 'text-[var(--warning)]'
   if (status === 'paused') return 'text-[var(--warning)]'
   return 'text-[var(--text-secondary)]'
 }
 
 function statusLabel(job: DisplayJob) {
   if (job.status === 'uploading' && job.progress !== undefined) return `${Math.round(job.progress * 100)}%`
-  if (job.status === 'processing' && job.stage) return job.stage
   if (job.status === 'assembling') return 'assembling'
   return job.status
 }

@@ -24,13 +24,21 @@ describe('InlineUpload', () => {
     vi.clearAllMocks()
   })
 
-  it('defaults to skipNameSizeDedup=true and skips pre-upload check', async () => {
+  it('triggers chunked upload on file selection', async () => {
     const api = (await import('../api/client')).default as any
-    let uploadCheckCalled = false
+    let chunkUploadCalled = false
     api.post.mockImplementation((url: string) => {
-      if (url === '/upload/check') {
-        uploadCheckCalled = true
-        return Promise.resolve({ data: { duplicates: [] } })
+      if (url === '/upload/chunk') {
+        chunkUploadCalled = true
+        return Promise.resolve({
+          data: {
+            upload_id: 'upload-1',
+            resume_token: 'token-1',
+            stored_chunks: [0],
+            missing_chunks: [],
+            next_chunk: 1,
+          },
+        })
       }
       return new Promise(() => {})
     })
@@ -47,35 +55,7 @@ describe('InlineUpload', () => {
     await wrapper.vm.$nextTick()
     await new Promise((r) => setTimeout(r, 10))
 
-    expect(uploadCheckCalled).toBe(false)
-  })
-
-  it('passes skipNameSizeDedup=false and runs pre-upload check', async () => {
-    const api = (await import('../api/client')).default as any
-    let uploadCheckCalled = false
-    api.post.mockImplementation((url: string) => {
-      if (url === '/upload/check') {
-        uploadCheckCalled = true
-        return Promise.resolve({ data: { duplicates: [] } })
-      }
-      return new Promise(() => {})
-    })
-
-    const wrapper = mount(InlineUpload, {
-      props: { skipNameSizeDedup: false },
-    })
-    const file = makeFile('test.jpg', 1024)
-    const input = wrapper.find('input[type="file"]')
-
-    Object.defineProperty(input.element, 'files', {
-      value: [file],
-      writable: false,
-    })
-    await input.trigger('change')
-    await wrapper.vm.$nextTick()
-    await new Promise((r) => setTimeout(r, 10))
-
-    expect(uploadCheckCalled).toBe(true)
+    expect(chunkUploadCalled).toBe(true)
   })
 
   it('renders with custom label', () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import FolderTreeView from './FolderTreeView.vue'
-import { useUploadStore } from '../stores/upload'
+import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
 vi.mock('../api/client', () => {
   const api = {
@@ -86,7 +86,7 @@ describe('FolderTreeView', () => {
     const api = (await import('../api/client')).default as any
     const callsBefore = api.get.mock.calls.length
 
-    const upload = useUploadStore()
+    const upload = useChunkedUploadStore()
     upload.completedJobs.push({
       file_id: 'new-file',
       filename: 'new.jpg',
@@ -107,7 +107,7 @@ describe('FolderTreeView', () => {
     const api = (await import('../api/client')).default as any
     const callsBefore = api.get.mock.calls.length
 
-    const upload = useUploadStore()
+    const upload = useChunkedUploadStore()
     upload.completedJobs.push({
       file_id: 'new-file',
       filename: 'new.jpg',

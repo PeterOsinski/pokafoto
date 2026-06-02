@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <DropZone :folderId="currentFolderId">
     <div v-if="settings.previewMode.value === 'sidebar' && lightboxFile" :class="{ 'flex': true }">
       <div class="flex-1 min-w-0">
 
@@ -434,7 +434,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </DropZone>
 </template>
 
 <script setup lang="ts">
@@ -453,7 +453,8 @@ import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 import InlineUpload from '../components/InlineUpload.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { useUploadStore } from '../stores/upload'
+import DropZone from '../components/DropZone.vue'
+import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
 interface FileItem {
   id: string
@@ -551,7 +552,7 @@ const lastClickedIndex = ref(-1)
 const selectionEnabled = ref(true)
 const showDeleteConfirm = ref(false)
 
-const upload = useUploadStore()
+const upload = useChunkedUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const moveDialog = ref({ open: false })
