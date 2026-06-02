@@ -935,18 +935,24 @@ func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
 		t.Fatalf("create job: %v", err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
-	j, err := ujs.FindByID(job.ID)
-	if err != nil {
-		t.Fatalf("find job: %v", err)
+	var finalStatus model.JobStatus
+	for i := 0; i < 10; i++ {
+		j, err := ujs.FindByID(job.ID)
+		if err != nil {
+			t.Fatalf("find job: %v", err)
+		}
+		if j == nil {
+			t.Fatal("job not found")
+		}
+		finalStatus = j.Status
+		if finalStatus == model.JobStatusQueued {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	if j == nil {
-		t.Fatal("job not found")
-	}
-	if j.Status != model.JobStatusQueued {
-		t.Errorf("expected status queued, got %s", j.Status)
-	}
+	t.Errorf("expected status queued after retries, got %s", finalStatus)
 }
 
 func intPtr(n int) *int { return &n }

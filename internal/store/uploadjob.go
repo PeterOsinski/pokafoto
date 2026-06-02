@@ -69,7 +69,7 @@ func (s *UploadJobStore) claimOnce() (*model.UploadJob, error) {
 
 	var id string
 	err = tx.QueryRow(
-		`SELECT id FROM upload_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`,
+		`SELECT id FROM upload_jobs WHERE status = 'queued' ORDER BY updated_at ASC LIMIT 1`,
 	).Scan(&id)
 	if err == sql.ErrNoRows {
 		return nil, nil
