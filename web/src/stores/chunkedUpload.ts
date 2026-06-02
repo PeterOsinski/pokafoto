@@ -215,6 +215,7 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
       const workers = Math.min(MAX_CONCURRENT_CHUNKS, queued.length)
       await Promise.all(Array.from({ length: workers }, () => worker()))
 
+      updateJob(job.uploadId, { status: 'assembling' })
       const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
         upload_id: job.uploadId,
       })
@@ -275,19 +276,24 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
   async function resumeUpload(job: ChunkedUploadJob, file: File): Promise<void> {
     const totalChunks = job.totalChunks
+    const storedChunks = job.storedChunks || []
     const missingChunks: number[] = []
     for (let i = 0; i < totalChunks; i++) {
-      if (!job.storedChunks.includes(i)) {
+      if (!storedChunks.includes(i)) {
         missingChunks.push(i)
       }
     }
 
     if (missingChunks.length === 0) {
       updateJob(job.uploadId, { status: 'assembling' })
-      await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
+      const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
         upload_id: job.uploadId,
       })
-      updateJob(job.uploadId, { status: 'processing' })
+      const serverStored = completeRes.data.stored_chunks || 0
+      const serverMissing = completeRes.data.missing_chunks || []
+      if (serverStored >= totalChunks && serverMissing.length === 0) {
+        updateJob(job.uploadId, { status: 'processing' })
+      }
       return
     }
 
@@ -301,10 +307,15 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
     }
 
     updateJob(job.uploadId, { status: 'assembling' })
-    await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
+    const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
       upload_id: job.uploadId,
     })
-    updateJob(job.uploadId, { status: 'processing' })
+    const serverStored = completeRes.data.stored_chunks || 0
+    const serverMissing = completeRes.data.missing_chunks || []
+    if (serverStored >= totalChunks && serverMissing.length === 0) {
+      updateJob(job.uploadId, { status: 'processing' })
+      await pollForCompletion(job.uploadId, completeRes.data.job_id)
+    }
   }
 
   async function checkAndResumeAll() {
