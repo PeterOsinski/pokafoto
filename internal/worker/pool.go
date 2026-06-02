@@ -399,6 +399,7 @@ func (p *Pool) processChunkedJob(job *model.UploadJob) {
 
 	mimeType := detectMimeTypeFromFile(f, job.Filename)
 	mediaType := detectMediaType(mimeType)
+	f.Seek(0, 0)
 
 	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
 		existing, _ := p.fileStore.FindByNameAndSize(job.UserID, job.Filename, job.SizeBytes)
@@ -427,6 +428,7 @@ func (p *Pool) processChunkedJob(job *model.UploadJob) {
 
 func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, mediaType model.MediaType, sha256Hash string) {
 	defer f.Close()
+	f.Seek(0, 0)
 
 	var exifData *model.ExifData
 	var now = time.Now().UTC()

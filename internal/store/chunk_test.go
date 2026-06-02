@@ -9,7 +9,7 @@ import (
 	"github.com/drive/drive/internal/model"
 )
 
-func setupChunkStore(t *testing.T) (*ChunkStore, *DB, string, func()) {
+func setupChunkStore(t *testing.T) (*ChunkStore, *DB, string, string, func()) {
 	t.Helper()
 	db := OpenTestDB(t)
 	cs := NewChunkStore(db)
@@ -38,11 +38,11 @@ func setupChunkStore(t *testing.T) (*ChunkStore, *DB, string, func()) {
 		t.Fatalf("create upload job: %v", err)
 	}
 
-	return cs, db, job.ID, func() {}
+	return cs, db, job.ID, user.ID, func() {}
 }
 
 func TestChunkStore_CreateChunkRecord_shouldPersist(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	if err := cs.CreateChunkRecord(uploadID, 0, 1024, 0, "abc123", "/tmp/chunk_0"); err != nil {
 		t.Fatalf("create chunk record: %v", err)
@@ -58,7 +58,7 @@ func TestChunkStore_CreateChunkRecord_shouldPersist(t *testing.T) {
 }
 
 func TestChunkStore_GetStoredChunks_shouldReturnSortedIndices(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 2, 512, 1024, "sha2", "/tmp/c2")
 	cs.CreateChunkRecord(uploadID, 0, 512, 0, "sha0", "/tmp/c0")
@@ -77,7 +77,7 @@ func TestChunkStore_GetStoredChunks_shouldReturnSortedIndices(t *testing.T) {
 }
 
 func TestChunkStore_FindMissingChunks_shouldReturnMissingIndices(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 0, 512, 0, "", "/tmp/c0")
 	cs.CreateChunkRecord(uploadID, 2, 512, 1024, "", "/tmp/c2")
@@ -95,7 +95,7 @@ func TestChunkStore_FindMissingChunks_shouldReturnMissingIndices(t *testing.T) {
 }
 
 func TestChunkStore_GetChunkPath_shouldReturnPath(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 0, 512, 0, "", "/tmp/my_chunk")
 
@@ -109,7 +109,7 @@ func TestChunkStore_GetChunkPath_shouldReturnPath(t *testing.T) {
 }
 
 func TestChunkStore_GetChunkPath_shouldReturnEmptyForMissing(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	path, err := cs.GetChunkPath(uploadID, 99)
 	if err != nil {
@@ -121,11 +121,88 @@ func TestChunkStore_GetChunkPath_shouldReturnEmptyForMissing(t *testing.T) {
 }
 
 func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, db, _, userID, _ := setupChunkStore(t)
+	ujs := NewUploadJobStore(db)
 
-	content := []byte("hello world chunked data")
-	chunk1 := content[:5]
-	chunk2 := content[5:]
+	for _, tc := range []struct {
+		name       string
+		content    []byte
+		splitPoint int
+	}{
+		{"small_text", []byte("hello world chunked data"), 5},
+		{"binary_2000b", makeBinaryData(2000), 1000},
+		{"binary_1001b", makeBinaryData(1001), 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			totalChunks := 2
+			chunkSize := int64(len(tc.content)) / int64(totalChunks)
+			job := &model.UploadJob{
+				BatchID:     "chunk-batch-" + t.Name(),
+				UserID:      userID,
+				Filename:    "test.dat",
+				SizeBytes:   int64(len(tc.content)),
+				TempPath:    os.TempDir(),
+				Status:      model.JobStatusQueued,
+				UploadMode:  model.UploadModeChunked,
+				TotalChunks: &totalChunks,
+				ChunkSize:   &chunkSize,
+			}
+			if err := ujs.Create(job); err != nil {
+				t.Fatalf("create upload job: %v", err)
+			}
+
+			chunk1 := tc.content[:tc.splitPoint]
+			chunk2 := tc.content[tc.splitPoint:]
+
+			dir := t.TempDir()
+			chunk1Path := filepath.Join(dir, "chunk_0")
+			chunk2Path := filepath.Join(dir, "chunk_1")
+			os.WriteFile(chunk1Path, chunk1, 0644)
+			os.WriteFile(chunk2Path, chunk2, 0644)
+
+			cs.CreateChunkRecord(job.ID, 0, int64(len(chunk1)), 0, "", chunk1Path)
+			cs.CreateChunkRecord(job.ID, 1, int64(len(chunk2)), int64(len(chunk1)), "", chunk2Path)
+
+			destPath := filepath.Join(dir, "assembled.dat")
+			sha256Hex, err := cs.AssembleFile(job.ID, 2, destPath)
+			if err != nil {
+				t.Fatalf("assemble file: %v", err)
+			}
+
+			assembled, err := os.ReadFile(destPath)
+			if err != nil {
+				t.Fatalf("read assembled file: %v", err)
+			}
+
+			if len(assembled) != len(tc.content) {
+				t.Errorf("length mismatch: expected %d, got %d", len(tc.content), len(assembled))
+			}
+
+			if string(assembled) != string(tc.content) {
+				t.Errorf("content mismatch")
+			}
+
+			if sha256Hex == "" {
+				t.Error("expected non-empty SHA256 hash")
+			}
+		})
+	}
+}
+
+func TestChunkStore_AssembleFile_boundaryBytes(t *testing.T) {
+	cs, _, uploadID, _, _ := setupChunkStore(t)
+
+	content := make([]byte, 1500)
+	content[0] = 0xFF
+	content[1] = 0xD8
+	content[2] = 0xFF
+	content[749] = 0xAB
+	content[750] = 0xCD
+	content[1498] = 0xEF
+	content[1499] = 0xD9
+
+	chunk1 := content[:750]
+	chunk2 := content[750:]
 
 	dir := t.TempDir()
 	chunk1Path := filepath.Join(dir, "chunk_0")
@@ -137,7 +214,7 @@ func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
 	cs.CreateChunkRecord(uploadID, 1, int64(len(chunk2)), int64(len(chunk1)), "", chunk2Path)
 
 	destPath := filepath.Join(dir, "assembled.dat")
-	sha256Hex, err := cs.AssembleFile(uploadID, 2, destPath)
+	_, err := cs.AssembleFile(uploadID, 2, destPath)
 	if err != nil {
 		t.Fatalf("assemble file: %v", err)
 	}
@@ -146,16 +223,30 @@ func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read assembled file: %v", err)
 	}
-	if string(assembled) != string(content) {
-		t.Errorf("expected %q, got %q", string(content), string(assembled))
+
+	if assembled[0] != 0xFF || assembled[1] != 0xD8 || assembled[2] != 0xFF {
+		t.Errorf("header bytes corrupted: [%x %x %x]", assembled[0], assembled[1], assembled[2])
 	}
-	if sha256Hex == "" {
-		t.Error("expected non-empty SHA256 hash")
+
+	if assembled[749] != 0xAB || assembled[750] != 0xCD {
+		t.Errorf("chunk boundary bytes corrupted: expected AB CD at [749 750], got [%x %x]", assembled[749], assembled[750])
+	}
+
+	if assembled[1498] != 0xEF || assembled[1499] != 0xD9 {
+		t.Errorf("trailer bytes corrupted: expected EF D9 at [1498 1499], got [%x %x]", assembled[1498], assembled[1499])
 	}
 }
 
+func makeBinaryData(size int) []byte {
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+	return data
+}
+
 func TestChunkStore_AssembleFile_shouldFailMissingChunk(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
 	chunkPath := filepath.Join(dir, "chunk_0")
@@ -170,7 +261,7 @@ func TestChunkStore_AssembleFile_shouldFailMissingChunk(t *testing.T) {
 }
 
 func TestChunkStore_DeleteChunks_shouldRemoveRecordsAndFiles(t *testing.T) {
-	cs, _, uploadID, _ := setupChunkStore(t)
+	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
 	chunkPath := filepath.Join(dir, "chunk_0")
@@ -195,7 +286,7 @@ func TestChunkStore_DeleteChunks_shouldRemoveRecordsAndFiles(t *testing.T) {
 }
 
 func TestChunkStore_DeleteAbandonedChunks_shouldCleanOld(t *testing.T) {
-	cs, db, uploadID, _ := setupChunkStore(t)
+	cs, db, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
 	chunkPath := filepath.Join(dir, "chunk_0")

@@ -1,9 +1,12 @@
 package worker
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1013,6 +1016,292 @@ func TestPool_ChunkedJob_oldIncomplete_shouldExpire(t *testing.T) {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func TestPool_ChunkedJob_shouldPreserveContentIntegrity(t *testing.T) {
+	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
+	defer cleanup()
+
+	prefix := bytes.Repeat([]byte{0xFF, 0xD8, 0xFF, 0xE0}, 1)
+	middle := bytes.Repeat([]byte{0xAB}, 800)
+	suffix := []byte{0xFF, 0xD9}
+	content := make([]byte, 0, len(prefix)+len(middle)+len(suffix))
+	content = append(content, prefix...)
+	content = append(content, middle...)
+	content = append(content, suffix...)
+	expectSHA := fmt.Sprintf("%x", sha256.Sum256(content))
+
+	half := len(content) / 2
+	chunk0 := content[:half]
+	chunk1 := content[half:]
+
+	totalChunks := 2
+	totalSize := int64(len(content))
+	tc := totalChunks
+	csInt := int64(half)
+
+	chunkDir := store.ChunkTempDir(cfg.OriginalsDir())
+	os.MkdirAll(chunkDir, 0755)
+
+	job := &model.UploadJob{
+		BatchID:           "chunked-integrity-" + strings.ReplaceAll(t.Name(), "/", "_"),
+		UserID:            userID,
+		Filename:          "photo.jpg",
+		SizeBytes:         totalSize,
+		TempPath:          chunkDir,
+		Status:            model.JobStatusQueued,
+		UploadMode:        model.UploadModeChunked,
+		TotalChunks:       &tc,
+		ChunkSize:         &csInt,
+		SkipNameSizeDedup: true,
+	}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create upload job: %v", err)
+	}
+
+	for i, data := range [][]byte{chunk0, chunk1} {
+		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk_%d", i))
+		if err := os.WriteFile(chunkPath, data, 0644); err != nil {
+			t.Fatalf("write chunk %d: %v", i, err)
+		}
+		if err := cs.CreateChunkRecord(job.ID, i, int64(len(data)), int64(i*half), fmt.Sprintf("%x", sha256.Sum256(data)), chunkPath); err != nil {
+			t.Fatalf("create chunk record %d: %v", i, err)
+		}
+	}
+
+	var files []*model.File
+	deadline := time.After(15 * time.Second)
+	for len(files) == 0 {
+		select {
+		case <-deadline:
+			jobStatus, _ := ujs.FindByID(job.ID)
+			if jobStatus != nil {
+				t.Fatalf("timed out, status=%s error=%v", jobStatus.Status, jobStatus.Error)
+			}
+			t.Fatal("timed out, job not found")
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+		var err error
+		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
+		if err != nil {
+			t.Fatalf("list files: %v", err)
+		}
+	}
+
+	storedPath := filepath.Join(cfg.OriginalsDir(), userID, files[0].Filename)
+	storedBytes, err := os.ReadFile(storedPath)
+	if err != nil {
+		t.Fatalf("read stored file %q: %v", storedPath, err)
+	}
+
+	if len(storedBytes) != len(content) {
+		t.Fatalf("stored file size %d != original %d", len(storedBytes), len(content))
+	}
+
+	if !bytes.Equal(storedBytes[:len(prefix)], prefix) {
+		t.Errorf("JPEG magic bytes corrupted: expected %x, got %x", prefix, storedBytes[:len(prefix)])
+	}
+
+	if !bytes.Equal(storedBytes[len(content)-len(suffix):], suffix) {
+		t.Errorf("JPEG EOI marker corrupted: expected %x, got %x", suffix, storedBytes[len(content)-len(suffix):])
+	}
+
+	storedSHA := fmt.Sprintf("%x", sha256.Sum256(storedBytes))
+	if storedSHA != expectSHA {
+		t.Errorf("SHA-256 mismatch: expected %s, got %s", expectSHA, storedSHA)
+	}
+
+	if files[0].SHA256 != expectSHA {
+		t.Errorf("stored SHA-256 in DB mismatch: expected %s, got %s", expectSHA, files[0].SHA256)
+	}
+}
+
+func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
+	pool, cfg, fs, ujs, cs, db, userID, cleanup := setupChunkedTestPool(t)
+	defer cleanup()
+
+	ts := store.NewThumbnailStore(db)
+
+	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	var jpgBuf bytes.Buffer
+	if err := jpeg.Encode(&jpgBuf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("encode test JPEG: %v", err)
+	}
+	content := jpgBuf.Bytes()
+
+	totalChunks := 2
+	totalSize := int64(len(content))
+	half := totalSize / 2
+	tc := totalChunks
+	csInt := half
+
+	chunkDir := store.ChunkTempDir(cfg.OriginalsDir())
+	os.MkdirAll(chunkDir, 0755)
+
+	job := &model.UploadJob{
+		BatchID:           "chunked-thumb-" + strings.ReplaceAll(t.Name(), "/", "_"),
+		UserID:            userID,
+		Filename:          "thumb_test.jpg",
+		SizeBytes:         totalSize,
+		TempPath:          chunkDir,
+		Status:            model.JobStatusQueued,
+		UploadMode:        model.UploadModeChunked,
+		TotalChunks:       &tc,
+		ChunkSize:         &csInt,
+		SkipNameSizeDedup: true,
+	}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create upload job: %v", err)
+	}
+
+	chunk0 := content[:half]
+	chunk1 := content[half:]
+	for i, data := range [][]byte{chunk0, chunk1} {
+		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("thumb_chunk_%d", i))
+		if err := os.WriteFile(chunkPath, data, 0644); err != nil {
+			t.Fatalf("write chunk %d: %v", i, err)
+		}
+		if err := cs.CreateChunkRecord(job.ID, i, int64(len(data)), int64(i)*half, fmt.Sprintf("%x", sha256.Sum256(data)), chunkPath); err != nil {
+			t.Fatalf("create chunk record %d: %v", i, err)
+		}
+	}
+
+	var files []*model.File
+	deadline := time.After(15 * time.Second)
+	for len(files) == 0 {
+		select {
+		case <-deadline:
+			jobStatus, _ := ujs.FindByID(job.ID)
+			if jobStatus != nil {
+				t.Fatalf("timed out, status=%s error=%v", jobStatus.Status, jobStatus.Error)
+			}
+			t.Fatal("timed out, job not found")
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+		var err error
+		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
+		if err != nil {
+			t.Fatalf("list files: %v", err)
+		}
+	}
+
+	fileID := files[0].ID
+
+	sizes := []model.ThumbnailSize{model.ThumbSizeSmall, model.ThumbSizeLarge, model.ThumbSizeMedium, model.ThumbSizeXL, model.ThumbSizePreview}
+	deadline2 := time.After(10 * time.Second)
+	for _, size := range sizes {
+		var thumb *model.Thumbnail
+		var err error
+		for thumb == nil {
+			select {
+			case <-deadline2:
+				t.Fatalf("timed out waiting for thumbnail %s", size)
+			default:
+			}
+			thumb, err = ts.FindByFileIDAndSize(fileID, size)
+			if err != nil {
+				if err.Error() == "sql: no rows in result set" {
+					time.Sleep(200 * time.Millisecond)
+					continue
+				}
+				t.Errorf("FindByFileIDAndSize(%q, %s): %v", fileID, size, err)
+				break
+			}
+			if thumb.LocalPath == "" {
+				t.Errorf("thumbnail %s has empty LocalPath", size)
+				break
+			}
+			st, stErr := os.Stat(thumb.LocalPath)
+			if stErr != nil {
+				t.Errorf("thumbnail file %s not found: %v", thumb.LocalPath, stErr)
+				break
+			}
+			if st.Size() == 0 {
+				t.Errorf("thumbnail file %s is empty", thumb.LocalPath)
+			}
+		}
+	}
+
+	_ = pool
+}
+
+func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
+	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
+	defer cleanup()
+
+	content := bytes.Repeat([]byte("X"), 200)
+
+	totalChunks := 1
+	totalSize := int64(len(content))
+	tc := totalChunks
+	csInt := int64(1024 * 1024)
+
+	chunkDir := store.ChunkTempDir(cfg.OriginalsDir())
+	os.MkdirAll(chunkDir, 0755)
+
+	job := &model.UploadJob{
+		BatchID:           "chunked-small-" + strings.ReplaceAll(t.Name(), "/", "_"),
+		UserID:            userID,
+		Filename:          "small.bin",
+		SizeBytes:         totalSize,
+		TempPath:          chunkDir,
+		Status:            model.JobStatusQueued,
+		UploadMode:        model.UploadModeChunked,
+		TotalChunks:       &tc,
+		ChunkSize:         &csInt,
+		SkipNameSizeDedup: true,
+	}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create upload job: %v", err)
+	}
+
+	chunkPath := filepath.Join(chunkDir, "small_chunk_0")
+	if err := os.WriteFile(chunkPath, content, 0644); err != nil {
+		t.Fatalf("write chunk: %v", err)
+	}
+	if err := cs.CreateChunkRecord(job.ID, 0, int64(len(content)), 0, fmt.Sprintf("%x", sha256.Sum256(content)), chunkPath); err != nil {
+		t.Fatalf("create chunk record: %v", err)
+	}
+
+	var files []*model.File
+	deadline := time.After(15 * time.Second)
+	for len(files) == 0 {
+		select {
+		case <-deadline:
+			jobStatus, _ := ujs.FindByID(job.ID)
+			if jobStatus != nil {
+				t.Fatalf("timed out, status=%s error=%v", jobStatus.Status, jobStatus.Error)
+			}
+			t.Fatal("timed out, job not found")
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+		var err error
+		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
+		if err != nil {
+			t.Fatalf("list files: %v", err)
+		}
+	}
+
+	storedPath := filepath.Join(cfg.OriginalsDir(), userID, files[0].Filename)
+	storedBytes, err := os.ReadFile(storedPath)
+	if err != nil {
+		t.Fatalf("read stored file %q: %v", storedPath, err)
+	}
+
+	if len(storedBytes) != len(content) {
+		t.Fatalf("stored file size %d != original %d", len(storedBytes), len(content))
+	}
+
+	if !bytes.Equal(storedBytes, content) {
+		t.Errorf("stored file content does not match original")
+	}
+
+	if files[0].SizeBytes != totalSize {
+		t.Errorf("SizeBytes in DB %d != expected %d", files[0].SizeBytes, totalSize)
 	}
 }
 
