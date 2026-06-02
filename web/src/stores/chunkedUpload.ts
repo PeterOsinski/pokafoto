@@ -220,15 +220,18 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
       const workers = Math.min(MAX_CONCURRENT_CHUNKS, queued.length)
       await Promise.all(Array.from({ length: workers }, () => worker()))
 
-      if (job.storedChunks.length >= totalChunks) {
+      const currentJob = jobs.value.find(j => j.uploadId === job.uploadId) || job
+      const storedCount = currentJob.storedChunks.length
+      if (storedCount >= totalChunks) {
         updateJob(job.uploadId, { status: 'assembling' })
 
-        const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
+        const completeRes = await api.post(`/upload/chunk/${currentJob.resumeToken}/complete`, {
           upload_id: job.uploadId,
         })
 
         if (completeRes.data.status === 'assembling' && completeRes.data.missing_chunks.length === 0) {
           updateJob(job.uploadId, { status: 'processing' })
+          await pollForCompletion(job.uploadId, completeRes.data.job_id)
         }
       }
     } catch {
@@ -320,6 +323,51 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         clearTokens()
       }
     }
+  }
+
+  async function pollForCompletion(uploadId: string, jobId: string) {
+    const maxAttempts = 60
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const res = await api.get('/upload/active')
+        const activeJobs: any[] = res.data.jobs || []
+        const found = activeJobs.find((j: any) => j.job_id === jobId)
+        if (!found || found.status === 'completed' || found.status === 'skipped') {
+          updateJob(uploadId, {
+            status: 'completed',
+            error: undefined,
+          })
+          if (found?.file_id) {
+            completedJobs.value.push({
+              file_id: found.file_id,
+              filename: '',
+              folder_id: null,
+            })
+          }
+          return
+        }
+        if (found.status === 'failed') {
+          updateJob(uploadId, {
+            status: 'failed',
+            error: found.error || 'Server processing failed',
+          })
+          return
+        }
+        if (found.progress !== undefined) {
+          const job = jobs.value.find(j => j.uploadId === uploadId)
+          if (job) {
+            updateJob(uploadId, { uploadedBytes: found.progress * job.totalSize })
+          }
+        }
+      } catch {
+        // continue polling
+      }
+    }
+    updateJob(uploadId, {
+      status: 'failed',
+      error: 'Timed out waiting for server processing',
+    })
   }
 
   function consumeCompletedJobs(): { file_id: string; filename: string; folder_id: string | null }[] {

@@ -206,8 +206,8 @@ export const useUploadStore = defineStore('upload', () => {
     const fileMap = new Map<string, File>()
     const uploadJobs: UploadJob[] = []
 
-    for (let i = 0; i < allFiles.length; i++) {
-      const file = allFiles[i]
+    for (let i = 0; i < smallFiles.length; i++) {
+      const file = smallFiles[i]
       const jobId = `upload-${Date.now()}-${i}`
       fileMap.set(jobId, file)
       uploadJobs.push({
@@ -226,7 +226,7 @@ export const useUploadStore = defineStore('upload', () => {
     jobs.value = [...uploadJobs, ...jobs.value]
 
     if (!skipNameSizeDedup) {
-      const checkPayload = allFiles.map(f => ({ filename: f.name, size: f.size }))
+      const checkPayload = smallFiles.map(f => ({ filename: f.name, size: f.size }))
       try {
         const checkRes = await api.post('/upload/check', checkPayload)
         const duplicates: Set<string> = new Set(

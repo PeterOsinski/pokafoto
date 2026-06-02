@@ -365,6 +365,17 @@ func (s *UploadJobStore) Requeue(id string) error {
 	return nil
 }
 
+func (s *UploadJobStore) SetStatus(id string, status model.JobStatus) error {
+	_, err := s.db.Exec(
+		`UPDATE upload_jobs SET status = ?, updated_at = ? WHERE id = ?`,
+		string(status), time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set status: %w", err)
+	}
+	return nil
+}
+
 func (s *UploadJobStore) FindByResumeToken(token string) (*model.UploadJob, error) {
 	job := &model.UploadJob{}
 	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString

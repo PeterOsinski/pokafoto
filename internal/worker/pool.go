@@ -263,6 +263,16 @@ func (p *Pool) worker(id int) {
 }
 
 func (p *Pool) processJob(job *model.UploadJob) {
+	if job.UploadMode == model.UploadModeChunked {
+		stored, err := p.chunkStore.GetStoredChunkCount(job.ID)
+		if err != nil || job.TotalChunks == nil || stored < *job.TotalChunks {
+			p.uploadJobStore.SetStatus(job.ID, model.JobStatusQueued)
+			return
+		}
+		p.processChunkedJob(job)
+		return
+	}
+
 	stage := model.JobStageHashing
 	job.Stage = &stage
 	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.1)
@@ -278,12 +288,6 @@ func (p *Pool) processJob(job *model.UploadJob) {
 
 	if job.Reason != nil && *job.Reason == "reconcile" {
 		p.processReconcileJob(job, f)
-		return
-	}
-
-	if job.UploadMode == model.UploadModeChunked {
-		f.Close()
-		p.processChunkedJob(job)
 		return
 	}
 
