@@ -188,6 +188,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     for (const file of allFiles) {
       if (chunkedStore.shouldUseChunked(file)) {
+        console.log('[upload] routing large file to chunked upload:', file.name, file.size)
         largeFilePromises.push(
           chunkedStore.startChunkedUpload(file, targetFolderId, skipNameSizeDedup),
         )

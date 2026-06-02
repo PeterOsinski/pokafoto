@@ -30,6 +30,31 @@ async function computeChunkSHA256(blob: Blob): Promise<string> {
     .join('')
 }
 
+function computeChunkSHA256Fallback(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const buffer = reader.result as ArrayBuffer
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+        resolve(Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join(''))
+      } catch (e) {
+        reject(e)
+      }
+    }
+    reader.onerror = () => reject(new Error('Failed to read blob for SHA-256'))
+    reader.readAsArrayBuffer(blob)
+  })
+}
+
+async function computeSHA256Safe(blob: Blob): Promise<string> {
+  try {
+    return await computeChunkSHA256(blob)
+  } catch {
+    return computeChunkSHA256Fallback(blob)
+  }
+}
+
 function persistTokens(jobs: ChunkedUploadJob[]) {
   const tokens = jobs.map(j => ({
     token: j.resumeToken,
@@ -84,7 +109,8 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
   }
 
   async function uploadChunk(job: ChunkedUploadJob, chunkIndex: number, blob: Blob): Promise<boolean> {
-    const sha256hex = await computeChunkSHA256(blob)
+    const sha256hex = await computeSHA256Safe(blob)
+    console.log('[chunkedUpload] uploading chunk', chunkIndex, 'of', job.totalChunks, 'sha256:', sha256hex.substring(0, 8) + '...')
 
     try {
       const headers: Record<string, string> = {
@@ -145,6 +171,7 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
       return true
     } catch (e: any) {
+      console.error('[chunkedUpload] uploadChunk error:', e?.message, e?.response?.status, e?.response?.data)
       if (e?.response?.status === 422) {
         return false
       }
@@ -174,9 +201,12 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
     }
 
     addJob(job)
+    const jobRef = jobs.value.indexOf(job)
+    console.log('[chunkedUpload] starting upload:', job.filename, job.totalSize, 'bytes,', job.totalChunks, 'chunks, index:', jobRef)
 
     try {
       const firstChunk = file.slice(0, Math.min(CHUNK_SIZE, file.size))
+      console.log('[chunkedUpload] sending first chunk, size:', firstChunk.size)
       await uploadChunk(job, 0, firstChunk)
 
       const queued: (() => Promise<boolean>)[] = []
@@ -234,8 +264,11 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
           await pollForCompletion(job.uploadId, completeRes.data.job_id)
         }
       }
-    } catch {
-      updateJob(job.uploadId, { status: 'paused' })
+    } catch (e: any) {
+      console.error('[chunkedUpload] startChunkedUpload error:', e?.message || e, e?.response?.status, e?.response?.data)
+      if (jobRef >= 0 && jobRef < jobs.value.length) {
+        jobs.value[jobRef] = { ...jobs.value[jobRef], status: 'paused', error: e?.message || 'Unknown error' }
+      }
       persistTokens(jobs.value.filter(j => j.status === 'uploading' || j.status === 'paused'))
     }
 
