@@ -251,10 +251,8 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         return null
       }
 
-      const storedChunks: number[] = []
-      for (let i = 0; i < storedCount; i++) {
-        storedChunks.push(i)
-      }
+      const storedChunksRaw = res.headers['x-stored-chunks'] as string
+      const storedChunks: number[] = storedChunksRaw ? JSON.parse(storedChunksRaw) : []
 
       return {
         uploadId,
