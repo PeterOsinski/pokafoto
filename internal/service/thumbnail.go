@@ -184,38 +184,44 @@ func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*mo
 		return nil, err
 	}
 
-	args := []string{
-		"-y",
-		"-strict", "unofficial",
-		"-ss", "5",
-		"-i", sourcePath,
-		"-vframes", "1",
-		"-q:v", "3",
-		"-vf", "scale=600:-1",
-		stillPath,
+	for _, seek := range []string{"5", "1", "0.1"} {
+		args := []string{
+			"-y",
+			"-strict", "unofficial",
+			"-ss", seek,
+			"-i", sourcePath,
+			"-vframes", "1",
+			"-q:v", "3",
+			"-vf", "scale=600:-1",
+			stillPath,
+		}
+
+		cmd := exec.Command("ffmpeg", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			continue
+		}
+		_ = out
+
+		stat, err := os.Stat(stillPath)
+		if err != nil {
+			continue
+		}
+
+		still := &model.Thumbnail{
+			FileID:    fileID,
+			Size:      model.ThumbSizeVideoStill,
+			Width:     600,
+			Height:    338,
+			Format:    "jpeg",
+			LocalPath: stillPath,
+			SizeBytes: stat.Size(),
+		}
+
+		return []*model.Thumbnail{still}, nil
 	}
 
-	cmd := exec.Command("ffmpeg", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("ffmpeg video still: %w: %s", err, string(out))
-	}
-
-	stat, err := os.Stat(stillPath)
-	if err != nil {
-		return nil, err
-	}
-
-	still := &model.Thumbnail{
-		FileID:    fileID,
-		Size:      model.ThumbSizeVideoStill,
-		Width:     600,
-		Height:    338,
-		Format:    "jpeg",
-		LocalPath: stillPath,
-		SizeBytes: stat.Size(),
-	}
-
-	return []*model.Thumbnail{still}, nil
+	return nil, fmt.Errorf("ffmpeg video still: failed to extract frame at any position")
 }
 
 func (s *ThumbnailService) generateVideoProxy(fileID, sourcePath string) (*model.Thumbnail, error) {

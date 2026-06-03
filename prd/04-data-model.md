@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS exif (
     aperture        REAL,                   -- f-number
     shutter_speed   TEXT,                   -- e.g., "1/250"
     iso             INTEGER,
-    date_taken      TEXT,                   -- Original EXIF DateTimeOriginal
+    date_taken      TEXT,                   -- Original EXIF DateTimeOriginal (photos) or QuickTime mvhd CreationTime (videos)
     gps_latitude    REAL,
     gps_longitude   REAL,
     gps_altitude    REAL,                   -- meters

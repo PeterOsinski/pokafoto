@@ -49,7 +49,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | SHA-256 hashing | Stream file to temp, compute hash, detect content-level duplicates | `internal/service/dedup.go` | ✅ (in worker pipeline) |
 | Local storage | Write originals to `{storage.local.path}/originals/...` | `internal/storage/local.go` | ✅ (in worker pipeline) |
 | S3 upload | MinIO client, conditional on `s3.enabled` config | `internal/storage/s3.go` | ✅ (`internal/service/storage.go`) |
-| EXIF extraction | `goexif` for JPEG/PNG/TIFF, `exiftool` subprocess fallback for HEIC/AVIF | `internal/service/exif.go` | ✅ |
+| EXIF extraction | `goexif` for JPEG/PNG/TIFF, `go-mp4` for MP4/MOV video creation date, `exiftool` subprocess fallback for HEIC/AVIF and other formats | `internal/service/exif.go` | ✅ |
 | Date-based path | Auto-organize: `YYYY/MM/filename` from EXIF date or file mtime | `internal/service/organizer.go` | ✅ (in worker pipeline) |
 | Async job queue | Go channel-based worker pool (4 workers default) for processing | `internal/worker/pool.go` | ✅ |
 

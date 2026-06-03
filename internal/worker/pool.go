@@ -448,7 +448,12 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 		job.Stage = &stage
 		p.uploadJobStore.UpdateProgress(job.ID, stage, 0.3)
 		p.notifySubscribers(job)
-		exifData, _ = p.exifService.Extract(job.TempPath)
+		if mediaType == model.MediaTypeVideo {
+			exifData, _ = p.exifService.ExtractVideoDate(job.TempPath)
+		}
+		if exifData == nil {
+			exifData, _ = p.exifService.Extract(job.TempPath)
+		}
 	} else {
 		stage := model.JobStageStoring
 		job.Stage = &stage

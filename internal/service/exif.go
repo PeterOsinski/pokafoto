@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"os"
 	"os/exec"
 	"strconv"
+	"time"
 
+	mp4lib "github.com/abema/go-mp4"
 	jpegexif "github.com/dsoprea/go-exif/v3"
 	"github.com/dsoprea/go-exif/v3/common"
 	"github.com/dsoprea/go-jpeg-image-structure/v2"
@@ -30,8 +33,10 @@ type exifToolEntry struct {
 	FNumber         float64 `json:"FNumber"`
 	ExposureTime    string `json:"ExposureTime"`
 	ISO             int    `json:"ISO"`
-	DateTimeOriginal string `json:"DateTimeOriginal"`
-	GPSLatitude     float64 `json:"GPSLatitude"`
+	DateTimeOriginal string  `json:"DateTimeOriginal"`
+	CreateDate       string  `json:"CreateDate"`
+	MediaCreateDate  string  `json:"MediaCreateDate"`
+	GPSLatitude      float64 `json:"GPSLatitude"`
 	GPSLongitude    float64 `json:"GPSLongitude"`
 	GPSAltitude     float64 `json:"GPSAltitude"`
 	Orientation     int    `json:"Orientation"`
@@ -157,6 +162,33 @@ func (s *ExifService) extractViaDsoprea(filePath string) (*model.ExifData, error
 	return &data, nil
 }
 
+func (s *ExifService) ExtractVideoDate(filePath string) (*model.ExifData, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("open video: %w", err)
+	}
+	defer f.Close()
+
+	boxes, err := mp4lib.ExtractBoxWithPayload(f, nil, mp4lib.BoxPath{
+		mp4lib.BoxTypeMoov(),
+		mp4lib.BoxTypeMvhd(),
+	})
+	if err != nil || len(boxes) == 0 {
+		return nil, fmt.Errorf("mvhd not found: %w", err)
+	}
+
+	mvhd, ok := boxes[0].Payload.(*mp4lib.Mvhd)
+	if !ok || mvhd.GetCreationTime() == 0 {
+		return nil, nil
+	}
+
+	qtEpoch := time.Date(1904, time.January, 1, 0, 0, 0, 0, time.UTC)
+	creationTime := qtEpoch.Add(time.Duration(mvhd.GetCreationTime()) * time.Second)
+	dateStr := creationTime.Format("2006:01:02 15:04:05")
+
+	return &model.ExifData{DateTaken: &dateStr}, nil
+}
+
 func valueString(ite *jpegexif.IfdTagEntry) string {
 	v, err := ite.Value()
 	if err != nil {
@@ -254,6 +286,10 @@ func (s *ExifService) extractViaExifTool(filePath string) (*model.ExifData, erro
 	}
 	if e.DateTimeOriginal != "" {
 		data.DateTaken = &e.DateTimeOriginal
+	} else if e.CreateDate != "" {
+		data.DateTaken = &e.CreateDate
+	} else if e.MediaCreateDate != "" {
+		data.DateTaken = &e.MediaCreateDate
 	}
 	if e.GPSLatitude != 0 || e.GPSLongitude != 0 {
 		lat := e.GPSLatitude

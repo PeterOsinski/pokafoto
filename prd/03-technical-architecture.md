@@ -11,7 +11,7 @@
 | **HTTP Router** | `chi` | Lightweight, no heavy framework |
 | **Image Processing** | `libvips` (via `govips`) | 4-5x faster than ImageMagick, low memory. CGO-required. |
 | **Video Processing** | `ffmpeg` (subprocess) | Industry standard, hardware acceleration support |
-| **EXIF Parsing** | `goexif` + `exiftool` subprocess (HEIC/AVIF fallback) | Pure Go for JPEG, exiftool for HEIC container |
+| **EXIF Parsing** | `goexif` for JPEG + `go-mp4` for MP4/MOV + `exiftool` subprocess fallback (HEIC/AVIF/other) | Pure Go for JPEG and MP4, exiftool for HEIC container and other formats |
 | **S3 Client** | `github.com/minio/minio-go` | S3-compatible, widely used |
 | **Map (Frontend)** | Leaflet + OpenStreetMap tiles | No API key, lightweight |
 | **Clustering** | Supercluster (client-side) | Fast, works offline |

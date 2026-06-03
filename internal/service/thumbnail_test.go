@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -215,5 +216,49 @@ func TestThumbnailService_GenerateVideoProxy_shouldSkipFor720pVideo(t *testing.T
 	}
 	if !stillsFound {
 		t.Error("expected video_still thumbnail")
+	}
+}
+
+func TestThumbnailService_GenerateAll_shortVideoFallback(t *testing.T) {
+	dir := t.TempDir()
+	shortVideo := filepath.Join(dir, "short.mp4")
+
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-f", "lavfi",
+		"-i", "color=c=blue:size=320x240:d=2",
+		"-c:v", "libx264",
+		"-t", "2",
+		"-pix_fmt", "yuv420p",
+		shortVideo,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Skipf("ffmpeg not available or failed: %v: %s", err, out)
+	}
+
+	if _, err := os.Stat(shortVideo); err != nil {
+		t.Fatalf("test video not created: %v", err)
+	}
+
+	ts := NewThumbnailService(dir)
+	thumbs, err := ts.GenerateAll("test-short", shortVideo, "video/mp4")
+	if err != nil {
+		t.Fatalf("GenerateAll failed for short video: %v", err)
+	}
+
+	var still *model.Thumbnail
+	for _, th := range thumbs {
+		if th.Size == model.ThumbSizeVideoStill {
+			still = th
+			break
+		}
+	}
+	if still == nil {
+		t.Fatal("expected video_still thumbnail for short (<5s) video, got nil")
+	}
+
+	if _, err := os.Stat(still.LocalPath); err != nil {
+		t.Errorf("still file missing on disk: %v", err)
 	}
 }

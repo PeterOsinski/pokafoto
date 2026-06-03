@@ -81,13 +81,13 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		storageService, _ = service.NewStorageService(&config.Config{}) // disabled client
 	}
 
+	s.eventRecorder = service.NewEventRecorder(db)
+	s.systemEventsStore = store.NewSystemEventsStore(db)
+
 	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore, s.chunkStore, s.eventRecorder)
 	s.storageService = storageService
 
 	s.s3DeletionPool = NewS3DeletionPool(storageService)
-
-	s.systemEventsStore = store.NewSystemEventsStore(db)
-	s.eventRecorder = service.NewEventRecorder(db)
 
 	if err != nil {
 		s.eventRecorder.Warn("s3_disconnect", "S3 storage init failed", map[string]interface{}{"error": err.Error()})
