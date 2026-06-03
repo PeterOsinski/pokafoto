@@ -327,22 +327,11 @@ function formatSize(bytes: number): string {
 
 async function downloadFile() {
   if (!props.file?.id) return
-  try {
-    if (props.downloadUrl) {
-      window.open(props.downloadUrl, '_blank')
-      return
-    }
-    const res = await api.get(`/download/${props.file.id}`, { responseType: 'blob' })
-    const url = URL.createObjectURL(res.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = props.file.originalName || ''
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  } catch (e) {
-    console.error('Download failed:', e)
+  if (props.downloadUrl) {
+    window.open(props.downloadUrl, '_blank')
+    return
   }
+  const token = authStore.accessToken ? `?token=${authStore.accessToken}` : ''
+  window.open(`/api/v1/download/${props.file.id}${token}`, '_blank')
 }
 </script>

@@ -3,8 +3,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import FileViewer from './FileViewer.vue'
 
-const { mockApiGet } = vi.hoisted(() => ({
+const { mockApiGet, mockAccessToken } = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
+  mockAccessToken: vi.fn(() => ''),
 }))
 
 vi.mock('@/api/client', () => ({
@@ -14,6 +15,12 @@ vi.mock('@/api/client', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
+}))
+
+vi.mock('../stores/auth', () => ({
+  useAuthStore: () => ({
+    accessToken: mockAccessToken(),
+  }),
 }))
 
 function makeFile(overrides: Record<string, any> = {}) {
@@ -146,16 +153,18 @@ describe('FileViewer', () => {
     })
 
     it('fetches file on download if not yet loaded', async () => {
-      mockApiGet.mockResolvedValue({ data: new Blob(['hello']) })
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+      mockAccessToken.mockReturnValue('test-token-123')
+      mockApiGet.mockRejectedValue(new Error('not loaded'))
       const wrapper = mountViewer()
       await flushPromises()
-
-      mockApiGet.mockClear()
-      mockApiGet.mockResolvedValue({ data: new Blob(['fresh download']) })
 
       const links = wrapper.findAll('button')
       const downloadBtn = links.find(b => b.text().includes('Download'))
       await downloadBtn!.trigger('click')
+
+      expect(openSpy).toHaveBeenCalledWith('/api/v1/download/file-1?token=test-token-123', '_blank')
+      openSpy.mockRestore()
     })
   })
 

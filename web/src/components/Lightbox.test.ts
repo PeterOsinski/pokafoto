@@ -4,8 +4,9 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useLocalSettings, _resetSingleton } from '../composables/useLocalSettings'
 import Lightbox from './Lightbox.vue'
 
-const { mockApiGet } = vi.hoisted(() => ({
+const { mockApiGet, mockAccessToken } = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
+  mockAccessToken: vi.fn(() => ''),
 }))
 
 vi.mock('@/api/client', () => ({
@@ -15,6 +16,12 @@ vi.mock('@/api/client', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
+}))
+
+vi.mock('../stores/auth', () => ({
+  useAuthStore: () => ({
+    accessToken: mockAccessToken(),
+  }),
 }))
 
 function makeFile(overrides: Record<string, any> = {}) {
@@ -156,17 +163,18 @@ describe('Lightbox', () => {
     })
 
     it('downloads file when download button is clicked', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+      mockAccessToken.mockReturnValue('test-token-123')
       const wrapper = mountLightbox()
       await flushPromises()
-
-      mockApiGet.mockResolvedValueOnce({ data: new Blob(['test'], { type: 'image/jpeg' }) })
 
       const downloadBtn = wrapper.findAll('button').find(b => b.text().includes('Download'))
       expect(downloadBtn).toBeTruthy()
       await downloadBtn!.trigger('click')
       await flushPromises()
 
-      expect(mockApiGet).toHaveBeenCalledWith('/download/file-1', { responseType: 'blob' })
+      expect(openSpy).toHaveBeenCalledWith('/api/v1/download/file-1?token=test-token-123', '_blank')
+      openSpy.mockRestore()
     })
 
     it('displays EXIF data when API returns it', async () => {

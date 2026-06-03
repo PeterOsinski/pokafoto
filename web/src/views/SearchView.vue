@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '../api/client'
+import { useAuthStore } from '../stores/auth'
 import TagInput from '../components/TagInput.vue'
 import SizeRangeSlider from '../components/SizeRangeSlider.vue'
 
@@ -136,6 +137,8 @@ const tagStats = ref<{ name: string; count: number }[]>([])
 const results = ref<any[]>([])
 const loading = ref(false)
 const searched = ref(false)
+
+const authStore = useAuthStore()
 const previewItem = ref<any>(null)
 
 async function doSearch() {
@@ -198,8 +201,8 @@ function preview(item: any) {
 }
 
 function downloadFile(item: any) {
-  const url = `/api/v1/download/${item.id}`
-  window.open(url, '_blank')
+  const token = authStore.accessToken ? `?token=${authStore.accessToken}` : ''
+  window.open(`/api/v1/download/${item.id}${token}`, '_blank')
 }
 
 function formatSize(bytes: number): string {

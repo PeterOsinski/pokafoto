@@ -164,6 +164,7 @@ func (s *Server) setupRouter() {
 		r.Get("/thumb/{fileID}/{size}", s.handleServeThumbnail)
 
 		r.Get("/video/{id}", s.handleVideoStreamWithToken)
+		r.Get("/download/{id}", s.handleDownloadWithToken)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
@@ -211,7 +212,6 @@ func (s *Server) setupRouter() {
 
 			r.Get("/stats", s.handleStats)
 
-			r.Get("/download/{id}", s.handleDownload)
 			r.Post("/download/batch", s.handleBatchDownload)
 
 			r.Get("/trash", s.handleListTrash)

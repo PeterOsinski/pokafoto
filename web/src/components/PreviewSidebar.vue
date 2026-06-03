@@ -495,17 +495,8 @@ function formatJson(raw: string): string {
 
 async function downloadFile() {
   if (!props.file?.id) return
-  try {
-    const res = await api.get(`/download/${props.file.id}`, { responseType: 'blob' })
-    const url = URL.createObjectURL(res.data as Blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = props.file.originalName || ''
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  } catch {}
+  const token = authStore.accessToken ? `?token=${authStore.accessToken}` : ''
+  window.open(`/api/v1/download/${props.file.id}${token}`, '_blank')
 }
 
 onUnmounted(() => {

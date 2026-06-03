@@ -99,6 +99,7 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted, nextTick } from 'vue'
 import api from '../api/client'
+import { useAuthStore } from '../stores/auth'
 import PdfViewer from './viewers/PdfViewer.vue'
 import JsonViewer from './viewers/JsonViewer.vue'
 import MarkdownViewer from './viewers/MarkdownViewer.vue'
@@ -140,6 +141,8 @@ const newComment = ref('')
 const fileTags = ref<string[]>([])
 const tagsLoading = ref(false)
 const tagsLoaded = ref(false)
+
+const authStore = useAuthStore()
 
 let destroyed = false
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -220,12 +223,8 @@ async function downloadFile() {
     return
   }
   if (!props.file?.id) return
-  try {
-    const res = await api.get(`/download/${props.file.id}`, { responseType: 'blob' })
-    triggerDownload(res.data as Blob, props.file.originalName || 'file')
-  } catch {
-    error.value = 'Download failed'
-  }
+  const token = authStore.accessToken ? `?token=${authStore.accessToken}` : ''
+  window.open(`/api/v1/download/${props.file.id}${token}`, '_blank')
 }
 
 function triggerDownload(blob: Blob, filename: string) {

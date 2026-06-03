@@ -680,6 +680,26 @@ func (s *Server) handleVideoStreamWithToken(w http.ResponseWriter, r *http.Reque
 	s.handleVideoStream(w, r)
 }
 
+func (s *Server) handleDownloadWithToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		if !s.validateTokenAndSetContext(w, r, tokenStr) {
+			return
+		}
+	} else {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
+			return
+		}
+		if !s.validateTokenAndSetContext(w, r, token) {
+			return
+		}
+	}
+	s.handleDownload(w, r)
+}
+
 func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
