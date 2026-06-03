@@ -49,6 +49,7 @@
       >
         <VideoPlayer
           v-if="file.mediaType === 'video'"
+          :key="file.id"
           :src="videoSrc"
           :proxySrc="proxySrc"
           :poster="file.videoStill?.url"

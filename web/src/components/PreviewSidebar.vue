@@ -32,6 +32,7 @@
       <div class="relative" style="background: var(--bg-color); min-height: 200px">
         <VideoPlayer
           v-if="file.mediaType === 'video'"
+          :key="file.id"
           :src="videoSrc"
           :proxySrc="proxySrc"
           :poster="file.thumbnails?.videoStill?.url"

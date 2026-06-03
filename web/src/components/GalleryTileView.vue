@@ -21,6 +21,7 @@
           @select="$emit('select', file.id)"
           @deselect="$emit('deselect', file.id)"
           @open="$emit('open', rowIndex * columns + colIndex)"
+          @contextmenu="($event) => $emit('contextmenu', $event, file.id, file.originalName || file.filename)"
         />
       </div>
     </RecycleScroller>
@@ -67,6 +68,7 @@ defineEmits<{
   select: [id: string]
   deselect: [id: string]
   open: [index: number]
+  contextmenu: [e: MouseEvent, fileId: string, fileName: string]
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)

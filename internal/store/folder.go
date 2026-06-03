@@ -202,3 +202,89 @@ func (s *FolderStore) FindByParentID(parentID string) ([]*model.Folder, error) {
 
 	return folders, rows.Err()
 }
+
+func (s *FolderStore) UpdateParent(id string, parentID *string) error {
+	_, err := s.db.Exec(
+		`UPDATE folders SET parent_id = ?, updated_at = ? WHERE id = ?`,
+		parentID, time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update folder parent: %w", err)
+	}
+	return nil
+}
+
+func (s *FolderStore) IsDescendant(id, potentialAncestor string) (bool, error) {
+	if id == potentialAncestor {
+		return false, nil
+	}
+	current := id
+	for i := 0; i < 100; i++ {
+		var parentID *string
+		err := s.db.QueryRow(`SELECT parent_id FROM folders WHERE id = ?`, current).Scan(&parentID)
+		if err != nil {
+			return false, nil
+		}
+		if parentID == nil {
+			return false, nil
+		}
+		if *parentID == potentialAncestor {
+			return true, nil
+		}
+		current = *parentID
+	}
+	return false, nil
+}
+
+func (s *FolderStore) FindDescendantIDs(id string) ([]string, error) {
+	var ids []string
+	stack := []string{id}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		ids = append(ids, current)
+		children, err := s.FindByParentID(current)
+		if err != nil {
+			return nil, fmt.Errorf("find descendants: %w", err)
+		}
+		for _, child := range children {
+			stack = append(stack, child.ID)
+		}
+	}
+	return ids, nil
+}
+
+type DeleteRecursiveResult struct {
+	DeletedFiles   int64
+	DeletedFolders int
+}
+
+func (s *FolderStore) DeleteRecursive(folderID, userID string) (*DeleteRecursiveResult, error) {
+	folder, err := s.FindByID(folderID)
+	if err != nil || folder == nil {
+		return nil, fmt.Errorf("folder not found")
+	}
+
+	ids, err := s.FindDescendantIDs(folderID)
+	if err != nil {
+		return nil, fmt.Errorf("find descendants: %w", err)
+	}
+
+	fileStore := NewFileStore(s.db)
+	deletedFiles, err := fileStore.SoftDeleteByFolderIDs(userID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("soft delete files: %w", err)
+	}
+
+	for i := len(ids) - 1; i >= 0; i-- {
+		_, err := s.db.Exec(`DELETE FROM folders WHERE id = ?`, ids[i])
+		if err != nil {
+			return nil, fmt.Errorf("delete folder %s: %w", ids[i], err)
+		}
+	}
+
+	return &DeleteRecursiveResult{
+		DeletedFiles:   deletedFiles,
+		DeletedFolders: len(ids),
+	}, nil
+}

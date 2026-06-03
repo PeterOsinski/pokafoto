@@ -4,6 +4,7 @@
     class="relative rounded-md overflow-hidden group"
     :class="selected ? 'ring-2 ring-[var(--accent)]' : ''"
     style="background: var(--bg-elevated); aspect-ratio: 1"
+    @contextmenu.prevent="$emit('contextmenu', $event)"
     >
     <button
       v-if="selectable && !selected"
@@ -104,6 +105,7 @@ defineEmits<{
   select: []
   deselect: []
   open: []
+  contextmenu: [e: MouseEvent]
 }>()
 
 const isVisible = ref(false)

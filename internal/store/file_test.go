@@ -902,3 +902,103 @@ func TestFileStore_SearchEnhanced_shouldMatchCaseInsensitiveTags(t *testing.T) {
 		t.Errorf("expected 1 file, got %d", len(result.Files))
 	}
 }
+
+func TestFileStore_Rename_shouldUpdateOriginalName(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f := createTestFile(t, fs, u.ID, "photo.jpg")
+	if f == nil {
+		t.Fatal("expected file to be created")
+	}
+
+	err := fs.Rename(f.ID, u.ID, "renamed.jpg")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	file, _ := fs.FindByID(f.ID)
+	if file.OriginalName != "renamed.jpg" {
+		t.Errorf("expected 'renamed.jpg', got %q", file.OriginalName)
+	}
+}
+
+func TestFileStore_Rename_shouldScopeToUser(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u1 := createTestUser(t, us)
+	u2, _ := us.Create("renamer-other", "password123", model.RoleMember, nil)
+	f := createTestFile(t, fs, u1.ID, "photo.jpg")
+
+	err := fs.Rename(f.ID, u2.ID, "hacked.jpg")
+	if err == nil {
+		t.Error("expected error renaming file owned by another user")
+	}
+}
+
+func TestFileStore_Rename_shouldUpdateFilenameForDocuments(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f := createTestDocFile(t, fs, u.ID)
+
+	err := fs.Rename(f.ID, u.ID, "newdoc.md")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	file, _ := fs.FindByID(f.ID)
+	if file.OriginalName != "newdoc.md" {
+		t.Errorf("expected 'newdoc.md', got %q", file.OriginalName)
+	}
+	if file.Filename != "_app_documents/newdoc.md" {
+		t.Errorf("expected '_app_documents/newdoc.md', got %q", file.Filename)
+	}
+}
+
+func TestFileStore_SoftDeleteByFolderIDs_shouldSoftDeleteFilesInFolders(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	folderStore := NewFolderStore(db)
+
+	u := createTestUser(t, us)
+	parentFolder, _ := folderStore.Create(u.ID, "Parent", nil)
+	childFolder, _ := folderStore.Create(u.ID, "Child", &parentFolder.ID)
+
+	f1 := createTestFile(t, fs, u.ID, "f1.jpg")
+	f1.FolderID = &parentFolder.ID
+	fs.BatchMove(u.ID, []string{f1.ID}, &parentFolder.ID)
+
+	f2 := createTestFile(t, fs, u.ID, "f2.jpg")
+	fs.BatchMove(u.ID, []string{f2.ID}, &childFolder.ID)
+
+	f3 := createTestFile(t, fs, u.ID, "f3.jpg")
+
+	affected, err := fs.SoftDeleteByFolderIDs(u.ID, []string{parentFolder.ID, childFolder.ID})
+	if err != nil {
+		t.Fatalf("soft delete by folder ids: %v", err)
+	}
+	if affected != 2 {
+		t.Errorf("expected 2 affected, got %d", affected)
+	}
+
+	f1Check, _ := fs.FindByID(f1.ID)
+	if !f1Check.IsDeleted {
+		t.Error("f1 should be soft-deleted")
+	}
+	f2Check, _ := fs.FindByID(f2.ID)
+	if !f2Check.IsDeleted {
+		t.Error("f2 should be soft-deleted")
+	}
+	f3Check, _ := fs.FindByID(f3.ID)
+	if f3Check.IsDeleted {
+		t.Error("f3 should NOT be soft-deleted")
+	}
+}

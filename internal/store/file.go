@@ -1129,3 +1129,54 @@ func (s *FileStore) ListFilesByFolderID(folderID, cursor string, limit int) ([]*
 
 	return files, nextCursor, total, rows.Err()
 }
+
+func (s *FileStore) Rename(id, userID, newName string) error {
+	file, err := s.FindByID(id)
+	if err != nil || file == nil || file.UserID != userID {
+		return fmt.Errorf("file not found")
+	}
+
+	var newFilename string
+	if file.IsAppManaged {
+		newFilename = "_app_documents/" + newName
+	} else {
+		newFilename = file.Filename
+	}
+
+	_, err = s.db.Exec(
+		`UPDATE files SET original_name = ?, filename = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		newName, newFilename, time.Now().UTC().Format(time.RFC3339), id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("rename file: %w", err)
+	}
+	return nil
+}
+
+func (s *FileStore) SoftDeleteByFolderIDs(userID string, folderIDs []string) (int64, error) {
+	if len(folderIDs) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	placeholders := make([]string, len(folderIDs))
+	args := make([]interface{}, 0, len(folderIDs)+3)
+	args = append(args, now, now, userID)
+	for i, id := range folderIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE files SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE user_id = ? AND is_deleted = 0 AND folder_id IN (%s)`,
+		strings.Join(placeholders, ", "),
+	)
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("soft delete by folder ids: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	return affected, nil
+}

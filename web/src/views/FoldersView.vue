@@ -67,6 +67,7 @@
         v-for="child in folders.children"
         :key="child.folder.id"
         @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
         class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
         style="border: 1px solid var(--border-color)"
       >
@@ -97,6 +98,7 @@
         v-for="child in subfolders"
         :key="child.folder.id"
         @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
         class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
         style="border: 1px solid var(--border-color)"
       >
@@ -145,6 +147,7 @@
           v-for="child in listFolders"
           :key="child.folder.id"
           @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
           class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
           style="height: 52px"
         >
@@ -168,6 +171,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
       <GalleryListView
         v-else-if="settings.layout.value === 'list'"
@@ -178,6 +182,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
       <GalleryGroupedView
         v-else-if="settings.layout.value === 'grouped'"
@@ -188,6 +193,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
     </div>
 
@@ -304,6 +310,7 @@
         v-for="child in folders.children"
         :key="child.folder.id"
         @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
         class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
         style="border: 1px solid var(--border-color)"
       >
@@ -334,6 +341,7 @@
         v-for="child in subfolders"
         :key="child.folder.id"
         @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
         class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
         style="border: 1px solid var(--border-color)"
       >
@@ -382,6 +390,7 @@
           v-for="child in listFolders"
           :key="child.folder.id"
           @click="navigateTo(child.folder.id)"
+        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
           class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
           style="height: 52px"
         >
@@ -405,6 +414,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
       <GalleryListView
         v-else-if="settings.layout.value === 'list'"
@@ -415,6 +425,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
       <GalleryGroupedView
         v-else-if="settings.layout.value === 'grouped'"
@@ -425,6 +436,7 @@
         @select="toggleSelect"
         @deselect="toggleSelect"
         @open="(i: number) => handleFileClick(i)"
+        @contextmenu="($event, fileId, fileName) => openFileContextMenu($event, fileId, fileName)"
       />
     </div>
 
@@ -499,6 +511,73 @@
       :folderName="shareDialog.folderName"
       @close="shareDialog.show = false"
     />
+
+    <ContextMenu
+      :visible="contextMenu.visible"
+      :position="{ x: contextMenu.x, y: contextMenu.y }"
+      :items="contextMenu.items"
+      @close="contextMenu.visible = false"
+    />
+
+    <div
+      v-if="renameDialog.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      @click.self="renameDialog.show = false"
+    >
+      <div class="bg-[var(--bg-surface)] rounded-lg shadow-xl p-6 w-full max-w-sm mx-4" style="border: 1px solid var(--border-color)">
+        <h3 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Rename {{ renameDialog.type }}</h3>
+        <input
+          v-model="renameDialog.currentName"
+          type="text"
+          class="w-full px-3 py-2 rounded text-sm mb-4"
+          style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+          @keyup.enter="executeRename"
+          @keyup.escape="renameDialog.show = false"
+        />
+        <div class="flex justify-end gap-3">
+          <button @click="renameDialog.show = false" class="px-4 py-2 rounded text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Cancel</button>
+          <button @click="executeRename" class="px-4 py-2 rounded text-sm text-white" style="background: var(--accent)">Rename</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="deleteFolderConfirm.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      @click.self="deleteFolderConfirm.show = false"
+    >
+      <div class="bg-[var(--bg-surface)] rounded-lg shadow-xl p-6 w-full max-w-sm mx-4" style="border: 1px solid var(--border-color)">
+        <template v-if="!deleteFolderConfirm.result">
+          <h3 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Delete Folder?</h3>
+          <p class="text-sm text-[var(--text-secondary)] mb-4">
+            &quot;{{ deleteFolderConfirm.folderName }}&quot; and all its contents will be moved to trash.
+          </p>
+          <div class="flex justify-end gap-3">
+            <button @click="deleteFolderConfirm.show = false" class="px-4 py-2 rounded text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Cancel</button>
+            <button @click="executeFolderDelete" :disabled="deleteFolderConfirm.loading" class="px-4 py-2 rounded text-sm text-white" style="background: #ef4444">
+              {{ deleteFolderConfirm.loading ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <h3 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Folder Deleted</h3>
+          <p class="text-sm text-[var(--text-secondary)] mb-4">
+            {{ deleteFolderConfirm.result.deleted_files }} {{ deleteFolderConfirm.result.deleted_files === 1 ? 'file' : 'files' }} and {{ deleteFolderConfirm.result.deleted_folders }} {{ deleteFolderConfirm.result.deleted_folders === 1 ? 'subfolder' : 'subfolders' }} moved to trash.
+          </p>
+          <div class="flex justify-end">
+            <button @click="deleteFolderConfirm.show = false" class="px-4 py-2 rounded text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Close</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <FolderPickerDialog
+      :open="moveFolderDialog.show"
+      title="Move folder"
+      actionLabel="Move here"
+      @close="moveFolderDialog.show = false"
+      @confirm="executeFolderMove"
+    />
   </DropZone>
 </template>
 
@@ -524,6 +603,8 @@ import FolderPasswordDialog from '../components/FolderPasswordDialog.vue'
 import FolderShareDialog from '../components/FolderShareDialog.vue'
 import { useChunkedUploadStore } from '../stores/chunkedUpload'
 import { useFolderUnlockStore } from '../stores/folderUnlock'
+import ContextMenu from '../components/ContextMenu.vue'
+import type { ContextMenuItem } from '../components/ContextMenu.vue'
 
 interface FileItem {
   id: string
@@ -647,6 +728,37 @@ const shareDialog = ref({
   folderId: '',
   folderName: '',
 })
+
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  items: [] as ContextMenuItem[],
+})
+
+const renameDialog = ref({
+  show: false,
+  folderId: '',
+  fileName: '',
+  currentName: '',
+  type: 'folder' as 'folder' | 'file',
+})
+
+const deleteFolderConfirm = ref({
+  show: false,
+  folderId: '',
+  folderName: '',
+  loading: false,
+  result: null as { deleted_files: number; deleted_folders: number } | null,
+})
+
+const moveFolderDialog = ref({
+  show: false,
+  folderId: '',
+  folderName: '',
+})
+
+const fileContextTarget = ref<string | null>(null)
 
 const lightboxFile = computed(() => {
   if (!photoQuery.value) return null
@@ -926,6 +1038,99 @@ function openPasswordDialog(folderId: string) {
 
 function openShareDialog(folderId: string, folderName: string) {
   shareDialog.value = { show: true, folderId, folderName }
+}
+
+function openFolderContextMenu(e: MouseEvent, folder: FolderEntry) {
+  const items: ContextMenuItem[] = [
+    {
+      label: 'Rename',
+      icon: '&#x270F;',
+      action: () => openRenameDialog('folder', folder.id, folder.name),
+    },
+    {
+      label: 'Move',
+      icon: '&#x2194;',
+      action: () => {
+        moveFolderDialog.value = { show: true, folderId: folder.id, folderName: folder.name }
+      },
+    },
+    {
+      label: 'Delete',
+      icon: '&#x1F5D1;',
+      danger: true,
+      action: () => {
+        deleteFolderConfirm.value = { show: true, folderId: folder.id, folderName: folder.name, loading: false, result: null }
+      },
+    },
+  ]
+  contextMenu.value = { visible: true, x: e.clientX, y: e.clientY, items }
+}
+
+function openFileContextMenu(e: MouseEvent, fileId: string, fileName: string) {
+  fileContextTarget.value = fileId
+  contextMenu.value = {
+    visible: true,
+    x: e.clientX,
+    y: e.clientY,
+    items: [
+      {
+        label: 'Rename',
+        icon: '&#x270F;',
+        action: () => openRenameDialog('file', fileId, fileName),
+      },
+    ],
+  }
+}
+
+function openRenameDialog(type: 'folder' | 'file', id: string, currentName: string) {
+  renameDialog.value = { show: true, folderId: id, fileName: id, currentName, type }
+}
+
+async function executeRename() {
+  if (!renameDialog.value.currentName.trim()) return
+  try {
+    if (renameDialog.value.type === 'folder') {
+      await api.put(`/folders/${renameDialog.value.folderId}`, {
+        name: renameDialog.value.currentName.trim(),
+      })
+    } else {
+      await api.put(`/files/${renameDialog.value.folderId}/rename`, {
+        name: renameDialog.value.currentName.trim(),
+      })
+    }
+    renameDialog.value.show = false
+    await loadFolders()
+    await loadFiles(true)
+  } catch (e) {
+    console.error('Failed to rename', e)
+  }
+}
+
+async function executeFolderDelete() {
+  deleteFolderConfirm.value.loading = true
+  try {
+    const res = await api.delete(`/folders/${deleteFolderConfirm.value.folderId}`)
+    deleteFolderConfirm.value.result = res.data
+    await loadFolders()
+    await loadFiles(true)
+  } catch (e) {
+    console.error('Failed to delete folder', e)
+  } finally {
+    deleteFolderConfirm.value.loading = false
+  }
+}
+
+async function executeFolderMove(targetFolderId: string | null) {
+  try {
+    await api.put(`/folders/${moveFolderDialog.value.folderId}`, {
+      parent_id: targetFolderId || '',
+    })
+    moveFolderDialog.value.show = false
+    await loadFolders()
+    await loadFiles(true)
+  } catch (e) {
+    console.error('Failed to move folder', e)
+  }
 }
 
 function onFolderUnlocked(_folderId: string) {

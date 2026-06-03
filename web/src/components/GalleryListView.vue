@@ -21,6 +21,7 @@
         class="flex items-center border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors"
         :class="selectedIds.has(file.id) ? 'bg-[var(--accent)]/10' : ''"
         :style="{ height: rowHeight + 'px' }"
+        @contextmenu.prevent="$emit('contextmenu', $event, file.id, file.originalName || file.filename)"
       >
         <div v-if="selectionEnabled" class="py-2 px-3 w-8 shrink-0">
           <button
@@ -100,6 +101,7 @@ defineEmits<{
   select: [id: string]
   deselect: [id: string]
   open: [index: number]
+  contextmenu: [e: MouseEvent, fileId: string, fileName: string]
 }>()
 
 const listThumbSize = computed(() => {

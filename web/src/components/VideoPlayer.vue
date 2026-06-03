@@ -79,6 +79,10 @@ watch(() => props.src, () => {
   quality.value = 'proxy'
   loading.value = false
   error.value = false
+  if (videoEl.value) {
+    videoEl.value.pause()
+    videoEl.value.currentTime = 0
+  }
 })
 
 watch(currentSrc, () => {

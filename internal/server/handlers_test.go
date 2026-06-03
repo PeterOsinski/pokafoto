@@ -736,3 +736,228 @@ func TestParseRange_shouldParseValidRanges(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlers_RenameFile_shouldSucceed(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("renamefile-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u.ID, "photo.jpg")
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/files/"+f.ID+"/rename", `{"name":"renamed.jpg"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	updated, _ := fs.FindByID(f.ID)
+	if updated.OriginalName != "renamed.jpg" {
+		t.Errorf("expected 'renamed.jpg', got %q", updated.OriginalName)
+	}
+}
+
+func TestHandlers_RenameFile_shouldRequireAuth(t *testing.T) {
+	srv, _, cleanup := newTestServer(t)
+	defer cleanup()
+
+	w := testRequest(t, srv, "PUT", "/api/v1/files/some-id/rename", `{"name":"test.jpg"}`, map[string]string{
+		"Content-Type": "application/json",
+	})
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestHandlers_RenameFile_shouldRejectEmptyName(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("rename-empty-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u.ID, "photo.jpg")
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/files/"+f.ID+"/rename", `{"name":""}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandlers_RenameFile_shouldScopeToUser(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u1, _ := us.Create("rename-owner-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u2, _ := us.Create("rename-other-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f := createTestFileForHandler(t, fs, u1.ID, "photo.jpg")
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u2.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/files/"+f.ID+"/rename", `{"name":"hacked.jpg"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandlers_UpdateFolder_shouldRename(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	u, _ := us.Create("updfolder-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	folder, _ := folderStore.Create(u.ID, "Old Name", nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+folder.ID, `{"name":"New Name"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	updated, _ := folderStore.FindByID(folder.ID)
+	if updated.Name != "New Name" {
+		t.Errorf("expected 'New Name', got %q", updated.Name)
+	}
+}
+
+func TestHandlers_UpdateFolder_shouldMove(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	u, _ := us.Create("movefolder-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	parent1, _ := folderStore.Create(u.ID, "Parent1", nil)
+	parent2, _ := folderStore.Create(u.ID, "Parent2", nil)
+	child, _ := folderStore.Create(u.ID, "Child", &parent1.ID)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+child.ID, `{"parent_id":"`+parent2.ID+`"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	updated, _ := folderStore.FindByID(child.ID)
+	if updated.ParentID == nil || *updated.ParentID != parent2.ID {
+		t.Errorf("expected parent_id %q, got %v", parent2.ID, updated.ParentID)
+	}
+}
+
+func TestHandlers_UpdateFolder_shouldRejectCircularMove(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	u, _ := us.Create("circmove-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	parent, _ := folderStore.Create(u.ID, "Parent", nil)
+	child, _ := folderStore.Create(u.ID, "Child", &parent.ID)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+parent.ID, `{"parent_id":"`+child.ID+`"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlers_UpdateFolder_shouldRequireNameOrParentID(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	u, _ := us.Create("updf-empty-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	folder, _ := folderStore.Create(u.ID, "Folder", nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+folder.ID, `{}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandlers_DeleteFolder_shouldDeleteRecursively(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	fileStore := store.NewFileStore(db)
+	u, _ := us.Create("delfolder-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	parent, _ := folderStore.Create(u.ID, "Parent", nil)
+	child, _ := folderStore.Create(u.ID, "Child", &parent.ID)
+	f1 := createTestFileForHandler(t, fileStore, u.ID, "f1.jpg")
+	f2 := createTestFileForHandler(t, fileStore, u.ID, "f2.jpg")
+	fileStore.BatchMove(u.ID, []string{f1.ID}, &parent.ID)
+	fileStore.BatchMove(u.ID, []string{f2.ID}, &child.ID)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "DELETE", "/api/v1/folders/"+parent.ID, "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if deletedFiles, ok := resp["deleted_files"].(float64); !ok || int64(deletedFiles) != 2 {
+		t.Errorf("expected 2 deleted_files, got %v", resp["deleted_files"])
+	}
+	if deletedFolders, ok := resp["deleted_folders"].(float64); !ok || int(deletedFolders) != 2 {
+		t.Errorf("expected 2 deleted_folders, got %v", resp["deleted_folders"])
+	}
+
+	_, err := folderStore.FindByID(parent.ID)
+	if err == nil {
+		t.Error("parent folder should be deleted")
+	}
+	f1Check, _ := fileStore.FindByID(f1.ID)
+	if !f1Check.IsDeleted {
+		t.Error("f1 should be soft-deleted")
+	}
+}
+
+func TestHandlers_DeleteFolder_shouldScopeToUser(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folderStore := store.NewFolderStore(db)
+	u1, _ := us.Create("delf-scope1-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u2, _ := us.Create("delf-scope2-"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	folder, _ := folderStore.Create(u1.ID, "My Folder", nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u2.ID, "member")
+
+	w := testRequest(t, srv, "DELETE", "/api/v1/folders/"+folder.ID, "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}

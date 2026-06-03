@@ -325,6 +325,19 @@ Soft-delete a file (moves to trash).
 
 **Response:** `204 No Content`
 
+#### `PUT /api/v1/files/{id}/rename`
+Rename a file or document. For app-managed documents, also updates the filename path.
+
+**Request:**
+```json
+{
+  "name": "new_name.jpg"
+}
+```
+
+**Response:** `204 No Content`
+**Error:** `400 Bad Request` if name is empty. `404 Not Found` if file not owned by user.
+
 #### `DELETE /api/v1/files/{id}/permanent`
 Permanently delete a file and all thumbnails from S3 and local cache.
 
@@ -598,18 +611,34 @@ Create a new folder. Can be nested under a parent.
 **Response:** `201 Created` — returns the created `Folder` object.
 
 #### `PUT /api/v1/folders/{id}`
-Rename a folder.
+Update a folder — rename, move (change parent), or both. At least one field is required.
 
 **Request:**
 ```json
-{ "name": "Summer Trip 2024" }
+{
+  "name": "New Name",
+  "parent_id": "uuid-or-null"
+}
 ```
+
+- `name` — rename the folder. Must be non-empty.
+- `parent_id` — move to a different parent folder. Set to `""` to move to root. Cannot move into itself or its own descendant.
+
 **Response:** `204 No Content`
+**Error:** `400 Bad Request` if neither field provided or circular move attempted. `404 Not Found` if folder or target parent not found/owned.
 
 #### `DELETE /api/v1/folders/{id}`
-Delete a folder. Files inside revert to root via `ON DELETE SET NULL` FK. Nested subfolders cascade-delete via `ON DELETE CASCADE` on `parent_id`.
+Delete a folder recursively. All files within the folder and its subfolders are soft-deleted (moved to trash). All subfolders are permanently deleted.
 
-**Response:** `204 No Content`
+**Response:** `200 OK`
+```json
+{
+  "deleted_files": 5,
+  "deleted_folders": 3
+}
+```
+
+**Error:** `404 Not Found` if folder not found or not owned by user.
 
 ---
 

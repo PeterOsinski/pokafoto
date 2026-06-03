@@ -24,6 +24,7 @@
           @select="$emit('select', entry.file.id)"
           @deselect="$emit('deselect', entry.file.id)"
           @open="$emit('open', entry.index)"
+          @contextmenu="($event) => $emit('contextmenu', $event, entry.file.id, entry.file.originalName || entry.file.filename)"
         />
       </div>
     </DynamicScrollerItem>
@@ -79,6 +80,7 @@ defineEmits<{
   select: [id: string]
   deselect: [id: string]
   open: [index: number]
+  contextmenu: [e: MouseEvent, fileId: string, fileName: string]
 }>()
 
 const columns = computed(() => Math.max(1, Math.floor(1200 / (props.thumbSizePx + 8))))
