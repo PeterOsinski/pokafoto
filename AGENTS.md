@@ -98,6 +98,24 @@ Keep the description lowercase, imperative mood, and under 72 characters.
 
 The `system_events` table records every significant system operation — backup successes/failures, upload errors, S3 connectivity changes, cache evictions, reconciliation runs, and server lifecycle events. It is the first place to look when diagnosing failures.
 
+> **⚠️ If system_events has no entries for a failure that the code should
+> have logged:** the event recorder may be receiving a nil pointer. Check
+> `internal/server/server.go` — `s.eventRecorder` must be initialized
+> *before* it is passed to `worker.NewPool()`. The nil guard in `Record()`
+> silently drops all events from the worker pool (`upload_error`,
+> `s3_upload_error`, `reconciliation_error`) without a panic or log line.
+
+### Checking Docker logs
+
+**Docker logs are the most reliable debugging source.** Raw `slog` output
+bypasses the event recorder entirely — it works even when `system_events`
+is empty or broken. Always check Docker logs first before querying the DB.
+
+```bash
+# Docker logs for a specific time window
+docker compose logs --since="2026-06-03T11:28:00" --until="2026-06-03T11:29:00"
+```
+
 ### Querying events directly
 
 ```bash
@@ -237,7 +255,7 @@ With `MAX_CONCURRENT_CHUNKS=3`, chunks are uploaded in parallel batches of 3. If
 | `error="upload_expired"` | Chunks not completed within `max_chunk_upload_age_hours` | Check config `upload.max_chunk_upload_age_hours` |
 | All chunked uploads failing | S3 or storage path issue | Check `system_events` for s3_disconnect, disk space |
 | Chunk hash mismatches | Corrupted transfer or client-side mutation | Server returns 422 with expected/actual hashes |
-| No events in system_events | Error occurred client-side only (frontend network error, server never saw failure) | Check browser console / network tab |
+| No events in system_events | Client-side error OR event recorder nil (check server.go init order) | Check Docker logs for slog output AND browser console |
 
 ### Code Trace Map
 
