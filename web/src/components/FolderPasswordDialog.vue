@@ -26,6 +26,13 @@
             style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
             @keyup.enter="submit"
           />
+          <input
+            v-model="passwordHint"
+            type="text"
+            placeholder="Password hint (optional)"
+            class="w-full px-3 py-2 rounded text-sm mb-2"
+            style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-color)"
+          />
           <p class="text-xs text-[var(--text-secondary)] mb-4">
             Password expires after {{ expiryMinutes }} minutes of inactivity.
           </p>
@@ -52,6 +59,7 @@
           <p class="text-sm text-[var(--text-secondary)] mb-3">
             This folder is password-protected. Enter the password to access its contents.
           </p>
+          <p v-if="passwordHint" class="text-xs text-[var(--text-secondary)] mb-2 px-2 py-1 rounded" style="background: var(--bg-elevated)">Hint: {{ passwordHint }}</p>
           <input
             ref="passwordInput"
             v-model="password"
@@ -97,6 +105,7 @@
               Password expires at {{ expiresAt }}
             </p>
           </template>
+          <p v-if="passwordHint" class="text-xs text-[var(--text-secondary)] mb-2 px-2 py-1 rounded" style="background: var(--bg-elevated)">Hint: {{ passwordHint }}</p>
           <div class="flex justify-end gap-3">
             <button
               @click="removePassword"
@@ -130,6 +139,7 @@ const props = defineProps<{
   mode: 'set' | 'unlock' | 'status'
   hasPassword?: boolean
   expiresAt?: string
+  passwordHint?: string
 }>()
 
 const emit = defineEmits<{
@@ -140,6 +150,7 @@ const emit = defineEmits<{
 
 const unlockStore = useFolderUnlockStore()
 const password = ref('')
+const passwordHint = ref('')
 const error = ref('')
 const loading = ref(false)
 const removing = ref(false)
@@ -162,6 +173,7 @@ watch(() => props.visible, (v) => {
   if (v) {
     error.value = ''
     password.value = ''
+    passwordHint.value = props.mode === 'set' ? '' : (props.passwordHint || '')
     loading.value = false
     removing.value = false
     nextTick(() => passwordInput.value?.focus())
@@ -189,7 +201,10 @@ async function submit() {
 
   try {
     if (props.mode === 'set') {
-      await api.post(`/folders/${props.folderId}/password`, { password: password.value })
+      await api.post(`/folders/${props.folderId}/password`, {
+        password: password.value,
+        password_hint: passwordHint.value,
+      })
       emit('close')
     } else if (props.mode === 'unlock') {
       const res = await api.post(`/folders/${props.folderId}/unlock`, { password: password.value })

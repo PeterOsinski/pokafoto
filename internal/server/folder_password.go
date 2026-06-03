@@ -23,7 +23,8 @@ func (s *Server) handleSetFolderPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		Password string `json:"password"`
+		Password     string `json:"password"`
+		PasswordHint string `json:"password_hint"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Password is required")
@@ -42,7 +43,7 @@ func (s *Server) handleSetFolderPassword(w http.ResponseWriter, r *http.Request)
 		s.folderPasswordStore.DeleteByFolderID(folderID)
 	}
 
-	fp, err := s.folderPasswordStore.Create(folderID, string(hash), expiresAt)
+	fp, err := s.folderPasswordStore.Create(folderID, string(hash), req.PasswordHint, expiresAt)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to set folder password")
 		return
@@ -121,7 +122,7 @@ func (s *Server) handleUnlockFolder(w http.ResponseWriter, r *http.Request) {
 
 	expiresAt := time.Now().UTC().Add(s.folderPasswordExpiryDuration())
 	s.folderPasswordStore.DeleteByFolderID(folderID)
-	if _, err := s.folderPasswordStore.Create(folderID, fp.PasswordHash, expiresAt); err != nil {
+	if _, err := s.folderPasswordStore.Create(folderID, fp.PasswordHash, fp.PasswordHint, expiresAt); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to refresh unlock")
 		return
 	}
@@ -168,7 +169,8 @@ func (s *Server) handleGetFolderPasswordStatus(w http.ResponseWriter, r *http.Re
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"has_password": active,
-		"expires_at":   fp.ExpiresAt.Format(time.RFC3339),
+		"has_password":  active,
+		"expires_at":    fp.ExpiresAt.Format(time.RFC3339),
+		"password_hint": fp.PasswordHint,
 	})
 }

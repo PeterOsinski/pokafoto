@@ -986,3 +986,37 @@ func TestShareSubdir_RejectFolderOutsideTree(t *testing.T) {
 		t.Errorf("expected 403 for deleting folder outside share tree, got %d", delW.Code)
 	}
 }
+
+func TestFolderPassword_shouldSetAndReturnHint(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("fphint_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Hint Folder", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	setBody := `{"password":"secret123","password_hint":"My birthday"}`
+	w := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/password", setBody, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	statusW := testRequest(t, srv, "GET", "/api/v1/folders/"+f.ID+"/password", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", statusW.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(statusW.Body.Bytes(), &resp)
+	if hint, ok := resp["password_hint"].(string); !ok || hint != "My birthday" {
+		t.Errorf("expected password_hint 'My birthday', got %v", resp["password_hint"])
+	}
+}

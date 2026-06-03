@@ -338,3 +338,49 @@ func TestFolderStore_DeleteRecursive_shouldReturnCounts(t *testing.T) {
 		t.Errorf("expected 1 deleted folder, got %d", result.DeletedFolders)
 	}
 }
+
+func TestFolderStore_ListTree_shouldIncludeHasShares(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFolderStore(db)
+	shs := NewFolderShareStore(db)
+
+	user := createTestUser(t, us)
+	f1, _ := fs.Create(user.ID, "Shared Folder", nil)
+	f2, _ := fs.Create(user.ID, "Private Folder", nil)
+
+	shs.Create(&model.FolderShare{FolderID: f1.ID, Permissions: "read"})
+
+	root, err := fs.ListTree(user.ID)
+	if err != nil {
+		t.Fatalf("list tree: %v", err)
+	}
+
+	shared := findNodeByID(root.Children, f1.ID)
+	if shared == nil {
+		t.Fatal("expected shared folder in tree")
+	}
+	if !shared.HasShares {
+		t.Error("shared folder should have HasShares=true")
+	}
+
+	private := findNodeByID(root.Children, f2.ID)
+	if private == nil {
+		t.Fatal("expected private folder in tree")
+	}
+	if private.HasShares {
+		t.Error("private folder should have HasShares=false")
+	}
+}
+
+func findNodeByID(nodes []*model.FolderTreeNode, id string) *model.FolderTreeNode {
+	for _, n := range nodes {
+		if n.Folder.ID == id {
+			return n
+		}
+		if found := findNodeByID(n.Children, id); found != nil {
+			return found
+		}
+	}
+	return nil
+}

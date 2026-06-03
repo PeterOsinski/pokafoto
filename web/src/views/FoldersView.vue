@@ -62,81 +62,26 @@
       @togglePreviewMode="togglePreviewMode"
     />
 
-    <div v-if="!currentFolderId && folders.children?.length && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-      <button
-        v-for="child in folders.children"
-        :key="child.folder.id"
-        @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
-        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
-        style="border: 1px solid var(--border-color)"
-      >
-        <span class="text-3xl">&#128193;</span>
-        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
-        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-        <div class="flex items-center gap-1 mt-1" @click.stop>
-          <button
-            :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openPasswordDialog(child.folder.id)"
-          >
-            {{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}
-          </button>
-          <button
-            title="Share"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openShareDialog(child.folder.id, child.folder.name)"
-          >
-            &#x1F517;
-          </button>
-        </div>
-      </button>
-    </div>
-
-    <div v-if="currentFolderId && subfolders.length > 0 && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-      <button
-        v-for="child in subfolders"
-        :key="child.folder.id"
-        @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
-        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
-        style="border: 1px solid var(--border-color)"
-      >
-        <span class="text-3xl">&#128193;</span>
-        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
-        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-        <div class="flex items-center gap-1 mt-1" @click.stop>
-          <button
-            :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openPasswordDialog(child.folder.id)"
-          >
-            {{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}
-          </button>
-          <button
-            title="Share"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openShareDialog(child.folder.id, child.folder.name)"
-          >
-            &#x1F517;
-          </button>
-        </div>
-      </button>
-    </div>
-
-    <div v-if="!folders.children?.length && !currentFolderId && !loading && settings.layout.value === 'tiles'" class="text-center py-10 text-[var(--text-secondary)]">
-      <p class="text-lg">No folders yet.</p>
-      <p class="mt-1 text-sm">Create a folder to start organizing your files.</p>
-    </div>
-
-    <div v-if="currentFolderId || settings.layout.value !== 'tiles' || (!currentFolderId && folders.children?.length === 0)">
-      <div v-if="files.length === 0 && !loading" class="text-center py-8 text-[var(--text-secondary)]">
-        <p v-if="currentFolderId">No files in this folder.</p>
-        <p v-else-if="!folders.children?.length">No files in this folder.</p>
-        <p v-else>No files to show.</p>
+    <div ref="tileContainer" class="tile-container">
+      <div v-if="settings.layout.value === 'tiles' && folderTileTargets.length > 0" class="grid gap-2 mb-2" :style="{ gridTemplateColumns: `repeat(${tileColumns}, 1fr)` }">
+        <button
+          v-for="child in folderTileTargets"
+          :key="child.folder.id"
+          @click="navigateTo(child.folder.id)"
+          @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
+          class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
+          style="border: 1px solid var(--border-color)"
+        >
+          <span class="text-3xl">&#128193;</span>
+          <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">
+            <span v-if="folderHasShares[child.folder.id]" class="mr-1" title="Shared">&#x1F517;</span>
+            {{ child.folder.name }}
+          </span>
+          <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        </button>
       </div>
 
-      <div v-if="settings.layout.value === 'list'" class="mb-4">
+      <div v-if="settings.layout.value === 'list' && listFolders.length > 0">
         <div class="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-xs font-semibold uppercase tracking-wide select-none px-3">
           <span class="w-10 shrink-0" />
           <span class="flex-1 min-w-0 py-2 px-3">Name</span>
@@ -147,19 +92,24 @@
           v-for="child in listFolders"
           :key="child.folder.id"
           @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
+          @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
           class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
           style="height: 52px"
         >
           <span class="text-xl w-10 shrink-0">&#128193;</span>
-          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">{{ child.folder.name }}</span>
+          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">
+            <span v-if="folderHasShares[child.folder.id]" class="mr-1" title="Shared">&#x1F517;</span>
+            {{ child.folder.name }}
+          </span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0 hidden sm:block mr-4">{{ formatFolderDate(child.folder.created_at) }}</span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0 mr-2">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-          <span class="text-xs shrink-0 flex items-center gap-1" @click.stop>
-            <span class="cursor-pointer hover:scale-110" :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'" @click="openPasswordDialog(child.folder.id)">{{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}</span>
-            <span class="cursor-pointer hover:scale-110" title="Share" @click="openShareDialog(child.folder.id, child.folder.name)">&#x1F517;</span>
-          </span>
         </button>
+      </div>
+
+      <div v-if="files.length === 0 && !loading && (!currentFolderId || folderTileTargets.length === 0)" class="text-center py-8 text-[var(--text-secondary)]">
+        <p v-if="currentFolderId">No files in this folder.</p>
+        <p v-else-if="!folders.children?.length">No files in this folder.</p>
+        <p v-else>No files to show.</p>
       </div>
 
       <GalleryTileView
@@ -305,81 +255,26 @@
       @togglePreviewMode="togglePreviewMode"
     />
 
-    <div v-if="!currentFolderId && folders.children?.length && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-      <button
-        v-for="child in folders.children"
-        :key="child.folder.id"
-        @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
-        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
-        style="border: 1px solid var(--border-color)"
-      >
-        <span class="text-3xl">&#128193;</span>
-        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
-        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-        <div class="flex items-center gap-1 mt-1" @click.stop>
-          <button
-            :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openPasswordDialog(child.folder.id)"
-          >
-            {{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}
-          </button>
-          <button
-            title="Share"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openShareDialog(child.folder.id, child.folder.name)"
-          >
-            &#x1F517;
-          </button>
-        </div>
-      </button>
-    </div>
-
-    <div v-if="currentFolderId && subfolders.length > 0 && settings.layout.value === 'tiles'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-      <button
-        v-for="child in subfolders"
-        :key="child.folder.id"
-        @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
-        class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
-        style="border: 1px solid var(--border-color)"
-      >
-        <span class="text-3xl">&#128193;</span>
-        <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">{{ child.folder.name }}</span>
-        <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-        <div class="flex items-center gap-1 mt-1" @click.stop>
-          <button
-            :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openPasswordDialog(child.folder.id)"
-          >
-            {{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}
-          </button>
-          <button
-            title="Share"
-            class="text-xs hover:scale-110 transition-transform"
-            @click="openShareDialog(child.folder.id, child.folder.name)"
-          >
-            &#x1F517;
-          </button>
-        </div>
-      </button>
-    </div>
-
-    <div v-if="!folders.children?.length && !currentFolderId && !loading && settings.layout.value === 'tiles'" class="text-center py-10 text-[var(--text-secondary)]">
-      <p class="text-lg">No folders yet.</p>
-      <p class="mt-1 text-sm">Create a folder to start organizing your files.</p>
-    </div>
-
-    <div v-if="currentFolderId || settings.layout.value !== 'tiles' || (!currentFolderId && folders.children?.length === 0)">
-      <div v-if="files.length === 0 && !loading" class="text-center py-8 text-[var(--text-secondary)]">
-        <p v-if="currentFolderId">No files in this folder.</p>
-        <p v-else-if="!folders.children?.length">No files in this folder.</p>
-        <p v-else>No files to show.</p>
+    <div ref="tileContainerLightbox" class="tile-container">
+      <div v-if="settings.layout.value === 'tiles' && folderTileTargets.length > 0" class="grid gap-2 mb-2" :style="{ gridTemplateColumns: `repeat(${tileColumns}, 1fr)` }">
+        <button
+          v-for="child in folderTileTargets"
+          :key="child.folder.id"
+          @click="navigateTo(child.folder.id)"
+          @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
+          class="flex flex-col items-center gap-2 p-4 rounded-lg text-center transition-colors hover:bg-[var(--bg-elevated)]"
+          style="border: 1px solid var(--border-color)"
+        >
+          <span class="text-3xl">&#128193;</span>
+          <span class="text-sm text-[var(--text-primary)] font-medium truncate w-full">
+            <span v-if="folderHasShares[child.folder.id]" class="mr-1" title="Shared">&#x1F517;</span>
+            {{ child.folder.name }}
+          </span>
+          <span class="text-xs text-[var(--text-secondary)]">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
+        </button>
       </div>
 
-      <div v-if="settings.layout.value === 'list'" class="mb-4">
+      <div v-if="settings.layout.value === 'list' && listFolders.length > 0">
         <div class="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-xs font-semibold uppercase tracking-wide select-none px-3">
           <span class="w-10 shrink-0" />
           <span class="flex-1 min-w-0 py-2 px-3">Name</span>
@@ -390,19 +285,24 @@
           v-for="child in listFolders"
           :key="child.folder.id"
           @click="navigateTo(child.folder.id)"
-        @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
+          @contextmenu.prevent="openFolderContextMenu($event, child.folder)"
           class="flex items-center w-full border-b border-[var(--border-color)] hover:bg-[var(--bg-elevated)] transition-colors px-3"
           style="height: 52px"
         >
           <span class="text-xl w-10 shrink-0">&#128193;</span>
-          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">{{ child.folder.name }}</span>
+          <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">
+            <span v-if="folderHasShares[child.folder.id]" class="mr-1" title="Shared">&#x1F517;</span>
+            {{ child.folder.name }}
+          </span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0 hidden sm:block mr-4">{{ formatFolderDate(child.folder.created_at) }}</span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0 mr-2">{{ child.fileCount }} {{ child.fileCount === 1 ? 'file' : 'files' }}</span>
-          <span class="text-xs shrink-0 flex items-center gap-1" @click.stop>
-            <span class="cursor-pointer hover:scale-110" :title="folderPasswordStatus[child.folder.id] ? 'Password protected (click to manage)' : 'Set password'" @click="openPasswordDialog(child.folder.id)">{{ folderPasswordStatus[child.folder.id] ? '&#x1F512;' : '&#x1F513;' }}</span>
-            <span class="cursor-pointer hover:scale-110" title="Share" @click="openShareDialog(child.folder.id, child.folder.name)">&#x1F517;</span>
-          </span>
         </button>
+      </div>
+
+      <div v-if="files.length === 0 && !loading && (!currentFolderId || folderTileTargets.length === 0)" class="text-center py-8 text-[var(--text-secondary)]">
+        <p v-if="currentFolderId">No files in this folder.</p>
+        <p v-else-if="!folders.children?.length">No files in this folder.</p>
+        <p v-else>No files to show.</p>
       </div>
 
       <GalleryTileView
@@ -500,6 +400,7 @@
       :mode="passwordDialog.mode"
       :hasPassword="passwordDialog.hasPassword"
       :expiresAt="passwordDialog.expiresAt"
+      :passwordHint="passwordDialog.passwordHint"
       @close="passwordDialog.show = false"
       @unlocked="onFolderUnlocked"
       @removed="onPasswordRemoved"
@@ -631,6 +532,7 @@ interface FolderEntry {
 interface FolderTreeNode {
   folder: FolderEntry
   fileCount: number
+  hasShares: boolean
   children: FolderTreeNode[]
 }
 
@@ -714,6 +616,7 @@ const copyDialog = ref({ open: false })
 
 const unlockStore = useFolderUnlockStore()
 const folderPasswordStatus = ref<Record<string, boolean>>({})
+const folderPasswordHints = ref<Record<string, string>>({})
 
 const passwordDialog = ref({
   show: false,
@@ -721,6 +624,7 @@ const passwordDialog = ref({
   mode: 'set' as 'set' | 'unlock' | 'status',
   hasPassword: false,
   expiresAt: '',
+  passwordHint: '',
 })
 
 const shareDialog = ref({
@@ -759,6 +663,26 @@ const moveFolderDialog = ref({
 })
 
 const fileContextTarget = ref<string | null>(null)
+const tileContainer = ref<HTMLElement | null>(null)
+const tileColumns = ref(4)
+let tileResizeObserver: ResizeObserver | null = null
+
+const folderTileTargets = computed(() => {
+  if (currentFolderId.value) return subfolders.value
+  return folders.value.children ?? []
+})
+
+const folderHasShares = computed(() => {
+  const map: Record<string, boolean> = {}
+  const collect = (nodes: FolderTreeNode[]) => {
+    for (const n of nodes) {
+      map[n.folder.id] = n.hasShares
+      collect(n.children ?? [])
+    }
+  }
+  collect(folders.value.children ?? [])
+  return map
+})
 
 const lightboxFile = computed(() => {
   if (!photoQuery.value) return null
@@ -1033,6 +957,7 @@ function openPasswordDialog(folderId: string) {
     mode: hasPass ? (unlocked ? 'status' : 'unlock') : 'set',
     hasPassword: hasPass,
     expiresAt: '',
+    passwordHint: folderPasswordHints.value[folderId] || '',
   }
 }
 
@@ -1041,7 +966,18 @@ function openShareDialog(folderId: string, folderName: string) {
 }
 
 function openFolderContextMenu(e: MouseEvent, folder: FolderEntry) {
+  const passStatus = folderPasswordStatus.value[folder.id]
   const items: ContextMenuItem[] = [
+    {
+      label: passStatus ? 'Password...' : 'Set Password',
+      icon: passStatus ? '&#x1F512;' : '&#x1F513;',
+      action: () => openPasswordDialog(folder.id),
+    },
+    {
+      label: 'Share',
+      icon: '&#x1F517;',
+      action: () => openShareDialog(folder.id, folder.name),
+    },
     {
       label: 'Rename',
       icon: '&#x270F;',
@@ -1159,6 +1095,7 @@ async function loadPasswordStatuses() {
       try {
         const res = await api.get(`/folders/${id}/password`)
         folderPasswordStatus.value[id] = res.data.has_password || false
+        folderPasswordHints.value[id] = res.data.password_hint || ''
       } catch {
         folderPasswordStatus.value[id] = false
       }
@@ -1210,6 +1147,19 @@ onMounted(() => {
     observer.observe(sentinel.value)
   }
 
+  if (tileContainer.value) {
+    const gap = 8
+    const updateColumns = () => {
+      if (tileContainer.value) {
+        const w = tileContainer.value.clientWidth
+        tileColumns.value = Math.max(1, Math.floor(w / (settings.thumbSizePx.value + gap)))
+      }
+    }
+    updateColumns()
+    tileResizeObserver = new ResizeObserver(updateColumns)
+    tileResizeObserver.observe(tileContainer.value)
+  }
+
   refreshInterval = setInterval(async () => {
     const completed = upload.consumeCompletedJobs()
     if (completed.length === 0) return
@@ -1237,5 +1187,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
+  tileResizeObserver?.disconnect()
 })
 </script>

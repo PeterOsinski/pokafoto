@@ -153,6 +153,7 @@ interface FolderEntry {
 interface FolderTreeNode {
   folder: FolderEntry
   fileCount: number
+  hasShares: boolean
   children: FolderTreeNode[]
 }
 

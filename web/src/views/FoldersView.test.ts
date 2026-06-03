@@ -121,7 +121,7 @@ describe('FoldersView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await nextTick()
 
-    expect(wrapper.text()).toContain('No folders yet')
+    expect(wrapper.text()).toContain('No files in this folder')
   })
 
   it('navigates into a folder on card click', async () => {

@@ -93,6 +93,11 @@ func (s *FolderStore) ListTree(userID string) (*model.FolderTreeNode, error) {
 		return nil, err
 	}
 
+	hasShares, err := s.folderHasShares(userID)
+	if err != nil {
+		return nil, err
+	}
+
 	folderMap := make(map[string]*model.Folder)
 	for _, f := range allFolders {
 		folderMap[f.ID] = f
@@ -107,6 +112,7 @@ func (s *FolderStore) ListTree(userID string) (*model.FolderTreeNode, error) {
 		node := &model.FolderTreeNode{
 			Folder:    f,
 			FileCount: fileCounts[f.ID],
+			HasShares: hasShares[f.ID],
 			Children:  []*model.FolderTreeNode{},
 		}
 		nodeMap[f.ID] = node
@@ -156,6 +162,28 @@ func (s *FolderStore) folderFileCounts(userID string) (map[string]int64, error) 
 		counts[folderID] = count
 	}
 	return counts, rows.Err()
+}
+
+func (s *FolderStore) folderHasShares(userID string) (map[string]bool, error) {
+	rows, err := s.db.Query(
+		`SELECT fs.folder_id FROM folder_shares fs
+		 JOIN folders f ON f.id = fs.folder_id
+		 WHERE f.user_id = ? GROUP BY fs.folder_id`, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("folder has shares: %w", err)
+	}
+	defer rows.Close()
+
+	hasShares := make(map[string]bool)
+	for rows.Next() {
+		var folderID string
+		if err := rows.Scan(&folderID); err != nil {
+			continue
+		}
+		hasShares[folderID] = true
+	}
+	return hasShares, rows.Err()
 }
 
 func (s *FolderStore) UpdateName(id, name string) error {

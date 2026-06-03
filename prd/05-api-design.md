@@ -566,7 +566,7 @@ Get directory tree structure.
 ### 5.1.6a Folders
 
 #### `GET /api/v1/folders`
-Get the user's folder tree with file counts.
+Get the user's folder tree with file counts and share indicators.
 
 **Response:** `200 OK`
 ```json
@@ -582,6 +582,7 @@ Get the user's folder tree with file counts.
         "updated_at": "2024-07-15T14:30:00Z"
       },
       "fileCount": 156,
+      "hasShares": true,
       "children": [
         {
           "folder": {
@@ -593,6 +594,7 @@ Get the user's folder tree with file counts.
             "updated_at": "2024-07-16T10:00:00Z"
           },
           "fileCount": 42,
+          "hasShares": false,
           "children": []
         }
       ]
@@ -668,11 +670,11 @@ Download multiple files as a ZIP archive.
 These endpoints require authentication and folder ownership.
 
 #### `POST /api/v1/folders/{id}/password`
-Set or update a password on a folder. The password expires after 30 minutes (configurable). All folder contents become protected — the owner must also unlock to access.
+Set or update a password on a folder. The password expires after 30 minutes (configurable). All folder contents become protected — the owner must also unlock to access. An optional `password_hint` helps remember the password.
 
 **Request:**
 ```json
-{ "password": "secret123" }
+{ "password": "secret123", "password_hint": "My birthday + dog's name" }
 ```
 **Response:** `201 Created`
 ```json
@@ -706,7 +708,7 @@ Check if a folder has an active password.
 
 **Response:** `200 OK`
 ```json
-{ "has_password": true, "expires_at": "2026-06-02T16:00:00Z" }
+{ "has_password": true, "expires_at": "2026-06-02T16:00:00Z", "password_hint": "My birthday + dog's name" }
 ```
 
 ---

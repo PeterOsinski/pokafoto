@@ -16,19 +16,20 @@ func NewFolderPasswordStore(db *DB) *FolderPasswordStore {
 	return &FolderPasswordStore{db: db}
 }
 
-func (s *FolderPasswordStore) Create(folderID, passwordHash string, expiresAt time.Time) (*model.FolderPassword, error) {
+func (s *FolderPasswordStore) Create(folderID, passwordHash, passwordHint string, expiresAt time.Time) (*model.FolderPassword, error) {
 	fp := &model.FolderPassword{
 		ID:           uuid.New().String(),
 		FolderID:     folderID,
 		PasswordHash: passwordHash,
+		PasswordHint: passwordHint,
 		ExpiresAt:    expiresAt,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
 
 	_, err := s.db.Exec(
-		`INSERT INTO folder_passwords (id, folder_id, password_hash, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		fp.ID, fp.FolderID, fp.PasswordHash, fp.ExpiresAt.Format(time.RFC3339), fp.CreatedAt.Format(time.RFC3339), fp.UpdatedAt.Format(time.RFC3339),
+		`INSERT INTO folder_passwords (id, folder_id, password_hash, password_hint, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		fp.ID, fp.FolderID, fp.PasswordHash, fp.PasswordHint, fp.ExpiresAt.Format(time.RFC3339), fp.CreatedAt.Format(time.RFC3339), fp.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert folder password: %w", err)
@@ -38,10 +39,10 @@ func (s *FolderPasswordStore) Create(folderID, passwordHash string, expiresAt ti
 }
 
 func (s *FolderPasswordStore) FindByFolderID(folderID string) (*model.FolderPassword, error) {
-	var id, passwordHash, expiresAtStr, createdAtStr, updatedAtStr string
+	var id, passwordHash, passwordHint, expiresAtStr, createdAtStr, updatedAtStr string
 	err := s.db.QueryRow(
-		`SELECT id, folder_id, password_hash, expires_at, created_at, updated_at FROM folder_passwords WHERE folder_id = ?`, folderID,
-	).Scan(&id, &folderID, &passwordHash, &expiresAtStr, &createdAtStr, &updatedAtStr)
+		`SELECT id, folder_id, password_hash, password_hint, expires_at, created_at, updated_at FROM folder_passwords WHERE folder_id = ?`, folderID,
+	).Scan(&id, &folderID, &passwordHash, &passwordHint, &expiresAtStr, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, fmt.Errorf("find folder password: %w", err)
 	}
@@ -50,6 +51,7 @@ func (s *FolderPasswordStore) FindByFolderID(folderID string) (*model.FolderPass
 		ID:           id,
 		FolderID:     folderID,
 		PasswordHash: passwordHash,
+		PasswordHint: passwordHint,
 	}
 	fp.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAtStr)
 	fp.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)

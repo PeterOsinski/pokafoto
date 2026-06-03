@@ -100,7 +100,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Admin panel | User list, role management, registration toggle, per-user space quota, per-user thumbnail breakdown, quota progress bar in top nav, per-user file/thumbnail breakdown selectors, quota enforcement on upload | `web/src/views/AdminView.vue`, `web/src/App.vue`, `internal/server/handlers.go`, `internal/store/user.go`, `internal/server/upload.go`, `internal/store/file.go`, `internal/store/thumbnail.go` | ⚠️ User management works; registration toggle is read-only; dashboard added; quota management completed; per-user breakdowns completed; quota enforcement completed |
 | Dedup per-user scoping | FindBySHA256/FindByNameAndSize filtered by user_id | `internal/store/file.go`, `internal/worker/pool.go`, `internal/server/upload.go` | ✅ |
 | User settings/logout | User menu, profile display, logout action | Composable | ✅ |
-| Folders tab | Dedicated `/folders` route with tiles/list/calendar layouts, context menu (rename, move, delete), file rename | `web/src/views/FoldersView.vue` | ✅ |
+| Folders tab | Dedicated `/folders` route with merged folder/file tiles, list layouts, context menu (password, share, rename, move, delete), file rename, password hints, share indicators | `web/src/views/FoldersView.vue` | ✅ |
 
 ### Week 6: Vue.js Frontend — Lightbox & Detail — ⚠️ Partial
 

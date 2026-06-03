@@ -18,7 +18,7 @@ func TestFolderPasswordStore_Create_shouldSetPassword(t *testing.T) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
 	expiresAt := time.Now().UTC().Add(30 * time.Minute)
 
-	fp, err := fps.Create(folder.ID, string(hash), expiresAt)
+	fp, err := fps.Create(folder.ID, string(hash), "", expiresAt)
 	if err != nil {
 		t.Fatalf("create folder password: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestFolderPasswordStore_FindByFolderID_shouldReturnPassword(t *testing.T) {
 	folder, _ := fs.Create(user.ID, "Secret Folder", nil)
 	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
 	expiresAt := time.Now().UTC().Add(30 * time.Minute)
-	fps.Create(folder.ID, string(hash), expiresAt)
+	fps.Create(folder.ID, string(hash), "", expiresAt)
 
 	found, err := fps.FindByFolderID(folder.ID)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestFolderPasswordStore_Delete_shouldRemovePassword(t *testing.T) {
 	user := createTestUser(t, us)
 	folder, _ := fs.Create(user.ID, "Secret Folder", nil)
 	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
-	fps.Create(folder.ID, string(hash), time.Now().UTC().Add(30*time.Minute))
+	fps.Create(folder.ID, string(hash), "", time.Now().UTC().Add(30*time.Minute))
 
 	if err := fps.DeleteByFolderID(folder.ID); err != nil {
 		t.Fatalf("delete by folder id: %v", err)
@@ -93,8 +93,8 @@ func TestFolderPasswordStore_DeleteExpired_shouldRemoveExpired(t *testing.T) {
 	folder2, _ := fs.Create(user.ID, "F2", nil)
 	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
 
-	fps.Create(folder1.ID, string(hash), time.Now().UTC().Add(-1*time.Hour))
-	fps.Create(folder2.ID, string(hash), time.Now().UTC().Add(1*time.Hour))
+	fps.Create(folder1.ID, string(hash), "", time.Now().UTC().Add(-1*time.Hour))
+	fps.Create(folder2.ID, string(hash), "", time.Now().UTC().Add(1*time.Hour))
 
 	n, err := fps.DeleteExpired()
 	if err != nil {
@@ -107,5 +107,45 @@ func TestFolderPasswordStore_DeleteExpired_shouldRemoveExpired(t *testing.T) {
 	_, err = fps.FindByFolderID(folder1.ID)
 	if err == nil {
 		t.Error("expired folder password should be deleted")
+	}
+}
+
+func TestFolderPasswordStore_Create_shouldStoreHint(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFolderStore(db)
+	fps := NewFolderPasswordStore(db)
+
+	user := createTestUser(t, us)
+	folder, _ := fs.Create(user.ID, "Hint Folder", nil)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
+	expiresAt := time.Now().UTC().Add(30 * time.Minute)
+
+	fp, err := fps.Create(folder.ID, string(hash), "My birthday", expiresAt)
+	if err != nil {
+		t.Fatalf("create folder password with hint: %v", err)
+	}
+	if fp.PasswordHint != "My birthday" {
+		t.Errorf("expected hint 'My birthday', got %q", fp.PasswordHint)
+	}
+}
+
+func TestFolderPasswordStore_FindByFolderID_shouldReturnHint(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFolderStore(db)
+	fps := NewFolderPasswordStore(db)
+
+	user := createTestUser(t, us)
+	folder, _ := fs.Create(user.ID, "Hint Folder", nil)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.MinCost)
+	fps.Create(folder.ID, string(hash), "My birthday", time.Now().UTC().Add(30*time.Minute))
+
+	found, err := fps.FindByFolderID(folder.ID)
+	if err != nil {
+		t.Fatalf("find by folder id: %v", err)
+	}
+	if found.PasswordHint != "My birthday" {
+		t.Errorf("expected hint 'My birthday', got %q", found.PasswordHint)
 	}
 }
