@@ -27,7 +27,7 @@
             @keyup.enter="submit"
           />
           <input
-            v-model="passwordHint"
+            v-model="hintInput"
             type="text"
             placeholder="Password hint (optional)"
             class="w-full px-3 py-2 rounded text-sm mb-2"
@@ -57,9 +57,8 @@
 
         <template v-if="mode === 'unlock'">
           <p class="text-sm text-[var(--text-secondary)] mb-3">
-            This folder is password-protected. Enter the password to access its contents.
+            {{ passwordHint || 'This folder is password-protected. Enter the password to access its contents.' }}
           </p>
-          <p v-if="passwordHint" class="text-xs text-[var(--text-secondary)] mb-2 px-2 py-1 rounded" style="background: var(--bg-elevated)">Hint: {{ passwordHint }}</p>
           <input
             ref="passwordInput"
             v-model="password"
@@ -150,7 +149,7 @@ const emit = defineEmits<{
 
 const unlockStore = useFolderUnlockStore()
 const password = ref('')
-const passwordHint = ref('')
+const hintInput = ref('')
 const error = ref('')
 const loading = ref(false)
 const removing = ref(false)
@@ -173,7 +172,7 @@ watch(() => props.visible, (v) => {
   if (v) {
     error.value = ''
     password.value = ''
-    passwordHint.value = props.mode === 'set' ? '' : (props.passwordHint || '')
+    hintInput.value = props.mode === 'set' ? '' : (props.passwordHint || '')
     loading.value = false
     removing.value = false
     nextTick(() => passwordInput.value?.focus())
@@ -203,7 +202,7 @@ async function submit() {
     if (props.mode === 'set') {
       await api.post(`/folders/${props.folderId}/password`, {
         password: password.value,
-        password_hint: passwordHint.value,
+        password_hint: hintInput.value,
       })
       emit('close')
     } else if (props.mode === 'unlock') {

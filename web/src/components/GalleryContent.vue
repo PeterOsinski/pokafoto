@@ -76,6 +76,7 @@
           :name="f.folder.name"
           :fileCount="f.fileCount"
           :hasShares="f.hasShares"
+          :hasPassword="!!pmap[f.folder.id]"
           @click="$emit('navigateTo', f.folder.id)"
           @contextmenu="(e: MouseEvent) => $emit('folderContextMenu', e, f.folder)"
         />
@@ -112,6 +113,7 @@
         >
           <span class="text-xl w-10 shrink-0">&#128193;</span>
           <span class="flex-1 min-w-0 text-sm text-[var(--text-primary)] font-medium truncate text-left">
+            <span v-if="!!pmap[f.folder.id]" class="mr-1" title="Password protected">&#x1F512;</span>
             <span v-if="f.hasShares" class="mr-1" title="Shared">&#x1F517;</span>{{ f.folder.name }}
           </span>
           <span class="text-xs text-[var(--text-secondary)] shrink-0 hidden sm:block mr-4">{{ formatDate(f.folder.created_at) }}</span>
@@ -182,7 +184,10 @@ const props = defineProps<{
   loadingMore: boolean
   showCreateInput: boolean
   showNewDocInput?: boolean
+  passwordStatuses?: Record<string, boolean>
 }>()
+
+const pmap = computed(() => props.passwordStatuses || ({} as Record<string, boolean>))
 
 const emit = defineEmits<{
   navigateTo: [id: string | null]

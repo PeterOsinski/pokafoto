@@ -1,6 +1,6 @@
 <template>
   <DropZone :folderId="ft.currentFolderId.value">
-    <div v-if="settings.previewMode.value === 'sidebar' && lightboxFile" class="flex">
+      <div v-if="settings.previewMode.value === 'sidebar' && lightboxFile" class="flex">
       <div class="flex-1 min-w-0">
         <GalleryContent
           :files="uf.files.value"
@@ -16,6 +16,7 @@
           :loading="uf.loading.value"
           :loadingMore="uf.loadingMore.value"
           :showCreateInput="showCreate"
+          :passwordStatuses="ft.passwordStatuses.value"
           @navigateTo="(id: string | null) => ft.navigateTo(id)"
           @navigateUp="ft.navigateUp()"
           @showCreateInput="showCreate = true"
@@ -66,6 +67,7 @@
         :loadingMore="uf.loadingMore.value"
         :showCreateInput="showCreate"
         :showNewDocInput="showNewDocInput"
+        :passwordStatuses="ft.passwordStatuses.value"
         @navigateTo="(id: string | null) => ft.navigateTo(id)"
         @navigateUp="ft.navigateUp()"
         @showCreateInput="showCreate = true"
