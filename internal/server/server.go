@@ -163,6 +163,8 @@ func (s *Server) setupRouter() {
 
 		r.Get("/thumb/{fileID}/{size}", s.handleServeThumbnail)
 
+		r.Get("/video/{id}", s.handleVideoStreamWithToken)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 

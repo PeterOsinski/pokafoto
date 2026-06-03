@@ -41,7 +41,7 @@
                                 ├──────────────────────┤
                                 │ file_id (TEXT PK/FK) │
                                 │ size (TEXT PK)       │
-                                │   -- 'sm','md','preview','video_still'
+                                │   -- 'sm','md','lg','xl','preview','video_still','video_proxy'
                                 │ ...                  │
                                 └──────────────────────┘
 
@@ -188,7 +188,7 @@ CREATE INDEX idx_exif_gps ON exif(gps_latitude, gps_longitude)
 -- Thumbnail registry
 CREATE TABLE IF NOT EXISTS thumbnails (
     file_id     TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    size        TEXT NOT NULL CHECK(size IN ('sm', 'md', 'preview', 'video_still')),
+    size        TEXT NOT NULL CHECK(size IN ('sm', 'md', 'lg', 'xl', 'preview', 'video_still', 'video_proxy')),
     width       INTEGER NOT NULL,
     height      INTEGER NOT NULL,
     format      TEXT NOT NULL DEFAULT 'jpeg',  -- 'jpeg' for sm/md/video_still, 'webp' for preview
@@ -573,8 +573,9 @@ type ThumbnailSize string
 const (
     ThumbSizeSmall     ThumbnailSize = "sm"
     ThumbSizeMedium    ThumbnailSize = "md"
-    ThumbSizePreview   ThumbnailSize = "preview"
+    ThumbSizePreview    ThumbnailSize = "preview"
     ThumbSizeVideoStill ThumbnailSize = "video_still"
+    ThumbSizeVideoProxy ThumbnailSize = "video_proxy"
 )
 
 type Thumbnail struct {
@@ -707,6 +708,7 @@ interface ThumbnailSet {
   md: ThumbnailInfo;          // 600px JPEG
   preview: ThumbnailInfo;    // 720p WebP
   videoStill?: ThumbnailInfo; // frame at 5s JPEG (videos only)
+  videoProxy?: ThumbnailInfo; // 720p H.264/AAC MP4 proxy (videos only)
 }
 
 interface ThumbnailInfo {

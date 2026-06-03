@@ -378,6 +378,33 @@ Serve a thumbnail image.
 
 ---
 
+### 5.1.3a Video Streaming
+
+#### `GET /api/v1/video/{id}`
+Stream a video file with byte range support for rewinding/scrubbing. Requires authentication.
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `quality` | string | `original` | `original` (full resolution) or `proxy` (720p transcode if available) |
+
+**Behavior:**
+1. `quality=proxy` — serves the 720p H.264/AAC MP4 proxy if available. Falls back to original if no proxy exists.
+2. `quality=original` (or absent) — serves the full-resolution original file.
+3. Supports HTTP Range requests for both proxy and original playback.
+4. For local files: uses `http.ServeContent` for native Range support.
+5. For S3 files: passes Range header through to S3 GetObject, returning `206 Partial Content` with `Content-Range`.
+
+**Response Headers:**
+- `Content-Type: video/mp4`
+- `Accept-Ranges: bytes`
+- `Content-Length: <file_size_bytes>` (for 200), or
+- `Content-Range: bytes <start>-<end>/<total>` (for 206)
+
+**Response:** `200 OK` for full file, `206 Partial Content` for range requests.
+
+---
+
 ### 5.1.4 Map & Geo
 
 #### `GET /api/v1/geo/points`

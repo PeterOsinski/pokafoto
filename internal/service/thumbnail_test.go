@@ -154,3 +154,66 @@ func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
 		}
 	}
 }
+
+func TestThumbnailService_GenerateVideoProxy_shouldGenerate720pFor1080p(t *testing.T) {
+	dir := t.TempDir()
+	ts := NewThumbnailService(dir)
+	thumbs, err := ts.GenerateAll("test-vid-proxy", "/tmp/test_video_1080p.mp4", "video/mp4")
+	if err != nil {
+		t.Fatalf("GenerateAll failed: %v", err)
+	}
+
+	var proxy *model.Thumbnail
+	for _, th := range thumbs {
+		if th.Size == model.ThumbSizeVideoProxy {
+			proxy = th
+			break
+		}
+	}
+	if proxy == nil {
+		t.Fatal("expected video_proxy thumbnail for 1080p video, got nil")
+	}
+	if proxy.Format != "mp4" {
+		t.Errorf("expected format mp4, got %s", proxy.Format)
+	}
+	if proxy.SizeBytes == 0 {
+		t.Error("video proxy file is empty")
+	}
+
+	stillsFound := false
+	for _, th := range thumbs {
+		if th.Size == model.ThumbSizeVideoStill {
+			stillsFound = true
+			break
+		}
+	}
+	if !stillsFound {
+		t.Error("expected video_still thumbnail alongside proxy")
+	}
+}
+
+func TestThumbnailService_GenerateVideoProxy_shouldSkipFor720pVideo(t *testing.T) {
+	dir := t.TempDir()
+	ts := NewThumbnailService(dir)
+	thumbs, err := ts.GenerateAll("test-vid-noproxy", "/tmp/test_video_720p.mp4", "video/mp4")
+	if err != nil {
+		t.Fatalf("GenerateAll failed: %v", err)
+	}
+
+	for _, th := range thumbs {
+		if th.Size == model.ThumbSizeVideoProxy {
+			t.Error("should not generate video_proxy for ≤720p video")
+		}
+	}
+
+	stillsFound := false
+	for _, th := range thumbs {
+		if th.Size == model.ThumbSizeVideoStill {
+			stillsFound = true
+			break
+		}
+	}
+	if !stillsFound {
+		t.Error("expected video_still thumbnail")
+	}
+}

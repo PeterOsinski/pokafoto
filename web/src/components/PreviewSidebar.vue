@@ -31,8 +31,9 @@
     <div class="flex-1 overflow-y-auto">
       <div class="relative" style="background: var(--bg-color); min-height: 200px">
         <VideoPlayer
-          v-if="file.mediaType === 'video' && videoSrc"
+          v-if="file.mediaType === 'video'"
           :src="videoSrc"
+          :proxySrc="proxySrc"
           :poster="file.thumbnails?.videoStill?.url"
         />
         <img
@@ -222,6 +223,7 @@
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import api from '../api/client'
 import { useLocalSettings } from '../composables/useLocalSettings'
+import { useAuthStore } from '../stores/auth'
 import VideoPlayer from './VideoPlayer.vue'
 import TagInput from './TagInput.vue'
 import { useAlbumStore } from '../stores/albums'
@@ -240,6 +242,7 @@ interface FileItem {
     md?: { url: string; width: number; height: number }
     preview?: { url: string; width: number; height: number }
     videoStill?: { url: string; width: number; height: number }
+    videoProxy?: { url: string; width: number; height: number }
   }
 }
 
@@ -280,9 +283,11 @@ const emit = defineEmits<{
 
 const settings = useLocalSettings()
 const albumStore = useAlbumStore()
+const authStore = useAuthStore()
 const sidebarEl = ref<HTMLElement | null>(null)
 const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
+const proxySrc = ref('')
 const showRawJson = ref(false)
 const sidebarWidth = ref(settings.sidebarWidth.value)
 
@@ -300,7 +305,6 @@ const sidebarTags = ref<string[]>([])
 const sidebarTagsLoading = ref(false)
 const sidebarTagsSaving = ref(false)
 
-let oldVideoURL = ''
 let isResizing = false
 let resizeStartX = 0
 let resizeStartWidth = 0
@@ -325,11 +329,8 @@ watch(() => props.file, async (file) => {
   sidebarComments.value = []
   sidebarTags.value = []
 
-  if (oldVideoURL) {
-    URL.revokeObjectURL(oldVideoURL)
-    oldVideoURL = ''
-  }
   videoSrc.value = ''
+  proxySrc.value = ''
   showRawJson.value = false
 
   if (!file?.id) {
@@ -339,11 +340,9 @@ watch(() => props.file, async (file) => {
   nextTick(() => sidebarEl.value?.focus())
 
   if (file.mediaType === 'video') {
-    try {
-      const res = await api.get(`/download/${file.id}`, { responseType: 'blob' })
-      oldVideoURL = URL.createObjectURL(res.data as Blob)
-      videoSrc.value = oldVideoURL
-    } catch {}
+    const token = authStore.accessToken ? `&token=${authStore.accessToken}` : ''
+    videoSrc.value = `/api/v1/video/${file.id}?quality=original${token}`
+    proxySrc.value = file.thumbnails?.videoProxy?.url ? `${file.thumbnails.videoProxy.url}${token}` : ''
   }
 
   try {

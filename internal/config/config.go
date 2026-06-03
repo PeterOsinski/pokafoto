@@ -128,6 +128,7 @@ func DefaultConfig() *Config {
 				"xl":          {Width: 2000, Quality: 85, Format: "jpeg"},
 				"preview":     {MaxDimension: 720, Quality: 80, Format: "webp"},
 				"video_still": {MaxDimension: 600, Quality: 75, Format: "jpeg"},
+				"video_proxy": {MaxDimension: 720, Quality: 80, Format: "mp4"},
 			},
 		},
 		Upload: UploadConfig{

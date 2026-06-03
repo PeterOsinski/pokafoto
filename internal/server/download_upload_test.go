@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/drive/drive/internal/model"
@@ -398,5 +399,88 @@ func TestUpload_shouldAllowWhenUnlimited(t *testing.T) {
 
 	if w.Code != http.StatusAccepted {
 		t.Errorf("expected 202, got %d", w.Code)
+	}
+}
+
+func TestVideoStream_shouldServeWithRangeSupport(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("videostream_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	userDir := filepath.Join(srv.cfg.OriginalsDir(), u.ID)
+	os.MkdirAll(userDir, 0755)
+
+	srcPath := "/tmp/test_video_1080p.mp4"
+	srcData, err := os.ReadFile(srcPath)
+	if err != nil {
+		t.Skipf("test video not found: %v", err)
+	}
+
+	destPath := filepath.Join(userDir, "2024/07/test-video.mp4")
+	os.MkdirAll(filepath.Dir(destPath), 0755)
+	os.WriteFile(destPath, srcData, 0644)
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/test-video.mp4",
+		OriginalName: "test-video.mp4",
+		Path:         "/2024",
+		SizeBytes:    int64(len(srcData)),
+		MimeType:     "video/mp4",
+		SHA256:       makeHandlerSHA256("videostream"),
+		MediaType:    model.MediaTypeVideo,
+	}
+	fs.Create(f)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/video/"+f.ID, "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if w.Header().Get("Accept-Ranges") != "bytes" {
+		t.Error("expected Accept-Ranges: bytes header")
+	}
+	if w.Header().Get("Content-Type") != "video/mp4" {
+		t.Errorf("expected Content-Type video/mp4, got %s", w.Header().Get("Content-Type"))
+	}
+
+	rangeW := testRequest(t, srv, "GET", "/api/v1/video/"+f.ID, "", map[string]string{
+		"Authorization": "Bearer " + token,
+		"Range":         "bytes=0-999",
+	})
+	if rangeW.Code != http.StatusPartialContent {
+		t.Errorf("expected 206 for range request, got %d", rangeW.Code)
+	}
+}
+
+func TestVideoStream_shouldRejectNonVideoFile(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	u, _ := us.Create("notvideo_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	photo := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/photo.jpg",
+		OriginalName: "photo.jpg",
+		Path:         "/2024",
+		SizeBytes:    1024,
+		MimeType:     "image/jpeg",
+		SHA256:       makeHandlerSHA256("notvideo"),
+		MediaType:    model.MediaTypePhoto,
+	}
+	fs.Create(photo)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/video/"+photo.ID, "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-video, got %d", w.Code)
 	}
 }

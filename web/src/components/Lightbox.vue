@@ -48,11 +48,11 @@
         @touchend="onTouchEnd"
       >
         <VideoPlayer
-          v-if="file.mediaType === 'video' && videoSrc"
+          v-if="file.mediaType === 'video'"
           :src="videoSrc"
+          :proxySrc="proxySrc"
           :poster="file.videoStill?.url"
         />
-        <div v-else-if="file.mediaType === 'video' && videoLoading" class="text-white/60 text-lg">Loading video...</div>
         <img
           v-else-if="previewSrc"
           :key="settings.highResDownload.value ? 'xl' : 'preview'"
@@ -120,6 +120,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import api from '../api/client'
 import { useLocalSettings } from '../composables/useLocalSettings'
+import { useAuthStore } from '../stores/auth'
 import VideoPlayer from './VideoPlayer.vue'
 import CommentsSection from './CommentsSection.vue'
 import TagInput from './TagInput.vue'
@@ -135,6 +136,7 @@ interface FileItem {
     md: { url: string; width: number; height: number }
     xl?: { url: string; width: number; height: number }
     preview: { url: string; width: number; height: number }
+    videoProxy?: { url: string; width: number; height: number }
   }
 }
 
@@ -169,8 +171,9 @@ const emit = defineEmits<{
 const lightboxEl = ref<HTMLElement | null>(null)
 const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
-const videoLoading = ref(false)
+const proxySrc = ref('')
 const settings = useLocalSettings()
+const authStore = useAuthStore()
 const panel = ref('')
 const comments = ref<any[]>([])
 const commentsLoading = ref(false)
@@ -186,7 +189,6 @@ const previewSrc = computed(() => {
   return t.preview?.url || t.md?.url || ''
 })
 
-let oldVideoURL = ''
 let touchStartX = 0
 let touchStartY = 0
 
@@ -196,12 +198,8 @@ watch(() => props.file, async (file) => {
   fileTags.value = []
   tagsLoaded.value = false
 
-  if (oldVideoURL) {
-    URL.revokeObjectURL(oldVideoURL)
-    oldVideoURL = ''
-  }
   videoSrc.value = ''
-  videoLoading.value = false
+  proxySrc.value = ''
 
   if (!file?.id) {
     exif.value = null
@@ -210,16 +208,9 @@ watch(() => props.file, async (file) => {
   nextTick(() => lightboxEl.value?.focus())
 
   if (file.mediaType === 'video') {
-    videoLoading.value = true
-    try {
-      const res = await api.get(`/download/${file.id}`, { responseType: 'blob' })
-      oldVideoURL = URL.createObjectURL(res.data)
-      videoSrc.value = oldVideoURL
-    } catch (e) {
-      console.error('Failed to load video', e)
-    } finally {
-      videoLoading.value = false
-    }
+    const token = authStore.accessToken ? `&token=${authStore.accessToken}` : ''
+    videoSrc.value = `/api/v1/video/${file.id}?quality=original${token}`
+    proxySrc.value = file.thumbnails?.videoProxy?.url ? `${file.thumbnails.videoProxy.url}${token}` : ''
   }
 
   try {

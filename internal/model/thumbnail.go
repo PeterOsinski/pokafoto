@@ -11,6 +11,7 @@ const (
 	ThumbSizeXL         ThumbnailSize = "xl"
 	ThumbSizePreview    ThumbnailSize = "preview"
 	ThumbSizeVideoStill ThumbnailSize = "video_still"
+	ThumbSizeVideoProxy ThumbnailSize = "video_proxy"
 )
 
 type Thumbnail struct {

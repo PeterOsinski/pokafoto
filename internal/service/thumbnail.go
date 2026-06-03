@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -26,7 +27,19 @@ func (s *ThumbnailService) GenerateAll(fileID, sourcePath, mimeType string) ([]*
 	isVideo := mimeType == "video/mp4" || mimeType == "video/quicktime" || mimeType == "video/x-msvideo" || mimeType == "video/x-matroska"
 
 	if isVideo {
-		return s.generateVideoStills(fileID, sourcePath)
+		thumbs, err := s.generateVideoStills(fileID, sourcePath)
+		if err != nil {
+			return thumbs, err
+		}
+
+		proxy, err := s.generateVideoProxy(fileID, sourcePath)
+		if err != nil {
+			return thumbs, nil
+		}
+		if proxy != nil {
+			thumbs = append(thumbs, proxy)
+		}
+		return thumbs, nil
 	}
 
 	return s.generateImageThumbs(fileID, sourcePath, mimeType)
@@ -173,6 +186,7 @@ func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*mo
 
 	args := []string{
 		"-y",
+		"-strict", "unofficial",
 		"-ss", "5",
 		"-i", sourcePath,
 		"-vframes", "1",
@@ -202,6 +216,91 @@ func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*mo
 	}
 
 	return []*model.Thumbnail{still}, nil
+}
+
+func (s *ThumbnailService) generateVideoProxy(fileID, sourcePath string) (*model.Thumbnail, error) {
+	width, height, err := probeVideoResolution(sourcePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if width <= 1280 && height <= 720 {
+		return nil, nil
+	}
+
+	proxyPath := filepath.Join(s.thumbnailsDir, fileID, "video_proxy.mp4")
+	dir := filepath.Dir(proxyPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+
+	args := []string{
+		"-y",
+		"-i", sourcePath,
+		"-vf", "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease",
+		"-c:v", "libx264",
+		"-preset", "fast",
+		"-crf", "23",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-movflags", "+faststart",
+		proxyPath,
+	}
+
+	cmd := exec.Command("ffmpeg", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg video proxy: %w: %s", err, string(out))
+	}
+
+	stat, err := os.Stat(proxyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	proxy := &model.Thumbnail{
+		FileID:    fileID,
+		Size:      model.ThumbSizeVideoProxy,
+		Width:     720,
+		Height:    405,
+		Format:    "mp4",
+		LocalPath: proxyPath,
+		SizeBytes: stat.Size(),
+	}
+
+	return proxy, nil
+}
+
+func probeVideoResolution(sourcePath string) (int, int, error) {
+	args := []string{
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_streams",
+		sourcePath,
+	}
+
+	cmd := exec.Command("ffprobe", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("ffprobe: %w: %s", err, string(out))
+	}
+
+	var probe struct {
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(out, &probe); err != nil {
+		return 0, 0, err
+	}
+
+	for _, s := range probe.Streams {
+		if s.Width > 0 && s.Height > 0 {
+			return s.Width, s.Height, nil
+		}
+	}
+
+	return 0, 0, fmt.Errorf("no video stream found")
 }
 
 func decodeImage(path, mimeType string) (image.Image, error) {

@@ -193,11 +193,12 @@ Upon upload, every image and video goes through:
 2. **Hash computation** — SHA-256 of file content for content-level deduplication. Content-hash dedup is only applied for root uploads (no folder context). Folder-scoped uploads skip this check.
 3. **EXIF extraction** — Parse all EXIF/XMP tags using `goexif` (JPEG/PNG/TIFF) with `exiftool` subprocess fallback (HEIC/AVIF). Non-media files skip EXIF entirely.
 4. **Thumbnail generation** — Four sizes per image:
-   - `thumb_sm`: 60px wide (JPEG, quality 60%) — for grid thumbnails
-   - `thumb_md`: 600px wide (JPEG, quality 75%) — for preview/lightbox
-   - `preview`: 720p max dimension (WebP, quality 80%) — for full preview
-   - `video_still`: frame at 5s (JPEG, quality 75%) — videos only
-5. **Video proxy** — Generate a 720p H.264/AAC MP4 proxy for browser playback. Stored as original + proxy in storage.
+    - `thumb_sm`: 60px wide (JPEG, quality 60%) — for grid thumbnails
+    - `thumb_md`: 600px wide (JPEG, quality 75%) — for preview/lightbox
+    - `preview`: 720p max dimension (WebP, quality 80%) — for full preview
+    - `video_still`: frame at 5s (JPEG, quality 75%) — videos only
+    - `video_proxy`: 720p H.264/AAC MP4 transcode (videos only, skipped if source ≤ 720p) — for browser streaming with byte range support
+5. **Video proxy** — Generate a 720p H.264/AAC MP4 proxy for browser playback during upload processing. Only generated if the source video exceeds 720p resolution. Proxy served via video streaming endpoint with full HTTP Range support for rewinding/scrubbing.
 6. **Storage** — Originals go to local disk (and S3 if enabled). Thumbnails go to local cache (and S3 if enabled).
 
 ### FR-02: Storage Tiers

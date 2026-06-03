@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,8 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/model"
+	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
+	"github.com/minio/minio-go/v7"
 	"golang.org/x/sys/unix"
 )
 
@@ -641,22 +645,153 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
-		stream, err := s.storageService.GetObjectStream(s3Key)
-		if err != nil {
-			slog.Warn("s3 download stream failed", "file_id", fileID, "error", err)
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk or in S3")
-			return
-		}
-		defer stream.Close()
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
+		w.Header().Set("Accept-Ranges", "bytes")
 		if file.MimeType != "" {
 			w.Header().Set("Content-Type", file.MimeType)
 		}
-		io.Copy(w, stream)
+		if file.SHA256 != "" {
+			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, file.SHA256))
+		}
+		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.storageService, file.MimeType, file.SizeBytes)
 		return
 	}
 
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk")
+}
+
+func (s *Server) handleVideoStreamWithToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		if !s.validateTokenAndSetContext(w, r, tokenStr) {
+			return
+		}
+	} else {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
+			return
+		}
+		if !s.validateTokenAndSetContext(w, r, token) {
+			return
+		}
+	}
+	s.handleVideoStream(w, r)
+}
+
+func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
+	fileID := r.PathValue("id")
+	userID := getUserID(r)
+
+	file, err := s.fileStore.FindByID(fileID)
+	if err != nil || file == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+		return
+	}
+
+	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+		return
+	}
+
+	if file.FolderID != nil {
+		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
+			return
+		}
+	}
+
+	if file.MediaType != model.MediaTypeVideo {
+		writeError(w, http.StatusBadRequest, "NOT_VIDEO", "File is not a video")
+		return
+	}
+
+	quality := r.URL.Query().Get("quality")
+
+	if quality == "proxy" {
+		thumb, err := s.thumbnailStore.FindByFileIDAndSize(fileID, model.ThumbSizeVideoProxy)
+		if err == nil && thumb != nil {
+			serveFileWithRange(w, r, thumb.LocalPath, thumb.S3Key, s.cfg, s.storageService, "video/mp4", thumb.SizeBytes)
+			return
+		}
+	}
+
+	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
+	if _, err := os.Stat(filePath); err == nil {
+		serveFileWithRange(w, r, filePath, nil, s.cfg, s.storageService, file.MimeType, file.SizeBytes)
+		return
+	}
+
+	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
+		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.storageService, file.MimeType, file.SizeBytes)
+		return
+	}
+
+	writeError(w, http.StatusNotFound, "NOT_FOUND", "Video not found on disk or in S3")
+}
+
+func serveFileWithRange(w http.ResponseWriter, r *http.Request, localPath string, s3Key *string, cfg *config.Config, storageService *service.StorageService, contentType string, fileSize int64) {
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Type", contentType)
+
+	if localPath != "" {
+		f, err := os.Open(localPath)
+		if err == nil {
+			defer f.Close()
+			stat, _ := f.Stat()
+			if fileSize <= 0 {
+				fileSize = stat.Size()
+			}
+			w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+			http.ServeContent(w, r, filepath.Base(localPath), stat.ModTime(), f)
+			return
+		}
+	}
+
+	if s3Key != nil && *s3Key != "" && cfg.Storage.S3.Enabled && storageService != nil {
+		client := storageService.Client()
+		if client == nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "S3 not available")
+			return
+		}
+
+		opts := minio.GetObjectOptions{}
+		rangeHeader := r.Header.Get("Range")
+		if rangeHeader != "" {
+			opts.Set("Range", rangeHeader)
+		}
+
+		obj, err := client.GetObject(context.Background(), cfg.Storage.S3.Bucket, *s3Key, opts)
+		if err != nil {
+			slog.Warn("s3 stream failed", "key", *s3Key, "error", err)
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not available in S3")
+			return
+		}
+		defer obj.Close()
+
+		stat, err := obj.Stat()
+		if err != nil {
+			slog.Warn("s3 stat failed", "key", *s3Key, "error", err)
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read file info")
+			return
+		}
+
+		if rangeHeader != "" {
+			if stat.Size > 0 {
+				w.Header().Set("Content-Length", strconv.FormatInt(stat.Size, 10))
+			}
+			w.WriteHeader(http.StatusPartialContent)
+		} else if fileSize > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+		}
+
+		io.Copy(w, obj)
+		return
+	}
+
+	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 }
 
 func (s *Server) handleBatchDownload(w http.ResponseWriter, r *http.Request) {
@@ -1317,6 +1452,7 @@ type thumbnailSetResponse struct {
 	XL         *thumbnailInfoResponse `json:"xl,omitempty"`
 	Preview    *thumbnailInfoResponse `json:"preview"`
 	VideoStill *thumbnailInfoResponse `json:"videoStill,omitempty"`
+	VideoProxy *thumbnailInfoResponse `json:"videoProxy,omitempty"`
 }
 
 type thumbnailInfoResponse struct {
@@ -1339,6 +1475,11 @@ func buildThumbnailSet(fileID string, mediaType model.MediaType) *thumbnailSetRe
 				URL:    fmt.Sprintf("/api/v1/thumb/%s/video_still.jpg?v=%s", fileID, ver),
 				Width:  600,
 				Height: 338,
+			},
+			VideoProxy: &thumbnailInfoResponse{
+				URL:    fmt.Sprintf("/api/v1/video/%s?quality=proxy", fileID),
+				Width:  1280,
+				Height: 720,
 			},
 		}
 	}

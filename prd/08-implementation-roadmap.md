@@ -288,8 +288,8 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 
 | Task | Details | Deliverable | Status |
 |---|---|---|---|
-| HLS transcoding | Generate .m3u8 + .ts segments | `internal/imaging/ffmpeg.go` | ❌ |
-| Video player | Plyr component with HLS support | `web/src/components/VideoPlayer.vue` | ⚠️ Basic VideoPlayer exists, no HLS |
+| Video proxy generation | 720p H.264/AAC MP4 from uploaded video | `internal/imaging/ffmpeg.go` | ⚠️ Sparse — video still frames generated; 720p proxy, S3 streaming, and byte range implemented in video streaming feature |
+| Video player | Plyr component with HLS support | `web/src/components/VideoPlayer.vue` | ⚠️ Basic VideoPlayer exists; 720p quality toggle and byte-range streaming implemented in video streaming feature |
 | RAW preview extraction | exiftool/dcraw for embedded JPEG | `internal/imaging/raw.go` | ❌ |
 | RAW badge | "RAW" indicator on thumbnails | `web/src/components/ThumbnailCard.vue` | ❌ |
 
