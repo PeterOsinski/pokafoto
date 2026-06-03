@@ -61,7 +61,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Thumbnail sizes | Generate `sm` (60px JPEG), `md` (600px JPEG), `preview` (720p WebP), `video_still` (600px JPEG, frame at 5s via ffmpeg) | Worker task | ✅ (plus extra `lg` 300px size) |
 | Local cache | Write thumbnails to `{cache_dir}/thumbnails/{file_id}/{size}.{format}` | `internal/cache/local.go` | ✅ (in `internal/service/thumbnail.go`) |
 | S3 thumbnail upload | Upload generated thumbnails to S3 (if `s3.enabled: true`) | Worker task | ✅ |
-| Video proxy generation | 720p H.264/AAC MP4 from uploaded video | `internal/imaging/ffmpeg.go` | ❌ Only video still frames generated, no full video transcoding |
+| Video proxy generation + S3 streaming | 720p H.264/AAC MP4 from uploaded video; uploaded to S3 with correct format (mp4), s3_key persisted in DB, local file removed after upload → streams from S3 | `internal/service/thumbnail.go`, `internal/worker/pool.go`, `internal/store/thumbnail.go` | ✅ Generated at 720p, streamed from S3 |
 | Thumbnail serve endpoint | `GET /api/v1/thumb/{file_id}/{size}.{format}` — cache-first, S3 fallback | `internal/handler/thumbnail.go` | ✅ (in `internal/server/handlers.go`) |
 | Cache eviction | LRU eviction, scheduled background goroutine (every 5 min) | `internal/cache/eviction.go` | ✅ (`internal/server/cache.go`) |
 

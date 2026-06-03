@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/drive/drive/internal/model"
@@ -632,5 +634,105 @@ func TestHandlers_TagStats_shouldReturnCounts(t *testing.T) {
 	first := tags[0].(map[string]interface{})
 	if first["name"] != "vacation" || int(first["count"].(float64)) != 2 {
 		t.Errorf("expected vacation with count 2, got %v=%v", first["name"], first["count"])
+	}
+}
+
+func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T) {
+	srv, _, cleanup := newTestServer(t)
+	defer cleanup()
+
+	u, _ := srv.userStore.Create("vidproxy_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	userDir := filepath.Join(srv.cfg.OriginalsDir(), u.ID, "2024/07")
+	os.MkdirAll(userDir, 0755)
+	destPath := filepath.Join(userDir, "test.mp4")
+	srcData := make([]byte, 1024)
+	os.WriteFile(destPath, srcData, 0644)
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/test.mp4",
+		OriginalName: "test.mp4",
+		Path:         "/2024",
+		SizeBytes:    int64(len(srcData)),
+		MimeType:     "video/mp4",
+		SHA256:       makeHandlerSHA256("test-video-proxy"),
+		MediaType:    model.MediaTypeVideo,
+	}
+	if err := srv.fileStore.Create(f); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	s3Key := "thumbnails/" + f.ID + "/video_proxy.mp4"
+	proxy := &model.Thumbnail{
+		FileID:    f.ID,
+		Size:      model.ThumbSizeVideoProxy,
+		Width:     720,
+		Height:    405,
+		Format:    "mp4",
+		LocalPath: "/nonexistent/path/video_proxy.mp4",
+		S3Key:     &s3Key,
+		SizeBytes: 2000000,
+	}
+	if err := srv.thumbnailStore.Create(proxy); err != nil {
+		t.Fatalf("create thumbnail: %v", err)
+	}
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+
+	w := testRequest(t, srv, "GET", "/api/v1/video/"+f.ID+"?quality=proxy", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 (S3 not available in test), got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("parse error body: %v", err)
+	}
+	errObj, _ := resp["error"].(map[string]interface{})
+	if errObj["code"] != "NOT_FOUND" {
+		t.Errorf("expected NOT_FOUND error code, got %v", errObj["code"])
+	}
+}
+
+func TestParseRange_shouldParseValidRanges(t *testing.T) {
+	tests := []struct {
+		name       string
+		header     string
+		fileSize   int64
+		wantStart  int64
+		wantEnd    int64
+		wantErr    bool
+	}{
+		{"start-end", "bytes=0-1023", 5000000, 0, 1023, false},
+		{"start-only", "bytes=1024-", 5000000, 1024, 4999999, false},
+		{"suffix", "bytes=-500", 5000000, 4999500, 4999999, false},
+		{"no-prefix", "0-1023", 5000000, -1, -1, true},
+		{"no-dash", "bytes=1024", 5000000, -1, -1, true},
+		{"no-start-or-end", "bytes=-", 5000000, -1, -1, true},
+		{"start-exceeds-size", "bytes=5000000-", 5000000, -1, -1, true},
+		{"start-greater-than-end", "bytes=5000-1000", 5000000, -1, -1, true},
+		{"empty", "", 5000000, -1, -1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start, end, err := parseRange(tt.header, tt.fileSize)
+			if tt.wantErr && err == nil {
+				t.Errorf("expected error, got start=%d end=%d", start, end)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if start != tt.wantStart {
+				t.Errorf("expected start=%d, got %d", tt.wantStart, start)
+			}
+			if end != tt.wantEnd {
+				t.Errorf("expected end=%d, got %d", tt.wantEnd, end)
+			}
+		})
 	}
 }

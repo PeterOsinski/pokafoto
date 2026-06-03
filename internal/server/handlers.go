@@ -752,6 +752,52 @@ func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "Video not found on disk or in S3")
 }
 
+func parseRange(rangeHeader string, fileSize int64) (int64, int64, error) {
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		return -1, -1, fmt.Errorf("range does not start with bytes=")
+	}
+	rangeVal := strings.TrimPrefix(rangeHeader, "bytes=")
+	parts := strings.SplitN(rangeVal, "-", 2)
+	if len(parts) != 2 {
+		return -1, -1, fmt.Errorf("invalid range format: %s", rangeHeader)
+	}
+
+	var start, end int64 = -1, -1
+	if parts[0] != "" {
+		var n uint64
+		n, err := strconv.ParseUint(parts[0], 10, 63)
+		if err != nil {
+			return -1, -1, fmt.Errorf("invalid range start: %s", parts[0])
+		}
+		start = int64(n)
+	}
+	if parts[1] != "" {
+		var n uint64
+		n, err := strconv.ParseUint(parts[1], 10, 63)
+		if err != nil {
+			return -1, -1, fmt.Errorf("invalid range end: %s", parts[1])
+		}
+		end = int64(n)
+	}
+
+	if start < 0 && end < 0 {
+		return -1, -1, fmt.Errorf("no start or end in range")
+	}
+
+	if start < 0 {
+		start = fileSize - end
+		end = fileSize - 1
+	} else if end < 0 {
+		end = fileSize - 1
+	}
+
+	if start >= fileSize || start > end {
+		return -1, -1, fmt.Errorf("range not satisfiable: start=%d end=%d size=%d", start, end, fileSize)
+	}
+
+	return start, end, nil
+}
+
 func serveFileWithRange(w http.ResponseWriter, r *http.Request, localPath string, s3Key *string, cfg *config.Config, storageService *service.StorageService, contentType string, fileSize int64) {
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", contentType)
@@ -779,8 +825,17 @@ func serveFileWithRange(w http.ResponseWriter, r *http.Request, localPath string
 
 		opts := minio.GetObjectOptions{}
 		rangeHeader := r.Header.Get("Range")
+		var rangeStart, rangeEnd int64 = -1, -1
 		if rangeHeader != "" {
-			opts.Set("Range", rangeHeader)
+			var err error
+			rangeStart, rangeEnd, err = parseRange(rangeHeader, fileSize)
+			if err != nil {
+				slog.Warn("invalid range header", "range", rangeHeader, "error", err)
+			} else {
+				if setRangeErr := opts.SetRange(rangeStart, rangeEnd); setRangeErr != nil {
+					slog.Warn("s3 setrange failed", "range", rangeHeader, "error", setRangeErr)
+				}
+			}
 		}
 
 		obj, err := client.GetObject(context.Background(), cfg.Storage.S3.Bucket, *s3Key, opts)
@@ -798,10 +853,19 @@ func serveFileWithRange(w http.ResponseWriter, r *http.Request, localPath string
 			return
 		}
 
-		if rangeHeader != "" {
-			if stat.Size > 0 {
-				w.Header().Set("Content-Length", strconv.FormatInt(stat.Size, 10))
+		if rangeHeader != "" && rangeStart >= 0 {
+			actualEnd := stat.Size - 1
+			if rangeEnd >= 0 {
+				actualEnd = rangeEnd
 			}
+			contentLen := stat.Size - rangeStart
+			if rangeEnd >= 0 {
+				contentLen = rangeEnd - rangeStart + 1
+			}
+			if contentLen > 0 {
+				w.Header().Set("Content-Length", strconv.FormatInt(contentLen, 10))
+			}
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", rangeStart, actualEnd, stat.Size))
 			w.WriteHeader(http.StatusPartialContent)
 		} else if fileSize > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))

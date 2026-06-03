@@ -197,9 +197,9 @@ Upon upload, every image and video goes through:
     - `thumb_md`: 600px wide (JPEG, quality 75%) — for preview/lightbox
     - `preview`: 720p max dimension (WebP, quality 80%) — for full preview
     - `video_still`: frame at 5s (JPEG, quality 75%) — videos only
-    - `video_proxy`: 720p H.264/AAC MP4 transcode (videos only, skipped if source ≤ 720p) — for browser streaming with byte range support
-5. **Video proxy** — Generate a 720p H.264/AAC MP4 proxy for browser playback during upload processing. Only generated if the source video exceeds 720p resolution. Proxy served via video streaming endpoint with full HTTP Range support for rewinding/scrubbing.
-6. **Storage** — Originals go to local disk (and S3 if enabled). Thumbnails go to local cache (and S3 if enabled).
+    - `video_proxy`: 720p H.264/AAC MP4 transcode (videos only, skipped if source ≤ 720p) — for browser streaming with byte range support; uploaded to S3 and streamed from there, local file deleted after S3 upload succeeds
+5. **Video proxy** — Generate a 720p H.264/AAC MP4 proxy for browser playback during upload processing. Only generated if the source video exceeds 720p resolution. The proxy is uploaded to S3 (if enabled), the s3_key is persisted in the database, and the local file is removed — causing the streaming endpoint to serve from S3 via HTTP range requests. Video still thumbnails (video_still) remain on local disk for instant preview.
+6. **Storage** — Originals go to local disk (and S3 if enabled, local removed after S3 upload). Image thumbnails and video stills stay on local cache (with optional S3 backup). Video proxy is S3-only after upload (local file deleted).
 
 ### FR-02: Storage Tiers
 
@@ -216,12 +216,12 @@ Storage Root (local disk, e.g., /data)
 **S3 Mode (s3.enabled: true):**
 ```
 Tier 1 — Local Cache (SSD/NVMe, fast)
-  ├── thumbnails/  (60px, 600px, 720p previews, video stills)
+  ├── thumbnails/  (60px, 600px, 720p previews, video stills; video proxy removed after S3 upload)
   └── sqlite.db    (metadata, EXIF, file index)
 
 Tier 2 — S3-Compatible Object Storage (durable, scalable)
   ├── originals/   (full-resolution uploads)
-  └── thumbnails/  (backup copy of all thumbnails)
+  └── thumbnails/  (backup copy of image thumbnails + primary store for video proxy)
 ```
 
 Cache eviction policy: LRU (least recently used), configurable max cache size (default: 50GB). Eviction runs as a scheduled background goroutine every 5 minutes. Thumbnails are regenerated on cache miss from stored originals (or S3 if enabled).

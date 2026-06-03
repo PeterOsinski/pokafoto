@@ -201,6 +201,8 @@ CREATE TABLE IF NOT EXISTS thumbnails (
 
 CREATE INDEX idx_thumbnails_local ON thumbnails(local_path);
 
+**s3_key population:** The `s3_key` column is populated asynchronously by the worker pool after successful S3 upload (see `worker/pool.go` s3Worker). For `video_proxy` thumbnails, the local file is removed after upload — subsequent requests to `/api/v1/video/{id}?quality=proxy` serve from S3 via the `serveFileWithRange` fallback chain. All other thumbnail sizes retain their local file for fast serving.
+
 -- R-tree spatial index for geo queries
 CREATE VIRTUAL TABLE IF NOT EXISTS geo_index USING rtree (
     id,             -- Integer primary key for R-tree

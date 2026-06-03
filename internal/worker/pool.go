@@ -207,9 +207,9 @@ func (p *Pool) s3Worker(id int) {
 					slog.Warn("thumbnail missing before s3 upload, skipping", "file_id", task.FileID, "size", t.Size, "path", t.LocalPath)
 					continue
 				}
-				format := "jpg"
-				if t.Size == model.ThumbSizePreview {
-					format = "webp"
+				format := t.Format
+				if format == "" {
+					format = "jpg"
 				}
 				if err := p.storageService.PutThumbnail(task.FileID, string(t.Size), format, t.LocalPath); err != nil {
 					slog.Warn("s3 upload failed for thumbnail", "file_id", task.FileID, "size", t.Size, "error", err)
@@ -218,6 +218,16 @@ func (p *Pool) s3Worker(id int) {
 						"size":    string(t.Size),
 						"error":   err.Error(),
 					})
+				} else {
+					s3Key := fmt.Sprintf("thumbnails/%s/%s.%s", task.FileID, t.Size, format)
+					if err := p.thumbnailStore.SetS3Key(task.FileID, t.Size, s3Key); err != nil {
+						slog.Warn("failed to persist s3_key for thumbnail", "file_id", task.FileID, "size", t.Size, "error", err)
+					}
+					if t.Size == model.ThumbSizeVideoProxy {
+						if err := os.Remove(t.LocalPath); err != nil {
+							slog.Warn("failed to remove local video proxy after s3 upload", "file_id", task.FileID, "error", err)
+						}
+					}
 				}
 			}
 		}

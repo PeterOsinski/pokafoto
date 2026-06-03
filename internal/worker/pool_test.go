@@ -1305,4 +1305,94 @@ func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
 	}
 }
 
+func TestPool_s3Worker_shouldSkipWithNilStorageService(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewThumbnailStore(db)
+
+	u, err := us.Create("s3worker_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "videos/test.mp4",
+		OriginalName: "test.mp4",
+		Path:         "videos",
+		SizeBytes:    5000000,
+		MimeType:     "video/mp4",
+		SHA256:       "abc123",
+		MediaType:    model.MediaTypeVideo,
+	}
+	if err := fs.Create(f); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	proxy := &model.Thumbnail{
+		FileID:    f.ID,
+		Size:      model.ThumbSizeVideoProxy,
+		Width:     720,
+		Height:    405,
+		Format:    "mp4",
+		LocalPath: "/tmp/thumb-video_proxy.mp4",
+		SizeBytes: 2000000,
+	}
+	if err := ts.Create(proxy); err != nil {
+		t.Fatalf("create thumbnail: %v", err)
+	}
+
+	still := &model.Thumbnail{
+		FileID:    f.ID,
+		Size:      model.ThumbSizeVideoStill,
+		Width:     600,
+		Height:    338,
+		Format:    "jpeg",
+		LocalPath: "/tmp/thumb-video_still.jpg",
+		SizeBytes: 50000,
+	}
+	if err := ts.Create(still); err != nil {
+		t.Fatalf("create thumbnail: %v", err)
+	}
+
+	p := &Pool{
+		cfg:            cfg,
+		thumbnailStore: ts,
+		storageService: nil,
+		stopCh:         make(chan struct{}),
+		s3JobCh:        make(chan *s3Task, 4),
+		s3Workers:      1,
+	}
+
+	p.wg.Add(1)
+	go p.s3Worker(0)
+
+	task := &s3Task{
+		UserID:   u.ID,
+		Filename: "test/file.mp4",
+		FileID:   f.ID,
+		Thumbnails: []*model.Thumbnail{
+			proxy, still,
+		},
+	}
+
+	p.s3JobCh <- task
+	time.Sleep(100 * time.Millisecond)
+
+	close(p.stopCh)
+	p.wg.Wait()
+
+	found, err := ts.FindByFileIDAndSize(f.ID, model.ThumbSizeVideoProxy)
+	if err != nil {
+		t.Fatalf("FindByFileIDAndSize: %v", err)
+	}
+	if found.S3Key != nil {
+		t.Error("expected S3Key to remain nil with nil storageService")
+	}
+}
+
 func intPtr(n int) *int { return &n }

@@ -41,6 +41,17 @@ func (s *ThumbnailStore) Create(t *model.Thumbnail) error {
 	return fmt.Errorf("insert thumbnail after %d retries: %w", maxRetries, lastErr)
 }
 
+func (s *ThumbnailStore) SetS3Key(fileID string, size model.ThumbnailSize, s3Key string) error {
+	_, err := s.db.Exec(
+		`UPDATE thumbnails SET s3_key = ? WHERE file_id = ? AND size = ?`,
+		s3Key, fileID, size,
+	)
+	if err != nil {
+		return fmt.Errorf("set thumbnail s3_key: %w", err)
+	}
+	return nil
+}
+
 func (s *ThumbnailStore) TotalSize() (int64, error) {
 	var size int64
 	err := s.db.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM thumbnails`).Scan(&size)
