@@ -135,6 +135,7 @@ import GalleryControls from '../components/GalleryControls.vue'
 import GalleryListView from '../components/GalleryListView.vue'
 import GalleryGroupedView from '../components/GalleryGroupedView.vue'
 
+// Local FileItem includes both snake_case (API response) and camelCase variants
 interface FileItem {
   id: string
   original_name: string
@@ -242,12 +243,14 @@ const lightboxFile = computed(() => {
   if (lightboxIndex.value < 0 || lightboxIndex.value >= displayFiles.value.length) return null
   const f = displayFiles.value[lightboxIndex.value]
   const t = f.thumbnails
-  return {
-    id: f.id,
-    originalName: f.originalName || f.original_name,
-    mediaType: f.mediaType || f.media_type,
-    sizeBytes: f.sizeBytes || f.size_bytes || 0,
-    thumbnails: t ? {
+    return {
+      id: f.id,
+      originalName: f.originalName || f.original_name,
+      filename: f.filename || '',
+      mediaType: f.mediaType || f.media_type,
+      sizeBytes: f.sizeBytes || f.size_bytes || 0,
+      mimeType: f.mimeType || f.mime_type || '',
+      thumbnails: t ? {
       sm: t.sm || { url: '', width: 60, height: 60 },
       md: t.md || { url: '', width: 600, height: 600 },
       preview: t.preview || { url: '', width: 720, height: 720 },

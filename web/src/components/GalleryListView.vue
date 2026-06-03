@@ -73,21 +73,7 @@ import { computed } from 'vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
-interface FileItem {
-  id: string
-  originalName: string
-  filename: string
-  sizeBytes: number
-  mimeType: string
-  mediaType: string
-  durationSec?: number
-  takenAt?: string
-  createdAt?: string
-  folder_id?: string | null
-  thumbnails?: {
-    sm?: { url: string; width: number; height: number }
-  }
-}
+import type { FileItem } from '../types/gallery'
 
 const props = defineProps<{
   files: FileItem[]
@@ -149,7 +135,6 @@ function fileExtension(file: FileItem): string {
 
 <style scoped>
 .scroller {
-  height: calc(100vh - 200px);
-  min-height: 400px;
+  height: auto;
 }
 </style>

@@ -28,7 +28,9 @@ function makeFile(overrides: Record<string, any> = {}) {
   return {
     id: 'file-1',
     originalName: 'test.jpg',
+    filename: 'test.jpg',
     sizeBytes: 1024,
+    mimeType: 'image/jpeg',
     mediaType: 'photo',
     thumbnails: {
       sm: { url: '/thumb/sm.jpg', width: 200, height: 200 },

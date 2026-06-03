@@ -67,6 +67,7 @@
 import { ref, onMounted } from 'vue'
 import api from '../api/client'
 import FolderNode from './FolderNode.vue'
+import type { RootNode } from '../types/gallery'
 
 const props = defineProps<{
   open: boolean
@@ -78,26 +79,6 @@ const emit = defineEmits<{
   close: []
   confirm: [folderId: string | null]
 }>()
-
-interface FolderEntry {
-  id: string
-  name: string
-  parent_id: string | null
-  user_id: string
-  created_at: string
-  updated_at: string
-}
-
-interface FolderTreeNode {
-  folder: FolderEntry
-  fileCount: number
-  hasShares: boolean
-  children: FolderTreeNode[]
-}
-
-interface RootNode {
-  children: FolderTreeNode[]
-}
 
 const root = ref<RootNode>({ children: [] })
 const selectedFolderId = ref<string | null>(null)

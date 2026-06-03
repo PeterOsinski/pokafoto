@@ -74,24 +74,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-
-interface FileItem {
-  id: string
-  originalName: string
-  filename: string
-  mediaType: string
-  durationSec?: number
-  takenAt?: string
-  folder_id?: string | null
-  isAppManaged?: boolean
-  thumbnails?: {
-    sm?: { url: string; width: number; height: number }
-    lg?: { url: string; width: number; height: number }
-    md?: { url: string; width: number; height: number }
-    preview?: { url: string; width: number; height: number }
-    videoStill?: { url: string; width: number; height: number }
-  }
-}
+import type { FileItem } from '../types/gallery'
 
 const props = defineProps<{
   file: FileItem

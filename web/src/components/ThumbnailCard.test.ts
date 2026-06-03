@@ -8,6 +8,8 @@ function makeFile(overrides: Record<string, any> = {}) {
     id: 'file-1',
     originalName: 'test.jpg',
     filename: 'test.jpg',
+    sizeBytes: 1024,
+    mimeType: 'image/jpeg',
     mediaType: 'photo',
     thumbnails: {
       sm: { url: '/thumb/sm.jpg', width: 60, height: 60 },

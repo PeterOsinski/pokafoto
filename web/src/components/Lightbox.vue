@@ -125,21 +125,7 @@ import { useAuthStore } from '../stores/auth'
 import VideoPlayer from './VideoPlayer.vue'
 import CommentsSection from './CommentsSection.vue'
 import TagInput from './TagInput.vue'
-
-interface FileItem {
-  id: string
-  originalName: string
-  mediaType?: string
-  sizeBytes: number
-  videoStill?: { url: string }
-  thumbnails?: {
-    sm: { url: string; width: number; height: number }
-    md: { url: string; width: number; height: number }
-    xl?: { url: string; width: number; height: number }
-    preview: { url: string; width: number; height: number }
-    videoProxy?: { url: string; width: number; height: number }
-  }
-}
+import type { FileItem } from '../types/gallery'
 
 interface ExifData {
   cameraMake?: string

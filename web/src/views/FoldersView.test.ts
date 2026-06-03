@@ -121,7 +121,7 @@ describe('FoldersView', () => {
     await new Promise((r) => setTimeout(r, 10))
     await nextTick()
 
-    expect(wrapper.text()).toContain('No files in this folder')
+    expect(wrapper.text()).toContain('No contents to show')
   })
 
   it('navigates into a folder on card click', async () => {
@@ -190,8 +190,8 @@ describe('FoldersView', () => {
     await new Promise((r) => setTimeout(r, 50))
     await nextTick()
 
-    const tileView = wrapper.findComponent({ name: 'GalleryTileView' })
-    expect(tileView.exists()).toBe(true)
+    const content = wrapper.findComponent({ name: 'GalleryContent' })
+    expect(content.exists()).toBe(true)
   })
 
   it('layout grouped renders GalleryGroupedView', async () => {

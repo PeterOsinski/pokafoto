@@ -130,36 +130,7 @@ import FolderPasswordDialog from './FolderPasswordDialog.vue'
 import FolderShareDialog from './FolderShareDialog.vue'
 import { useChunkedUploadStore } from '../stores/chunkedUpload'
 import { useFolderUnlockStore } from '../stores/folderUnlock'
-
-interface FileItem {
-  id: string
-  originalName: string
-  filename: string
-  sizeBytes: number
-  mimeType: string
-  mediaType: string
-  durationSec?: number
-  takenAt?: string
-  folder_id?: string | null
-  thumbnails?: any
-}
-
-interface FolderEntry {
-  id: string
-  name: string
-  parent_id: string | null
-}
-
-interface FolderTreeNode {
-  folder: FolderEntry
-  fileCount: number
-  hasShares: boolean
-  children: FolderTreeNode[]
-}
-
-interface RootNode {
-  children: FolderTreeNode[]
-}
+import type { FileItem, FolderTreeNode, RootNode } from '../types/gallery'
 
 const props = defineProps<{
   folderId: string | null

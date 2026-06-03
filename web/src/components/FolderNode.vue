@@ -39,19 +39,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-
-interface FolderEntry {
-  id: string
-  name: string
-  parent_id: string | null
-}
-
-interface FolderTreeNode {
-  folder: FolderEntry
-  fileCount: number
-  hasShares: boolean
-  children: FolderTreeNode[]
-}
+import type { FolderTreeNode } from '../types/gallery'
 
 defineProps<{
   node: FolderTreeNode

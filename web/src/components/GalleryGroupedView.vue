@@ -36,25 +36,7 @@ import { computed } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import ThumbnailCard from './ThumbnailCard.vue'
-
-interface FileItem {
-  id: string
-  originalName: string
-  filename: string
-  sizeBytes: number
-  mimeType: string
-  mediaType: string
-  durationSec?: number
-  takenAt?: string
-  folder_id?: string | null
-  thumbnails?: {
-    sm?: { url: string; width: number; height: number }
-    lg?: { url: string; width: number; height: number }
-    md?: { url: string; width: number; height: number }
-    preview?: { url: string; width: number; height: number }
-    videoStill?: { url: string; width: number; height: number }
-  }
-}
+import type { FileItem } from '../types/gallery'
 
 interface GroupedEntry {
   file: FileItem
@@ -139,7 +121,6 @@ const groupItems = computed<GroupItem[]>(() => {
 
 <style scoped>
 .scroller {
-  height: calc(100vh - 200px);
-  min-height: 400px;
+  height: auto;
 }
 </style>
