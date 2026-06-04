@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -102,58 +103,22 @@ func isSQLiteBusy(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "SQLITE_BUSY")
 }
 
-func (s *UploadJobStore) FindByID(id string) (*model.UploadJob, error) {
-	job := &model.UploadJob{}
-	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString
-	var createdAt, updatedAt string
-	var skipNameSizeDedup int
-	var uploadMode string
-	var chunkSize sql.NullInt64
-	var totalChunks sql.NullInt64
+func isSQLErrNoRows(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
+}
 
-	err := s.db.QueryRow(
+func (s *UploadJobStore) FindByID(id string) (*model.UploadJob, error) {
+	row := s.db.QueryRow(
 		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE id = ?`,
 		id,
-	).Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &uploadMode, &chunkSize, &totalChunks, &resumeToken, &createdAt, &updatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	)
+	job, err := s.scanJob(row)
 	if err != nil {
-		return nil, fmt.Errorf("find upload job: %w", err)
+		if isSQLErrNoRows(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-
-	if stage.Valid {
-		s := model.JobStage(stage.String)
-		job.Stage = &s
-	}
-	if errorStr.Valid {
-		job.Error = &errorStr.String
-	}
-	if reasonStr.Valid {
-		job.Reason = &reasonStr.String
-	}
-	if fileID.Valid {
-		job.FileID = &fileID.String
-	}
-	if folderID.Valid {
-		job.FolderID = &folderID.String
-	}
-	if resumeToken.Valid {
-		job.ResumeToken = &resumeToken.String
-	}
-	job.UploadMode = model.UploadMode(uploadMode)
-	if chunkSize.Valid {
-		cs := chunkSize.Int64
-		job.ChunkSize = &cs
-	}
-	if totalChunks.Valid {
-		tc := int(totalChunks.Int64)
-		job.TotalChunks = &tc
-	}
-	job.SkipNameSizeDedup = skipNameSizeDedup == 1
-	job.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	job.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
-
 	return job, nil
 }
 
@@ -377,57 +342,17 @@ func (s *UploadJobStore) SetStatus(id string, status model.JobStatus) error {
 }
 
 func (s *UploadJobStore) FindByResumeToken(token string) (*model.UploadJob, error) {
-	job := &model.UploadJob{}
-	var stage, errorStr, reasonStr, fileID, folderID, resumeToken sql.NullString
-	var createdAt, updatedAt string
-	var skipNameSizeDedup int
-	var uploadMode string
-	var chunkSize sql.NullInt64
-	var totalChunks sql.NullInt64
-
-	err := s.db.QueryRow(
+	row := s.db.QueryRow(
 		`SELECT id, batch_id, user_id, filename, size_bytes, temp_path, folder_id, skip_name_size_dedup, status, stage, progress, error, reason, file_id, upload_mode, chunk_size, total_chunks, resume_token, created_at, updated_at FROM upload_jobs WHERE resume_token = ?`,
 		token,
-	).Scan(&job.ID, &job.BatchID, &job.UserID, &job.Filename, &job.SizeBytes, &job.TempPath, &folderID, &skipNameSizeDedup, &job.Status, &stage, &job.Progress, &errorStr, &reasonStr, &fileID, &uploadMode, &chunkSize, &totalChunks, &resumeToken, &createdAt, &updatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	)
+	job, err := s.scanJob(row)
 	if err != nil {
-		return nil, fmt.Errorf("find upload job by resume token: %w", err)
+		if isSQLErrNoRows(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-
-	if stage.Valid {
-		s := model.JobStage(stage.String)
-		job.Stage = &s
-	}
-	if errorStr.Valid {
-		job.Error = &errorStr.String
-	}
-	if reasonStr.Valid {
-		job.Reason = &reasonStr.String
-	}
-	if fileID.Valid {
-		job.FileID = &fileID.String
-	}
-	if folderID.Valid {
-		job.FolderID = &folderID.String
-	}
-	if resumeToken.Valid {
-		job.ResumeToken = &resumeToken.String
-	}
-	job.UploadMode = model.UploadMode(uploadMode)
-	if chunkSize.Valid {
-		cs := chunkSize.Int64
-		job.ChunkSize = &cs
-	}
-	if totalChunks.Valid {
-		tc := int(totalChunks.Int64)
-		job.TotalChunks = &tc
-	}
-	job.SkipNameSizeDedup = skipNameSizeDedup == 1
-	job.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	job.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
-
 	return job, nil
 }
 

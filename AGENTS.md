@@ -1,5 +1,43 @@
 # Drive — Development Rules
 
+## Architecture
+
+| package   | role                                  | examples |
+|-----------|---------------------------------------|----------|
+| `model/`  | pure data structs, zero dependencies  | `File`, `UploadJob`, `User` |
+| `store/`  | data access, SQL, migrations          | `FileStore`, `UserStore`, `DB` |
+| `service/`| business logic, external integrations | `StorageService`, `EventRecorder`, `ExifService`, `FileSystem` |
+| `worker/` | async job processing                  | `Pool` (upload pipeline) |
+| `server/` | HTTP handlers, middleware, routing    | `handlers_*.go`, `auth.go`, `chunk_upload.go` |
+| `backup/` | database backup scheduling            | `Scheduler` |
+| `config/` | config struct + env loading           | `Config`, `Load()` |
+
+### Interface contracts
+
+Every store and external dependency defines an interface in `store/interfaces.go` or `service/interfaces.go`. All 22 store types (`FileRepository`, `UserRepository`, etc.) and 2 service types (`StorageProvider`, `FileSystem`) have explicit contracts. New dependencies must follow this pattern: define the interface where it's consumed, not where it's implemented.
+
+### Handler organization
+
+One file per domain, using `handlers_*.go` naming. Admin handlers are split to `handlers_admin.go`. Shared response types live in `response_types.go`. Do NOT add to a single monolithic file.
+
+### Filesystem abstraction
+
+All `os`, `filepath`, and `unix` calls go through `service.FileSystem`. Use `service.NewRealFS()` in production, `service.NewMockFS()` in tests. The mock supports `AddFile`, `ReadDir`, `Walk`, `Stat`, `Remove`, `RemoveAll`, `MkdirAll`, `ReadFile`, and `Statfs` with an in-memory store.
+
+### Store access
+
+Handlers call store methods exclusively — never embed raw SQL. The `db.Query()` pattern seen in legacy trash handlers is deprecated.
+
+### Background services
+
+`CacheEvictor`, `S3DeletionPool`, `trashCleanup`, and `chunkCleanup` should accept interfaces (`FileSystem`, `StorageProvider`) rather than calling `os`/`unix` directly. This avoids coupling background processes to global state and enables isolated testing.
+
+### Future direction
+
+- **Domain controllers** — The `Server` struct should shrink from ~49 fields to ~15 by extracting domain controllers (`FileController`, `AuthController`, etc.), each owning only its required dependencies.
+- **Service extraction** — Move `CacheEvictor`, `S3DeletionPool`, `trashCleanup`, and `chunkCleanup` from `server/` into `service/` with their own interface contracts and tests.
+- **Coverage targets** — Current: backup 17%, server 45%, service 31%, store 66%, worker 54%. Target per this document below: store 90%+, handler 70%+, worker 80%+.
+
 ## PRD-First Workflow
 
 All feature requests and significant changes MUST go through the `prd/` folder first. Before writing any code:

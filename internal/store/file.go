@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -164,7 +165,7 @@ func (s *FileStore) List(opts FileListOptions) ([]*model.File, string, int, erro
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			return nil, "", 0, err
 		}
@@ -370,7 +371,7 @@ func (s *FileStore) SearchEnhanced(opts SearchOptions) (*SearchResult, map[strin
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			continue
 		}
@@ -429,7 +430,7 @@ func (s *FileStore) Search(userID, query string, limit int) (*SearchResult, erro
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			continue
 		}
@@ -495,59 +496,19 @@ func (s *FileStore) Timeline(userID, granularity string) ([]TimelineGroup, error
 	return groups, rows.Err()
 }
 
-func (s *FileStore) scanFile(row interface{ Scan(dest ...interface{}) error }) (*model.File, error) {
-	f := &model.File{}
-	var width, height sql.NullInt64
-	var durationSec sql.NullFloat64
-	var takenAt sql.NullString
-	var folderID sql.NullString
-	var createdAt, updatedAt string
-	var deletedAt sql.NullString
-	var isDeleted int
-	var isAppManaged int
-
-	err := row.Scan(&f.ID, &f.UserID, &f.Filename, &f.OriginalName, &f.Path, &f.SizeBytes, &f.MimeType, &f.SHA256, &f.MediaType, &width, &height, &durationSec, &takenAt, &folderID, &createdAt, &updatedAt, &deletedAt, &isDeleted, &isAppManaged)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("scan file: %w", err)
-	}
-
-	if width.Valid {
-		w := int(width.Int64)
-		f.Width = &w
-	}
-	if height.Valid {
-		h := int(height.Int64)
-		f.Height = &h
-	}
-	if durationSec.Valid {
-		f.DurationSec = &durationSec.Float64
-	}
-	if takenAt.Valid {
-		f.TakenAt = &takenAt.String
-	}
-	if folderID.Valid {
-		f.FolderID = &folderID.String
-	}
-	f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
-	f.IsDeleted = isDeleted == 1
-	f.IsAppManaged = isAppManaged == 1
-	if deletedAt.Valid {
-		t, _ := time.Parse(time.RFC3339, deletedAt.String)
-		f.DeletedAt = &t
-	}
-
-	return f, nil
-}
-
 type scannable interface {
 	Scan(dest ...interface{}) error
 }
 
-func (s *FileStore) scanFileFromRows(row scannable) (*model.File, error) {
+func (s *FileStore) scanFile(row scannable) (*model.File, error) {
+	f, err := s.scanFileFromRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return f, err
+}
+
+func (s *FileStore) scanFileFromRow(row scannable) (*model.File, error) {
 	f := &model.File{}
 	var width, height sql.NullInt64
 	var durationSec sql.NullFloat64
@@ -624,7 +585,7 @@ func (s *FileStore) FindByNameAndSizeBatch(userID string, nameSizes []FileRecord
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			continue
 		}
@@ -826,7 +787,7 @@ func (s *FileStore) BatchCopy(userID string, ids []string, folderID *string) ([]
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	for rows.Next() {
-		src, err := s.scanFileFromRows(rows)
+		src, err := s.scanFileFromRow(rows)
 		if err != nil {
 			continue
 		}
@@ -971,7 +932,7 @@ func (s *FileStore) ListTrash(opts FileListOptions) ([]*model.File, string, int,
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			return nil, "", 0, err
 		}
@@ -1111,7 +1072,7 @@ func (s *FileStore) ListFilesByFolderID(folderID, cursor string, limit int) ([]*
 
 	var files []*model.File
 	for rows.Next() {
-		f, err := s.scanFileFromRows(rows)
+		f, err := s.scanFileFromRow(rows)
 		if err != nil {
 			continue
 		}
