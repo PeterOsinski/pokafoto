@@ -185,6 +185,82 @@ func TestThumbnailStore_SetS3Key_shouldWorkForVideoStill(t *testing.T) {
 	}
 }
 
+func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnRefs(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 500)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeMedium, 1200)
+
+	refs, err := ts.FindThumbnailRefsByFileID(f.ID)
+	if err != nil {
+		t.Fatalf("FindThumbnailRefsByFileID: %v", err)
+	}
+	if len(refs) != 2 {
+		t.Errorf("expected 2 refs, got %d", len(refs))
+	}
+}
+
+func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnEmpty(t *testing.T) {
+	db := OpenTestDB(t)
+	ts := NewThumbnailStore(db)
+
+	refs, err := ts.FindThumbnailRefsByFileID("nonexistent")
+	if err != nil {
+		t.Fatalf("FindThumbnailRefsByFileID: %v", err)
+	}
+	if len(refs) != 0 {
+		t.Errorf("expected 0 refs, got %d", len(refs))
+	}
+}
+
+func TestThumbnailStore_BreakdownByUser_shouldReturnPerSizeCounts(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 500)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeMedium, 1200)
+
+	breakdown, err := ts.BreakdownByUser(user.ID)
+	if err != nil {
+		t.Fatalf("BreakdownByUser: %v", err)
+	}
+	if len(breakdown) != 2 {
+		t.Fatalf("expected 2 size groups, got %d", len(breakdown))
+	}
+}
+
+func TestThumbnailStore_BreakdownByUser_shouldExcludeDeletedFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 500)
+	fs.SoftDelete(f.ID)
+
+	breakdown, err := ts.BreakdownByUser(user.ID)
+	if err != nil {
+		t.Fatalf("BreakdownByUser: %v", err)
+	}
+	if len(breakdown) != 0 {
+		t.Errorf("expected 0 for deleted file, got %d", len(breakdown))
+	}
+}
+
 func createTestThumb(t *testing.T, ts *ThumbnailStore, fileID string, size model.ThumbnailSize, sizeBytes int64) {
 	t.Helper()
 	th := &model.Thumbnail{

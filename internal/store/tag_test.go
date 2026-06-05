@@ -99,6 +99,27 @@ func TestTagStore_ListWithCount_shouldReturnCounts(t *testing.T) {
 	}
 }
 
+func TestTagStore_RemoveFromFile_shouldRemoveTag(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewTagStore(db)
+
+	user := createTestUser(t, us)
+	file := createTestFile(t, fs, user.ID, "test.jpg")
+	tag, _ := ts.FindOrCreate("vacation")
+	ts.AddToFile(file.ID, tag.ID, user.ID)
+
+	if err := ts.RemoveFromFile(file.ID, tag.ID); err != nil {
+		t.Fatalf("RemoveFromFile() error = %v", err)
+	}
+
+	tags, _ := ts.FindByFileID(file.ID)
+	if len(tags) != 0 {
+		t.Errorf("expected 0 tags after removal, got %d", len(tags))
+	}
+}
+
 func TestTagStore_ListWithCount_shouldExcludeDeletedAndOtherUsers(t *testing.T) {
 	db := OpenTestDB(t)
 	us := NewUserStore(db)

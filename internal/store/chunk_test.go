@@ -376,3 +376,11 @@ func TestChunkStore_CleanupOldUploads_shouldSkipRecentJobs(t *testing.T) {
 		t.Errorf("expected 0 expired uploads, got %d", len(ids))
 	}
 }
+
+func TestChunkTempDir_shouldReturnChunksPath(t *testing.T) {
+	result := ChunkTempDir("/data/originals")
+	expected := filepath.Join("/data/originals", "..", "tmp", "chunks")
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

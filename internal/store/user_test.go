@@ -202,3 +202,106 @@ func TestUserStore_Count_shouldReturnCorrectCount(t *testing.T) {
 		t.Errorf("expected 2, got %d", c2)
 	}
 }
+
+func TestUserStore_UpdateSpaceQuota_shouldSetQuota(t *testing.T) {
+	db := OpenTestDB(t)
+	s := NewUserStore(db)
+
+	u, _ := s.Create("quota-user", "pass", model.RoleMember, nil)
+	quota := int64(5000000000)
+	if err := s.UpdateSpaceQuota(u.ID, &quota); err != nil {
+		t.Fatalf("UpdateSpaceQuota: %v", err)
+	}
+
+	found, _ := s.FindByID(u.ID)
+	if found.SpaceQuota == nil || *found.SpaceQuota != quota {
+		t.Errorf("expected quota %d, got %v", quota, found.SpaceQuota)
+	}
+}
+
+func TestUserStore_UpdateSpaceQuota_shouldSetNil(t *testing.T) {
+	db := OpenTestDB(t)
+	s := NewUserStore(db)
+
+	u, _ := s.Create("nilquota-user", "pass", model.RoleMember, nil)
+	if err := s.UpdateSpaceQuota(u.ID, nil); err != nil {
+		t.Fatalf("UpdateSpaceQuota nil: %v", err)
+	}
+
+	found, _ := s.FindByID(u.ID)
+	if found.SpaceQuota != nil {
+		t.Errorf("expected nil quota, got %v", *found.SpaceQuota)
+	}
+}
+
+func TestUserStore_GetUsedSpace_shouldReturnTotal(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f1 := createTestFile(t, fs, user.ID, "f1.jpg")
+	f2 := createTestFile(t, fs, user.ID, "f2.jpg")
+
+	used, err := us.GetUsedSpace(user.ID)
+	if err != nil {
+		t.Fatalf("GetUsedSpace: %v", err)
+	}
+	if used != f1.SizeBytes+f2.SizeBytes {
+		t.Errorf("expected %d, got %d", f1.SizeBytes+f2.SizeBytes, used)
+	}
+}
+
+func TestUserStore_GetUsedSpace_shouldExcludeDeletedFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+	fs.SoftDelete(f.ID)
+
+	used, _ := us.GetUsedSpace(user.ID)
+	if used != 0 {
+		t.Errorf("expected 0 after soft delete, got %d", used)
+	}
+}
+
+func TestUserStore_GetThumbnailSize_shouldReturnThumbnailTotal(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 100)
+	createTestThumb(t, ts, f.ID, model.ThumbSizeMedium, 200)
+
+	size, err := us.GetThumbnailSize(user.ID)
+	if err != nil {
+		t.Fatalf("GetThumbnailSize: %v", err)
+	}
+	if size != 300 {
+		t.Errorf("expected 300, got %d", size)
+	}
+}
+
+func TestUserStore_GetThumbnailSize_shouldExcludeDeletedFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	ts := NewThumbnailStore(db)
+
+	user := createTestUser(t, us)
+	f := createTestFile(t, fs, user.ID, "photo.jpg")
+
+	createTestThumb(t, ts, f.ID, model.ThumbSizeSmall, 100)
+	fs.SoftDelete(f.ID)
+
+	size, _ := us.GetThumbnailSize(user.ID)
+	if size != 0 {
+		t.Errorf("expected 0 after soft delete, got %d", size)
+	}
+}

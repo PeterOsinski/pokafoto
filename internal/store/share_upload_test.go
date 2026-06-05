@@ -103,3 +103,55 @@ func TestShareUploadStore_SumByShareID_shouldReturnZeroWhenNone(t *testing.T) {
 		t.Errorf("expected 0, got %d", total)
 	}
 }
+
+func TestShareUploadStore_ListByShareID_shouldReturnUploads(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFolderStore(db)
+	filestore := NewFileStore(db)
+	shs := NewFolderShareStore(db)
+	sus := NewShareUploadStore(db)
+
+	user := createTestUser(t, us)
+	folder, _ := fs.Create(user.ID, "Shared Folder", nil)
+	share := &model.FolderShare{FolderID: folder.ID, Permissions: model.ShareReadUpload}
+	shs.Create(share)
+
+	file := &model.File{
+		UserID:       user.ID,
+		Filename:     "a.txt",
+		OriginalName: "a.txt",
+		Path:         "",
+		SizeBytes:    100,
+		MimeType:     "text/plain",
+		SHA256:       "hash123",
+		MediaType:    model.MediaTypeFile,
+		FolderID:     &folder.ID,
+	}
+	filestore.Create(file)
+	sus.Create(share.ID, file.ID, 100)
+
+	uploads, err := sus.ListByShareID(share.ID)
+	if err != nil {
+		t.Fatalf("ListByShareID: %v", err)
+	}
+	if len(uploads) != 1 {
+		t.Fatalf("expected 1 upload, got %d", len(uploads))
+	}
+	if uploads[0].FileID != file.ID {
+		t.Errorf("expected fileID %q, got %q", file.ID, uploads[0].FileID)
+	}
+}
+
+func TestShareUploadStore_ListByShareID_shouldReturnEmpty(t *testing.T) {
+	db := OpenTestDB(t)
+	sus := NewShareUploadStore(db)
+
+	uploads, err := sus.ListByShareID("nonexistent")
+	if err != nil {
+		t.Fatalf("ListByShareID: %v", err)
+	}
+	if len(uploads) != 0 {
+		t.Errorf("expected 0, got %d", len(uploads))
+	}
+}

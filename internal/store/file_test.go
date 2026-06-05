@@ -1002,3 +1002,246 @@ func TestFileStore_SoftDeleteByFolderIDs_shouldSoftDeleteFilesInFolders(t *testi
 		t.Error("f3 should NOT be soft-deleted")
 	}
 }
+
+func TestFileStore_BatchSoftDelete_shouldSoftDeleteMultipleFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f1 := createTestFile(t, fs, u.ID, "batch1.jpg")
+	f2 := createTestFile(t, fs, u.ID, "batch2.jpg")
+
+	if err := fs.BatchSoftDelete(u.ID, []string{f1.ID, f2.ID}); err != nil {
+		t.Fatalf("BatchSoftDelete: %v", err)
+	}
+
+	f1Check, _ := fs.FindByID(f1.ID)
+	if !f1Check.IsDeleted {
+		t.Error("f1 should be soft-deleted")
+	}
+	f2Check, _ := fs.FindByID(f2.ID)
+	if !f2Check.IsDeleted {
+		t.Error("f2 should be soft-deleted")
+	}
+}
+
+func TestFileStore_BatchSoftDelete_shouldScopeToUser(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u1 := createTestUser(t, us)
+	u2, _ := us.Create("batchscope-other", "password123", model.RoleMember, nil)
+	f := createTestFile(t, fs, u1.ID, "other-user.jpg")
+
+	if err := fs.BatchSoftDelete(u2.ID, []string{f.ID}); err != nil {
+		t.Fatalf("BatchSoftDelete: %v", err)
+	}
+
+	fCheck, _ := fs.FindByID(f.ID)
+	if fCheck.IsDeleted {
+		t.Error("file owned by user1 should not be deleted by user2")
+	}
+}
+
+func TestFileStore_PermanentDeleteByIDs_shouldDeleteFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f1 := createTestFile(t, fs, u.ID, "perm1.jpg")
+	f2 := createTestFile(t, fs, u.ID, "perm2.jpg")
+
+	if err := fs.PermanentDeleteByIDs([]string{f1.ID, f2.ID}); err != nil {
+		t.Fatalf("PermanentDeleteByIDs: %v", err)
+	}
+
+	found, err := fs.FindByID(f1.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if found != nil {
+		t.Error("f1 should not be found after permanent delete")
+	}
+}
+
+func TestFileStore_UpdateSizeAndHash_shouldUpdateFields(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f := createTestFile(t, fs, u.ID, "size.jpg")
+
+	if err := fs.UpdateSizeAndHash(f.ID, 9999, "abc123hash"); err != nil {
+		t.Fatalf("UpdateSizeAndHash: %v", err)
+	}
+
+	found, _ := fs.FindByID(f.ID)
+	if found.SizeBytes != 9999 {
+		t.Errorf("expected 9999, got %d", found.SizeBytes)
+	}
+	if found.SHA256 != "abc123hash" {
+		t.Errorf("expected abc123hash, got %s", found.SHA256)
+	}
+}
+
+func TestFileStore_BatchCopy_shouldDuplicateFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	folderStore := NewFolderStore(db)
+
+	u := createTestUser(t, us)
+	folder, _ := folderStore.Create(u.ID, "Dest", nil)
+	f := createTestFile(t, fs, u.ID, "source.jpg")
+
+	copies, err := fs.BatchCopy(u.ID, []string{f.ID}, &folder.ID)
+	if err != nil {
+		t.Fatalf("BatchCopy: %v", err)
+	}
+	if len(copies) != 1 {
+		t.Fatalf("expected 1 copy, got %d", len(copies))
+	}
+	if copies[0].OriginalName != "source.jpg" {
+		t.Errorf("expected source.jpg, got %s", copies[0].OriginalName)
+	}
+	if copies[0].FolderID == nil || *copies[0].FolderID != folder.ID {
+		t.Error("copy should be in destination folder")
+	}
+}
+
+func TestFileStore_BatchCopy_shouldScopeToUser(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u1 := createTestUser(t, us)
+	u2, _ := us.Create("copy-scope-other", "password123", model.RoleMember, nil)
+	f := createTestFile(t, fs, u1.ID, "notyours.jpg")
+
+	copies, err := fs.BatchCopy(u2.ID, []string{f.ID}, nil)
+	if err != nil {
+		t.Fatalf("BatchCopy: %v", err)
+	}
+	if len(copies) != 0 {
+		t.Errorf("expected 0 copies for other user, got %d", len(copies))
+	}
+}
+
+func TestFileStore_ListFilesByFolderID_shouldReturnFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+	folderStore := NewFolderStore(db)
+
+	u := createTestUser(t, us)
+	folder, _ := folderStore.Create(u.ID, "MyFolder", nil)
+
+	f1 := createTestFile(t, fs, u.ID, "f1.jpg")
+	f1.FolderID = &folder.ID
+	fs.BatchMove(u.ID, []string{f1.ID}, &folder.ID)
+
+	f2 := createTestFile(t, fs, u.ID, "f2.jpg")
+	f2.FolderID = &folder.ID
+	fs.BatchMove(u.ID, []string{f2.ID}, &folder.ID)
+
+	files, cursor, total, err := fs.ListFilesByFolderID(folder.ID, "", 10)
+	if err != nil {
+		t.Fatalf("ListFilesByFolderID: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("expected 2 files, got %d", total)
+	}
+	if len(files) != 2 {
+		t.Errorf("expected 2 files, got %d", len(files))
+	}
+	if cursor != "" {
+		t.Errorf("expected empty cursor, got %s", cursor)
+	}
+}
+
+func TestFileStore_CountPhotosMissingThumbnailPreview_shouldCountMissing(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	user := createTestUser(t, us)
+	createTestFile(t, fs, user.ID, "hasthumbs.jpg")
+	createTestFile(t, fs, user.ID, "nothumbs.jpg")
+
+	cnt, err := fs.CountPhotosMissingThumbnailPreview()
+	if err != nil {
+		t.Fatalf("CountPhotosMissingThumbnailPreview: %v", err)
+	}
+	if cnt != 2 {
+		t.Errorf("expected 2 missing previews, got %d", cnt)
+	}
+}
+
+func TestFileStore_AdminFileBreakdownByUser_shouldReturnBreakdown(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	createTestFile(t, fs, u.ID, "admin-photo.jpg")
+
+	b, err := fs.AdminFileBreakdownByUser(u.ID)
+	if err != nil {
+		t.Fatalf("AdminFileBreakdownByUser: %v", err)
+	}
+	if len(b.MediaTypes) == 0 {
+		t.Error("expected at least 1 media type")
+	}
+	if b.TotalSize != 1024 {
+		t.Errorf("expected total size 1024, got %d", b.TotalSize)
+	}
+}
+
+func TestFileStore_ListTrashFiles_shouldReturnTrashedFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f1 := createTestFile(t, fs, u.ID, "trash1.jpg")
+	f2 := createTestFile(t, fs, u.ID, "trash2.jpg")
+	f3 := createTestFile(t, fs, u.ID, "alive.jpg")
+
+	fs.SoftDelete(f1.ID)
+	fs.SoftDelete(f2.ID)
+
+	files, err := fs.ListTrashFiles(u.ID, []string{f1.ID, f2.ID, f3.ID})
+	if err != nil {
+		t.Fatalf("ListTrashFiles: %v", err)
+	}
+	if len(files) != 2 {
+		t.Errorf("expected 2 trash files, got %d", len(files))
+	}
+}
+
+func TestFileStore_ListAllTrashFiles_shouldReturnAllTrashed(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFileStore(db)
+
+	u := createTestUser(t, us)
+	f1 := createTestFile(t, fs, u.ID, "all-trash1.jpg")
+	_ = createTestFile(t, fs, u.ID, "not-trash.jpg")
+
+	fs.SoftDelete(f1.ID)
+
+	files, err := fs.ListAllTrashFiles(u.ID)
+	if err != nil {
+		t.Fatalf("ListAllTrashFiles: %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("expected 1 trash file, got %d", len(files))
+	}
+	if files[0].ID != f1.ID {
+		t.Errorf("expected %s, got %s", f1.ID, files[0].ID)
+	}
+}

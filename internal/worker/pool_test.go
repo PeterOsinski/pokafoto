@@ -1497,7 +1497,111 @@ func TestPool_StandardJob_tempFileRemovedBeforeProcessing(t *testing.T) {
 		t.Fatalf("timed out, status=%s error=%v", fetched.Status, fetched.Error)
 	default:
 	}
-	time.Sleep(200 * time.Millisecond)
 	}
 }
+
+func TestPool_ProcessReconcileJob_noFileID_fails(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("reconnofile_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := &Pool{
+		cfg:            cfg,
+		fs:             service.NewRealFS(),
+		fileStore:      store.NewFileStore(db),
+		uploadJobStore: ujs,
+	}
+
+	f, _ := os.CreateTemp(t.TempDir(), "recon-*.jpg")
+	defer f.Close()
+	job := &model.UploadJob{Filename: "test.jpg", UserID: u.ID, TempPath: f.Name(), Status: model.JobStatusProcessing, BatchID: "batch-nofileid"}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	pool.processReconcileJob(job, f)
+
+	found, err := ujs.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if found == nil {
+		t.Fatal("job should exist in DB")
+	}
+	if found.Status != model.JobStatusFailed {
+		t.Errorf("expected failed status, got %s", found.Status)
+	}
+	if found.Error == nil || *found.Error != "reconcile_missing_file_id" {
+		t.Errorf("expected reconcile_missing_file_id error, got %v", found.Error)
+	}
+}
+
+func TestPool_ProcessReconcileJob_fileNotFound_fails(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("reconnofile_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pool := &Pool{
+		cfg:            cfg,
+		fs:             service.NewRealFS(),
+		fileStore:      store.NewFileStore(db),
+		uploadJobStore: ujs,
+	}
+
+	fileID := "nonexistent-file"
+	job := &model.UploadJob{Filename: "test.jpg", UserID: u.ID, FileID: &fileID, Status: model.JobStatusProcessing, BatchID: "batch-nofile"}
+	f, _ := os.CreateTemp(t.TempDir(), "recon-*.jpg")
+	defer f.Close()
+
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	pool.processReconcileJob(job, f)
+
+	fetched, err := ujs.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if fetched == nil {
+		t.Fatal("job should exist")
+	}
+	if fetched.Status != model.JobStatusFailed {
+		t.Errorf("expected failed, got %s", fetched.Status)
+	}
+	if fetched.Error == nil || *fetched.Error != "reconcile_file_not_found" {
+		t.Errorf("expected reconcile_file_not_found, got %v", fetched.Error)
+	}
+}
+
+func TestPool_StartReconciler_stopsOnShutdown(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+
+	db := store.OpenTestDB(t)
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, store.NewFileStore(db), store.NewExifStore(db), store.NewThumbnailStore(db), nil, store.NewUploadJobStore(db), nil, nil)
+
+	pool.StartReconciler(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+
+	pool.Shutdown()
+}
+
 func intPtr(n int) *int { return &n }

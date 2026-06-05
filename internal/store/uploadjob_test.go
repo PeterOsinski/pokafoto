@@ -731,3 +731,148 @@ func TestUploadJobStore_Requeue_shouldFailForNonFailedJob(t *testing.T) {
 		t.Error("expected error requeueing completed job, got nil")
 	}
 }
+
+func TestUploadJobStore_DeleteByID_shouldRemoveJob(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	job := &model.UploadJob{
+		BatchID:   "batch-delete",
+		UserID:    userID,
+		Filename:  "delete-me.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusCompleted,
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	if err := s.DeleteByID(job.ID); err != nil {
+		t.Fatalf("DeleteByID: %v", err)
+	}
+
+	fetched, _ := s.FindByID(job.ID)
+	if fetched != nil {
+		t.Error("expected nil after delete")
+	}
+}
+
+func TestUploadJobStore_SetStatus_shouldUpdateStatus(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	job := &model.UploadJob{
+		BatchID:   "batch-setstatus",
+		UserID:    userID,
+		Filename:  "status-test.jpg",
+		SizeBytes: 100,
+		TempPath:  tmpPath,
+		Status:    model.JobStatusQueued,
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	if err := s.SetStatus(job.ID, model.JobStatusFailed); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+
+	fetched, _ := s.FindByID(job.ID)
+	if fetched.Status != model.JobStatusFailed {
+		t.Errorf("expected failed, got %s", fetched.Status)
+	}
+}
+
+func TestUploadJobStore_CompleteChunked_shouldSetTotalChunks(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	job := &model.UploadJob{
+		BatchID:    "batch-chunked",
+		UserID:     userID,
+		Filename:   "chunked.jpg",
+		SizeBytes:  5000,
+		TempPath:   tmpPath,
+		Status:     model.JobStatusQueued,
+		UploadMode: "chunked",
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	if err := s.CompleteChunked(job.ID, 5); err != nil {
+		t.Fatalf("CompleteChunked: %v", err)
+	}
+
+	fetched, _ := s.FindByID(job.ID)
+	if fetched.TotalChunks == nil || *fetched.TotalChunks != 5 {
+		t.Errorf("expected total_chunks 5, got %v", fetched.TotalChunks)
+	}
+}
+
+func TestUploadJobStore_FindByResumeToken_shouldFindJob(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	rtok := "rtok-123"
+	job := &model.UploadJob{
+		BatchID:    "batch-resume",
+		UserID:     userID,
+		Filename:   "resume.jpg",
+		SizeBytes:  1000,
+		TempPath:   tmpPath,
+		Status:     model.JobStatusQueued,
+		UploadMode: "chunked",
+		ResumeToken: &rtok,
+	}
+	if err := s.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	fetched, err := s.FindByResumeToken("rtok-123")
+	if err != nil {
+		t.Fatalf("FindByResumeToken: %v", err)
+	}
+	if fetched == nil {
+		t.Fatal("expected job, got nil")
+	}
+	if fetched.ID != job.ID {
+		t.Errorf("expected job %s, got %s", job.ID, fetched.ID)
+	}
+}
+
+func TestUploadJobStore_FindByResumeToken_shouldReturnNil(t *testing.T) {
+	s, _, _ := setupUploadJobStore(t)
+
+	fetched, err := s.FindByResumeToken("nonexistent-token")
+	if err != nil {
+		t.Fatalf("FindByResumeToken: %v", err)
+	}
+	if fetched != nil {
+		t.Error("expected nil for unknown token")
+	}
+}
+
+func TestUploadJobStore_CountProcessing_shouldReturnCount(t *testing.T) {
+	s, userID, _ := setupUploadJobStore(t)
+	tmpPath := createTempPath(t)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	s.db.Exec(
+		`INSERT INTO upload_jobs (id, batch_id, user_id, filename, size_bytes, temp_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"jp1", "batch-cnt", userID, "p1.jpg", 100, tmpPath, string(model.JobStatusProcessing), now, now,
+	)
+	s.db.Exec(
+		`INSERT INTO upload_jobs (id, batch_id, user_id, filename, size_bytes, temp_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"jp2", "batch-cnt", userID, "p2.jpg", 200, tmpPath, string(model.JobStatusProcessing), now, now,
+	)
+
+	cnt, err := s.CountProcessing()
+	if err != nil {
+		t.Fatalf("CountProcessing: %v", err)
+	}
+	if cnt != 2 {
+		t.Errorf("expected 2, got %d", cnt)
+	}
+}
