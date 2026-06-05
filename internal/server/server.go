@@ -160,8 +160,8 @@ func New(cfg *config.Config, db *store.DB) *Server {
 
 	s.workerPool.StartReconciler(30 * time.Minute)
 
-	service.NewCacheEvictor(cfg, service.NewRealFS(), s.eventRecorder).Start()
-	service.NewTrashCleanup(s.file.FileStore, service.NewRealFS(), s.cfg.OriginalsDir(), s.cfg.ThumbnailsDir(), s.cfg.TrashExpirationDays, s.enqueueS3Deletion).Start(s.stopCh)
+	service.NewCacheEvictor(cfg, s.fs, s.eventRecorder).Start()
+	service.NewTrashCleanup(s.file.FileStore, s.fs, s.cfg.OriginalsDir(), s.cfg.ThumbnailsDir(), s.cfg.TrashExpirationDays, s.enqueueS3Deletion).Start(s.stopCh)
 	service.NewEventRetention(s.admin.SystemEventsStore).Start(s.stopCh)
 	service.NewChunkCleanup(s.upload.ChunkStore, s.cfg.Upload.ChunkCleanupHours, s.cfg.Upload.MaxChunkUploadAgeHours).Start(s.stopCh)
 	service.NewFolderPasswordCleanup(s.file.FolderPwStore).Start(s.stopCh)
