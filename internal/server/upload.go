@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	
 
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/store"
@@ -37,8 +37,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	for _, fh := range files {
 		incomingTotal += fh.Size
 	}
-	used, _ := s.userStore.GetUsedSpace(userID)
-	user, _ := s.userStore.FindByID(userID)
+	used, _ := s.auth.UserStore.GetUsedSpace(userID)
+	user, _ := s.auth.UserStore.FindByID(userID)
 	if user != nil && user.SpaceQuota != nil && used+incomingTotal > *user.SpaceQuota {
 		writeError(w, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED",
 			fmt.Sprintf("Upload would exceed space quota (%d used + %d incoming > %d limit)", used, incomingTotal, *user.SpaceQuota))
@@ -69,7 +69,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tempDir := s.cfg.StoragePath("tmp")
-		if err := os.MkdirAll(tempDir, 0755); err != nil {
+		if err := s.fs.MkdirAll(tempDir, 0755); err != nil {
 			file.Close()
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
@@ -79,7 +79,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			})
 			continue
 		}
-		tempFile, err := os.CreateTemp(tempDir, "drive-upload-*")
+		tempFile, err := s.fs.CreateTemp(tempDir, "drive-upload-*")
 		if err != nil {
 			file.Close()
 			jobs = append(jobs, map[string]interface{}{
@@ -94,7 +94,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.Copy(tempFile, file); err != nil {
 			file.Close()
 			tempFile.Close()
-			os.Remove(tempFile.Name())
+			s.fs.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -119,8 +119,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			Status:            model.JobStatusQueued,
 		}
 
-		if err := s.uploadJobStore.Create(job); err != nil {
-			os.Remove(tempFile.Name())
+		if err := s.upload.UploadJobStore.Create(job); err != nil {
+			s.fs.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -158,7 +158,7 @@ func folderIDFromForm(r *http.Request) *string {
 func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	batchID := r.PathValue("batchID")
 
-	allJobs, err := s.uploadJobStore.ListByBatch(batchID)
+	allJobs, err := s.upload.UploadJobStore.ListByBatch(batchID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get upload status")
 		return
@@ -203,7 +203,7 @@ func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUploadActiveJobs(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	jobs, err := s.uploadJobStore.ListActiveByUser(userID)
+	jobs, err := s.upload.UploadJobStore.ListActiveByUser(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list active jobs")
 		return
@@ -270,7 +270,7 @@ func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	existing, err := s.fileStore.FindByNameAndSizeBatch(userID, records)
+	existing, err := s.file.FileStore.FindByNameAndSizeBatch(userID, records)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DEDUP_ERROR", "Failed to check duplicates")
 		return
@@ -367,7 +367,7 @@ func workerJobToMsg(job *model.UploadJob) map[string]interface{} {
 }
 
 func (s *Server) sendBatchSnapshot(conn *websocket.Conn, batchID, userID string) {
-	jobs, err := s.uploadJobStore.ListByBatch(batchID)
+	jobs, err := s.upload.UploadJobStore.ListByBatch(batchID)
 	if err != nil {
 		return
 	}

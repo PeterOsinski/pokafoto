@@ -13,6 +13,8 @@ type StorageProvider interface {
 	GetObjectStream(key string) (io.ReadCloser, error)
 	IsConnected() bool
 	DeleteObject(key string) error
+	DeleteOriginal(userID, filename string) error
+	DeleteThumbnail(fileID, size, format string) error
 	ListObjects(prefix string) ([]string, error)
 	Client() *minio.Client
 }

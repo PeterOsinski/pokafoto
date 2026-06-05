@@ -18,7 +18,7 @@ func (s *Server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folder, err := s.folderStore.Create(userID, req.Name, req.ParentID)
+	folder, err := s.file.FolderStore.Create(userID, req.Name, req.ParentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create folder")
 		return
@@ -30,7 +30,7 @@ func (s *Server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListFolders(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	root, err := s.folderStore.ListTree(userID)
+	root, err := s.file.FolderStore.ListTree(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list folders")
 		return
@@ -61,7 +61,7 @@ func (s *Server) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil || folder.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -72,7 +72,7 @@ func (s *Server) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Name cannot be empty")
 			return
 		}
-		if err := s.folderStore.UpdateName(folderID, *req.Name); err != nil {
+		if err := s.file.FolderStore.UpdateName(folderID, *req.Name); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to rename folder")
 			return
 		}
@@ -84,7 +84,7 @@ func (s *Server) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "CIRCULAR_MOVE", "Cannot move folder into itself")
 				return
 			}
-			isDesc, err := s.folderStore.IsDescendant(*req.ParentID, folderID)
+			isDesc, err := s.file.FolderStore.IsDescendant(*req.ParentID, folderID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to validate move")
 				return
@@ -93,17 +93,17 @@ func (s *Server) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "CIRCULAR_MOVE", "Cannot move folder into its own descendant")
 				return
 			}
-			parent, err := s.folderStore.FindByID(*req.ParentID)
+			parent, err := s.file.FolderStore.FindByID(*req.ParentID)
 			if err != nil || parent == nil || parent.UserID != userID {
 				writeError(w, http.StatusBadRequest, "INVALID_PARENT", "Target folder not found")
 				return
 			}
-			if err := s.folderStore.UpdateParent(folderID, req.ParentID); err != nil {
+			if err := s.file.FolderStore.UpdateParent(folderID, req.ParentID); err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move folder")
 				return
 			}
 		} else {
-			if err := s.folderStore.UpdateParent(folderID, nil); err != nil {
+			if err := s.file.FolderStore.UpdateParent(folderID, nil); err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move folder")
 				return
 			}
@@ -117,13 +117,13 @@ func (s *Server) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil || folder.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
 	}
 
-	result, err := s.folderStore.DeleteRecursive(folderID, userID)
+	result, err := s.file.FolderStore.DeleteRecursive(folderID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete folder")
 		return
@@ -147,7 +147,7 @@ func (s *Server) handleRenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.fileStore.Rename(fileID, userID, req.Name); err != nil {
+	if err := s.file.FileStore.Rename(fileID, userID, req.Name); err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found or access denied")
 		return
 	}

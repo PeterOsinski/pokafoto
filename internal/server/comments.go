@@ -18,7 +18,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comments, err := s.commentStore.FindByFileID(fileID)
+	comments, err := s.comment.CommentStore.FindByFileID(fileID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list comments")
 		return
@@ -38,11 +38,11 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	items := make([]commentResponse, 0, len(comments))
 	for _, c := range comments {
 		username := ""
-		if u, _ := s.userStore.FindByID(c.UserID); u != nil {
+		if u, _ := s.auth.UserStore.FindByID(c.UserID); u != nil {
 			username = u.Username
 		}
 
-		reactions, _ := s.reactionStore.FindByCommentID(c.ID, userID)
+		reactions, _ := s.comment.ReactionStore.FindByCommentID(c.ID, userID)
 		if reactions == nil {
 			reactions = []model.ReactionGroup{}
 		}
@@ -91,7 +91,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comment, err := s.commentStore.Create(fileID, userID, req.Content)
+	comment, err := s.comment.CommentStore.Create(fileID, userID, req.Content)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create comment")
 		return
@@ -111,7 +111,7 @@ func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	comment, err := s.commentStore.FindByID(commentID)
+	comment, err := s.comment.CommentStore.FindByID(commentID)
 	if err != nil || comment.UserID != userID || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
@@ -130,7 +130,7 @@ func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.commentStore.Update(commentID, userID, req.Content); err != nil {
+	if err := s.comment.CommentStore.Update(commentID, userID, req.Content); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update comment")
 		return
 	}
@@ -143,13 +143,13 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	comment, err := s.commentStore.FindByID(commentID)
+	comment, err := s.comment.CommentStore.FindByID(commentID)
 	if err != nil || comment.UserID != userID || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
 	}
 
-	if err := s.commentStore.Delete(commentID, userID); err != nil {
+	if err := s.comment.CommentStore.Delete(commentID, userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete comment")
 		return
 	}
@@ -158,7 +158,7 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) checkFileAccess(fileID, userID string) bool {
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.IsDeleted {
 		return false
 	}
@@ -167,22 +167,15 @@ func (s *Server) checkFileAccess(fileID, userID string) bool {
 		return true
 	}
 
-	rows, err := s.db.Query(
-		`SELECT 1 FROM album_items ai
-		 JOIN album_shares sh ON ai.album_id = sh.album_id
-		 WHERE ai.file_id = ? AND sh.shared_with_user_id = ? LIMIT 1`,
-		fileID, userID,
-	)
+	hasAccess, err := s.album.AlbumItemStore.HasSharedAccess(fileID, userID)
 	if err != nil {
 		return false
 	}
-	defer rows.Close()
-
-	return rows.Next()
+	return hasAccess
 }
 
 func (s *Server) checkCommentWriteAccess(fileID, userID string) bool {
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.IsDeleted {
 		return false
 	}
@@ -191,14 +184,7 @@ func (s *Server) checkCommentWriteAccess(fileID, userID string) bool {
 		return true
 	}
 
-	var perm string
-	err = s.db.QueryRow(
-		`SELECT sh.permission FROM album_items ai
-		 JOIN album_shares sh ON ai.album_id = sh.album_id
-		 WHERE ai.file_id = ? AND sh.shared_with_user_id = ?
-		 ORDER BY CASE sh.permission WHEN 'edit' THEN 0 WHEN 'comment' THEN 1 WHEN 'view' THEN 2 END LIMIT 1`,
-		fileID, userID,
-	).Scan(&perm)
+	perm, err := s.album.AlbumItemStore.GetSharedPermission(fileID, userID)
 	if err != nil {
 		return false
 	}

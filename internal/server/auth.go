@@ -33,8 +33,8 @@ type userResponse struct {
 }
 
 func (s *Server) isRegistrationAllowed() bool {
-	if s.settingStore != nil {
-		if val, err := s.settingStore.Get("allow_registration"); err == nil && val != "" {
+	if s.auth.SettingStore != nil {
+		if val, err := s.auth.SettingStore.Get("allow_registration"); err == nil && val != "" {
 			return val == "true"
 		}
 	}
@@ -69,13 +69,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, _ := s.userStore.FindByUsername(req.Username)
+	existing, _ := s.auth.UserStore.FindByUsername(req.Username)
 	if existing != nil {
 		writeError(w, http.StatusConflict, "USERNAME_EXISTS", "Username is already taken")
 		return
 	}
 
-	user, err := s.userStore.Create(req.Username, req.Password, model.RoleMember, req.DisplayName)
+	user, err := s.auth.UserStore.Create(req.Username, req.Password, model.RoleMember, req.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user")
 		return
@@ -99,7 +99,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.userStore.FindByUsername(req.Username)
+	user, err := s.auth.UserStore.FindByUsername(req.Username)
 	if err != nil || user == nil {
 		writeError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
 		return
@@ -117,7 +117,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	duration := time.Duration(s.cfg.Auth.SessionDurationH) * time.Hour
-	session, err := s.sessStore.Create(user.ID, time.Now().UTC().Add(duration))
+	session, err := s.auth.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
@@ -145,21 +145,21 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.sessStore.FindByRefreshToken(req.RefreshToken)
+	session, err := s.auth.SessionStore.FindByRefreshToken(req.RefreshToken)
 	if err != nil || session == nil {
 		writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid refresh token")
 		return
 	}
 
 	if time.Now().UTC().After(session.ExpiresAt) {
-		s.sessStore.Delete(session.ID)
+		s.auth.SessionStore.Delete(session.ID)
 		writeError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "Refresh token has expired")
 		return
 	}
 
-	s.sessStore.Delete(session.ID)
+	s.auth.SessionStore.Delete(session.ID)
 
-	user, err := s.userStore.FindByID(session.UserID)
+	user, err := s.auth.UserStore.FindByID(session.UserID)
 	if err != nil || user == nil {
 		writeError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
 		return
@@ -172,7 +172,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	duration := time.Duration(s.cfg.Auth.SessionDurationH) * time.Hour
-	newSession, err := s.sessStore.Create(user.ID, time.Now().UTC().Add(duration))
+	newSession, err := s.auth.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
@@ -200,13 +200,13 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.sessStore.DeleteByRefreshToken(req.RefreshToken)
+	s.auth.SessionStore.DeleteByRefreshToken(req.RefreshToken)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
-	user, err := s.userStore.FindByID(userID)
+	user, err := s.auth.UserStore.FindByID(userID)
 	if err != nil || user == nil {
 		writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return

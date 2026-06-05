@@ -21,7 +21,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -78,7 +78,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		share.PasswordHash = &hashStr
 	}
 
-	if err := s.folderShareStore.Create(share); err != nil {
+	if err := s.share.FolderShareStore.Create(share); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create share")
 		return
 	}
@@ -101,7 +101,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -111,7 +111,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shares, err := s.folderShareStore.ListByFolder(folderID)
+	shares, err := s.share.FolderShareStore.ListByFolder(folderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list shares")
 		return
@@ -132,7 +132,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 		if share.ExpiresAt != nil {
 			item["expires_at"] = share.ExpiresAt.Format(time.RFC3339)
 		}
-		uploaded, _ := s.shareUploadStore.SumByShareID(share.ID)
+		uploaded, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
 		item["uploaded_bytes"] = uploaded
 		items = append(items, item)
 	}
@@ -147,7 +147,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareId")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -157,7 +157,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.folderShareStore.FindByID(shareID)
+	share, err := s.share.FolderShareStore.FindByID(shareID)
 	if err != nil || share.FolderID != folderID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Share not found")
 		return
@@ -213,7 +213,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		hasPassword = true
 	}
 
-	if err := s.folderShareStore.Update(shareID, permissions, includeSubdirs, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
+	if err := s.share.FolderShareStore.Update(shareID, permissions, includeSubdirs, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update share")
 		return
 	}
@@ -228,7 +228,7 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareId")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -238,13 +238,13 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.folderShareStore.FindByID(shareID)
+	share, err := s.share.FolderShareStore.FindByID(shareID)
 	if err != nil || share.FolderID != folderID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Share not found")
 		return
 	}
 
-	if err := s.folderShareStore.Delete(shareID); err != nil {
+	if err := s.share.FolderShareStore.Delete(shareID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete share")
 		return
 	}

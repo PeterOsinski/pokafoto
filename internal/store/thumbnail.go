@@ -107,6 +107,29 @@ func (s *ThumbnailStore) Breakdown() ([]ThumbnailBreakdown, error) {
 	return result, rows.Err()
 }
 
+type ThumbnailRef struct {
+	Size   string
+	Format string
+}
+
+func (s *ThumbnailStore) FindThumbnailRefsByFileID(fileID string) ([]ThumbnailRef, error) {
+	rows, err := s.db.Query(`SELECT size, format FROM thumbnails WHERE file_id = ?`, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("query thumbnail refs: %w", err)
+	}
+	defer rows.Close()
+
+	var refs []ThumbnailRef
+	for rows.Next() {
+		var r ThumbnailRef
+		if err := rows.Scan(&r.Size, &r.Format); err != nil {
+			return nil, fmt.Errorf("scan thumbnail ref: %w", err)
+		}
+		refs = append(refs, r)
+	}
+	return refs, rows.Err()
+}
+
 func (s *ThumbnailStore) BreakdownByUser(userID string) ([]ThumbnailBreakdown, error) {
 	rows, err := s.db.Query(
 		`SELECT t.size, COUNT(*) as count, COALESCE(SUM(t.size_bytes), 0) as total_size FROM thumbnails t INNER JOIN files f ON t.file_id = f.id WHERE f.user_id = ? AND f.is_deleted = 0 GROUP BY t.size ORDER BY t.size`,

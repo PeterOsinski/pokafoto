@@ -10,7 +10,7 @@ import (
 func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 
-	tags, err := s.tagStore.Search(q)
+	tags, err := s.file.TagStore.Search(q)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list tags")
 		return
@@ -34,7 +34,7 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTagStats(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	tags, err := s.tagStore.ListWithCount(userID)
+	tags, err := s.file.TagStore.ListWithCount(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get tag stats")
 		return
@@ -66,7 +66,7 @@ func (s *Server) handleGetFileTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tags, err := s.tagStore.FindByFileID(fileID)
+	tags, err := s.file.TagStore.FindByFileID(fileID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file tags")
 		return
@@ -91,7 +91,7 @@ func (s *Server) handleAddFileTags(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -107,11 +107,11 @@ func (s *Server) handleAddFileTags(w http.ResponseWriter, r *http.Request) {
 
 	added := 0
 	for _, tagName := range req.Tags {
-		tag, err := s.tagStore.FindOrCreate(tagName)
+		tag, err := s.file.TagStore.FindOrCreate(tagName)
 		if err != nil {
 			continue
 		}
-		if err := s.tagStore.AddToFile(fileID, tag.ID, userID); err != nil {
+		if err := s.file.TagStore.AddToFile(fileID, tag.ID, userID); err != nil {
 			continue
 		}
 		added++
@@ -127,13 +127,13 @@ func (s *Server) handleRemoveFileTag(w http.ResponseWriter, r *http.Request) {
 	tagID := chi.URLParam(r, "tagId")
 	userID := getUserID(r)
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if err := s.tagStore.RemoveFromFile(fileID, tagID); err != nil {
+	if err := s.file.TagStore.RemoveFromFile(fileID, tagID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove tag")
 		return
 	}
@@ -151,23 +151,11 @@ func (s *Server) handleGetFileAlbums(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query(
-		`SELECT a.id, a.name, a.user_id, a.user_id = ? as is_owner
-		 FROM albums a
-		 JOIN album_items ai ON a.id = ai.album_id
-		 WHERE ai.file_id = ?
-		 AND (a.user_id = ? OR EXISTS (
-			SELECT 1 FROM album_shares s
-			WHERE s.album_id = a.id AND s.shared_with_user_id = ?
-		 ))
-		 ORDER BY a.created_at DESC`,
-		userID, fileID, userID, userID,
-	)
+	albumInfos, err := s.album.AlbumItemStore.ListAlbumsByFile(fileID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file albums")
 		return
 	}
-	defer rows.Close()
 
 	type albumInfo struct {
 		ID      string `json:"id"`
@@ -176,13 +164,14 @@ func (s *Server) handleGetFileAlbums(w http.ResponseWriter, r *http.Request) {
 		IsOwner bool   `json:"is_owner"`
 	}
 
-	albums := []albumInfo{}
-	for rows.Next() {
-		a := albumInfo{}
-		if err := rows.Scan(&a.ID, &a.Name, &a.OwnerID, &a.IsOwner); err != nil {
-			continue
-		}
-		albums = append(albums, a)
+	albums := make([]albumInfo, 0, len(albumInfos))
+	for _, a := range albumInfos {
+		albums = append(albums, albumInfo{
+			ID:      a.ID,
+			Name:    a.Name,
+			OwnerID: a.OwnerID,
+			IsOwner: a.IsOwner,
+		})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

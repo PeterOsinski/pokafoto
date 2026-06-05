@@ -19,7 +19,7 @@ func (s *Server) handleToggleReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comment, err := s.commentStore.FindByID(commentID)
+	comment, err := s.comment.CommentStore.FindByID(commentID)
 	if err != nil || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
@@ -38,7 +38,7 @@ func (s *Server) handleToggleReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	added, err := s.reactionStore.Toggle(commentID, userID, req.Emoji)
+	added, err := s.comment.ReactionStore.Toggle(commentID, userID, req.Emoji)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to toggle reaction")
 		return
@@ -62,7 +62,7 @@ func (s *Server) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.reactionStore.Remove(commentID, userID, emoji); err != nil {
+	if err := s.comment.ReactionStore.Remove(commentID, userID, emoji); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove reaction")
 		return
 	}
@@ -81,7 +81,7 @@ func (s *Server) handleGetReactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reactions, err := s.reactionStore.FindByCommentID(commentID, userID)
+	reactions, err := s.comment.ReactionStore.FindByCommentID(commentID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get reactions")
 		return

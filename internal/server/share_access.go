@@ -6,7 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
+	
 	"path/filepath"
 	"strconv"
 	"time"
@@ -18,7 +18,7 @@ import (
 
 func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -29,19 +29,19 @@ func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folder, err := s.folderStore.FindByID(share.FolderID)
+	folder, err := s.file.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Shared folder not found")
 		return
 	}
 
-	files, _, _, _ := s.fileStore.ListFilesByFolderID(share.FolderID, "", 0)
+	files, _, _, _ := s.file.FileStore.ListFilesByFolderID(share.FolderID, "", 0)
 	fileCount := 0
 	if files != nil {
 		fileCount = len(files)
 	}
 
-	uploadedBytes, _ := s.shareUploadStore.SumByShareID(share.ID)
+	uploadedBytes, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"needs_password":    share.HasPassword,
@@ -65,7 +65,7 @@ func (s *Server) isFolderInShareTree(folderID, shareFolderID string) bool {
 		return true
 	}
 	for i := 0; i < 50; i++ {
-		f, err := s.folderStore.FindByID(folderID)
+		f, err := s.file.FolderStore.FindByID(folderID)
 		if err != nil || f == nil || f.ParentID == nil || *f.ParentID == "" {
 			return false
 		}
@@ -79,7 +79,7 @@ func (s *Server) isFolderInShareTree(folderID, shareFolderID string) bool {
 
 func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -138,7 +138,7 @@ func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -169,7 +169,7 @@ func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 		targetFolderID = subID
 	}
 
-	files, _, _, err := s.fileStore.ListFilesByFolderID(targetFolderID, r.URL.Query().Get("cursor"), limit)
+	files, _, _, err := s.file.FileStore.ListFilesByFolderID(targetFolderID, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list files")
 		return
@@ -199,7 +199,7 @@ func (s *Server) handleShareGetFile(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -216,7 +216,7 @@ func (s *Server) handleShareGetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -251,7 +251,7 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -268,7 +268,7 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -282,7 +282,7 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.IsAppManaged {
-		doc, err := s.docStore.FindByFileID(fileID)
+		doc, err := s.doc.DocumentStore.FindByFileID(fileID)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Document content not found")
 			return
@@ -295,7 +295,7 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filePathStr := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	if _, err := os.Stat(filePathStr); err == nil {
+	if _, err := s.fs.Stat(filePathStr); err == nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
 		w.Header().Set("Accept-Ranges", "bytes")
 		if file.MimeType != "" {
@@ -336,7 +336,7 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileID")
 	size := r.PathValue("size")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -353,7 +353,7 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -367,7 +367,7 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	thumbPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, size)
-	if _, err := os.Stat(thumbPath); err == nil {
+	if _, err := s.fs.Stat(thumbPath); err == nil {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		http.ServeFile(w, r, thumbPath)
 		return
@@ -379,7 +379,7 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -413,7 +413,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if share.UploadLimitBytes != nil {
-		used, _ := s.shareUploadStore.SumByShareID(share.ID)
+		used, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
 		if used+incomingTotal > *share.UploadLimitBytes {
 			writeError(w, http.StatusRequestEntityTooLarge, "SHARE_QUOTA_EXCEEDED",
 				fmt.Sprintf("Upload would exceed share quota (%d used + %d incoming > %d limit)", used, incomingTotal, *share.UploadLimitBytes))
@@ -421,7 +421,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	folder, err := s.folderStore.FindByID(share.FolderID)
+	folder, err := s.file.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Shared folder not found")
 		return
@@ -452,11 +452,11 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tempDir := s.cfg.StoragePath("tmp")
-		if err := os.MkdirAll(tempDir, 0755); err != nil {
+		if err := s.fs.MkdirAll(tempDir, 0755); err != nil {
 			file.Close()
 			continue
 		}
-		tempFile, err := os.CreateTemp(tempDir, "drive-share-upload-*")
+		tempFile, err := s.fs.CreateTemp(tempDir, "drive-share-upload-*")
 		if err != nil {
 			file.Close()
 			continue
@@ -465,7 +465,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.Copy(tempFile, file); err != nil {
 			file.Close()
 			tempFile.Close()
-			os.Remove(tempFile.Name())
+			s.fs.Remove(tempFile.Name())
 			continue
 		}
 		file.Close()
@@ -484,8 +484,8 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 			UploadMode:       model.UploadModeFull,
 		}
 
-		if err := s.uploadJobStore.Create(job); err != nil {
-			os.Remove(tempFile.Name())
+		if err := s.upload.UploadJobStore.Create(job); err != nil {
+			s.fs.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -496,7 +496,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if share.UploadLimitBytes != nil {
-			s.shareUploadStore.Create(share.ID, uuid.New().String(), fh.Size)
+			s.share.ShareUploadStore.Create(share.ID, uuid.New().String(), fh.Size)
 		}
 
 		jobs = append(jobs, map[string]interface{}{
@@ -518,7 +518,7 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -535,7 +535,7 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := s.fileStore.FindByID(fileID)
+	file, err := s.file.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -548,7 +548,7 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.fileStore.SoftDelete(fileID); err != nil {
+	if err := s.file.FileStore.SoftDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete file")
 		return
 	}
@@ -558,7 +558,7 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -588,7 +588,7 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	folders, err := s.folderStore.FindByParentID(parentID)
+	folders, err := s.file.FolderStore.FindByParentID(parentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list folders")
 		return
@@ -596,7 +596,7 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 
 	items := make([]map[string]interface{}, 0, len(folders))
 	for _, f := range folders {
-		files, _, _, _ := s.fileStore.ListFilesByFolderID(f.ID, "", 0)
+		files, _, _, _ := s.file.FileStore.ListFilesByFolderID(f.ID, "", 0)
 		fileCount := 0
 		if files != nil {
 			fileCount = len(files)
@@ -617,7 +617,7 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -661,13 +661,13 @@ func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request)
 		parentID = req.ParentID
 	}
 
-	folder, err := s.folderStore.FindByID(share.FolderID)
+	folder, err := s.file.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Shared folder not found")
 		return
 	}
 
-	newFolder, err := s.folderStore.Create(folder.UserID, req.Name, &parentID)
+	newFolder, err := s.file.FolderStore.Create(folder.UserID, req.Name, &parentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create folder")
 		return
@@ -684,7 +684,7 @@ func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request)
 	token := r.PathValue("token")
 	folderID := r.PathValue("id")
 
-	share, err := s.folderShareStore.FindByToken(token)
+	share, err := s.share.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -716,7 +716,7 @@ func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := s.folderStore.Delete(folderID); err != nil {
+	if err := s.file.FolderStore.Delete(folderID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete folder")
 		return
 	}

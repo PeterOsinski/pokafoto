@@ -1,15 +1,17 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 )
 
 func OpenTestDB(t *testing.T) *DB {
-	db, err := Open(":memory:")
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(path)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(5)
 	t.Cleanup(func() { db.Close() })
 
 	if err := db.RunMigrations(); err != nil {

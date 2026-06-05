@@ -16,63 +16,120 @@ import (
 )
 
 type Server struct {
-	cfg                 *config.Config
-	db                  *store.DB
-	router              *chi.Mux
-	userStore           *store.UserStore
-	sessStore           *store.SessionStore
-	fileStore           *store.FileStore
-	folderStore         *store.FolderStore
-	exifStore           *store.ExifStore
-	thumbnailStore      *store.ThumbnailStore
-	geoStore            *store.GeoStore
-	uploadJobStore      *store.UploadJobStore
-	chunkStore          *store.ChunkStore
-	settingStore        *store.SettingStore
-	albumStore          *store.AlbumStore
-	albumItemStore      *store.AlbumItemStore
-	albumShareStore     *store.AlbumShareStore
-	commentStore        *store.CommentStore
-	reactionStore       *store.ReactionStore
-	tagStore            *store.TagStore
-	docStore            *store.DocumentStore
-	folderPasswordStore *store.FolderPasswordStore
-	folderShareStore    *store.FolderShareStore
-	shareUploadStore    *store.ShareUploadStore
-	storageService      *service.StorageService
-	workerPool          *worker.Pool
-	s3DeletionPool      *S3DeletionPool
-	eventRecorder       *service.EventRecorder
-	systemEventsStore   *store.SystemEventsStore
-	backupScheduler     *backup.Scheduler
-	stopCh              chan struct{}
+	cfg             *config.Config
+	db              *store.DB
+	router          *chi.Mux
+	fs              service.FileSystem
+	storageService  *service.StorageService
+	workerPool      *worker.Pool
+	s3DeletionPool  *service.S3DeletionPool
+	eventRecorder   *service.EventRecorder
+	backupScheduler *backup.Scheduler
+	stopCh          chan struct{}
+
+	auth     *AuthCtl
+	file     *FileCtl
+	upload   *UploadCtl
+	folder   *FolderCtl
+	album    *AlbumCtl
+	comment  *CommentCtl
+	doc      *DocCtl
+	download *DownloadCtl
+	share    *ShareCtl
+	admin    *AdminCtl
 }
 
 func New(cfg *config.Config, db *store.DB) *Server {
+	userStore := store.NewUserStore(db)
+	sessStore := store.NewSessionStore(db)
+	fileStore := store.NewFileStore(db)
+	folderStore := store.NewFolderStore(db)
+	thumbnailStore := store.NewThumbnailStore(db)
+	uploadJobStore := store.NewUploadJobStore(db)
+	chunkStore := store.NewChunkStore(db)
+	settingStore := store.NewSettingStore(db)
+	albumStore := store.NewAlbumStore(db)
+	albumItemStore := store.NewAlbumItemStore(db)
+	albumShareStore := store.NewAlbumShareStore(db)
+	commentStore := store.NewCommentStore(db)
+	reactionStore := store.NewReactionStore(db)
+	tagStore := store.NewTagStore(db)
+	docStore := store.NewDocumentStore(db)
+	folderPasswordStore := store.NewFolderPasswordStore(db)
+	folderShareStore := store.NewFolderShareStore(db)
+	shareUploadStore := store.NewShareUploadStore(db)
+	exifStore := store.NewExifStore(db)
+	geoStore := store.NewGeoStore(db)
+	systemEventsStore := store.NewSystemEventsStore(db)
+
 	s := &Server{
-		cfg:                cfg,
-		db:                 db,
-		userStore:          store.NewUserStore(db),
-		sessStore:          store.NewSessionStore(db),
-		fileStore:          store.NewFileStore(db),
-		folderStore:        store.NewFolderStore(db),
-		exifStore:          store.NewExifStore(db),
-		thumbnailStore:     store.NewThumbnailStore(db),
-		geoStore:           store.NewGeoStore(db),
-		uploadJobStore:     store.NewUploadJobStore(db),
-		chunkStore:         store.NewChunkStore(db),
-		settingStore:       store.NewSettingStore(db),
-		albumStore:         store.NewAlbumStore(db),
-		albumItemStore:     store.NewAlbumItemStore(db),
-		albumShareStore:    store.NewAlbumShareStore(db),
-		commentStore:       store.NewCommentStore(db),
-		reactionStore:      store.NewReactionStore(db),
-		tagStore:           store.NewTagStore(db),
-		docStore:           store.NewDocumentStore(db),
-		folderPasswordStore: store.NewFolderPasswordStore(db),
-		folderShareStore:    store.NewFolderShareStore(db),
-		shareUploadStore:    store.NewShareUploadStore(db),
-		stopCh:             make(chan struct{}),
+		cfg:  cfg,
+		db:   db,
+		fs:   service.NewRealFS(),
+		stopCh: make(chan struct{}),
+		auth: &AuthCtl{
+			UserStore:    userStore,
+			SessionStore: sessStore,
+			SettingStore: settingStore,
+		},
+		file: &FileCtl{
+			FileStore:      fileStore,
+			ExifStore:      exifStore,
+			GeoStore:       geoStore,
+			TagStore:       tagStore,
+			ThumbnailStore: thumbnailStore,
+			FolderStore:    folderStore,
+			FolderPwStore:  folderPasswordStore,
+			AlbumStore:     albumStore,
+		},
+		upload: &UploadCtl{
+			UploadJobStore: uploadJobStore,
+			ChunkStore:     chunkStore,
+			FileStore:      fileStore,
+			UserStore:      userStore,
+		},
+		folder: &FolderCtl{
+			FolderStore:      folderStore,
+			FolderPwStore:    folderPasswordStore,
+			FolderShareStore: folderShareStore,
+			ShareUploadStore: shareUploadStore,
+		},
+		album: &AlbumCtl{
+			AlbumStore:      albumStore,
+			AlbumItemStore:  albumItemStore,
+			AlbumShareStore: albumShareStore,
+			UserStore:       userStore,
+			FileStore:       fileStore,
+		},
+		comment: &CommentCtl{
+			CommentStore:  commentStore,
+			ReactionStore: reactionStore,
+			UserStore:     userStore,
+			FileStore:     fileStore,
+		},
+		doc: &DocCtl{
+			DocumentStore: docStore,
+			FileStore:     fileStore,
+		},
+		download: &DownloadCtl{
+			FileStore: fileStore,
+		},
+		share: &ShareCtl{
+			FolderShareStore: folderShareStore,
+			ShareUploadStore: shareUploadStore,
+			FolderStore:      folderStore,
+			FileStore:        fileStore,
+			FolderPwStore:    folderPasswordStore,
+		},
+		admin: &AdminCtl{
+			UserStore:         userStore,
+			FileStore:         fileStore,
+			ThumbnailStore:    thumbnailStore,
+			SystemEventsStore: systemEventsStore,
+			SettingStore:      settingStore,
+			ExifStore:         exifStore,
+			GeoStore:          geoStore,
+		},
 	}
 
 	storageService, err := service.NewStorageService(cfg)
@@ -82,12 +139,11 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	}
 
 	s.eventRecorder = service.NewEventRecorder(db)
-	s.systemEventsStore = store.NewSystemEventsStore(db)
 
-	s.workerPool = worker.NewPool(cfg, s.fileStore, s.exifStore, s.thumbnailStore, storageService, s.uploadJobStore, s.chunkStore, s.eventRecorder)
+	s.workerPool = worker.NewPool(cfg, s.file.FileStore, s.file.ExifStore, s.file.ThumbnailStore, storageService, s.upload.UploadJobStore, s.upload.ChunkStore, s.eventRecorder)
 	s.storageService = storageService
 
-	s.s3DeletionPool = NewS3DeletionPool(storageService)
+	s.s3DeletionPool = service.NewS3DeletionPool(storageService, s.file.ThumbnailStore)
 
 	if err != nil {
 		s.eventRecorder.Warn("s3_disconnect", "S3 storage init failed", map[string]interface{}{"error": err.Error()})
@@ -104,11 +160,11 @@ func New(cfg *config.Config, db *store.DB) *Server {
 
 	s.workerPool.StartReconciler(30 * time.Minute)
 
-	go NewCacheEvictor(cfg, s.eventRecorder).Start()
-	go s.startTrashCleanup()
-	go s.startEventRetention()
-	go s.startChunkCleanup()
-	go s.startFolderPasswordCleanup()
+	service.NewCacheEvictor(cfg, service.NewRealFS(), s.eventRecorder).Start()
+	service.NewTrashCleanup(s.file.FileStore, service.NewRealFS(), s.cfg.OriginalsDir(), s.cfg.ThumbnailsDir(), s.cfg.TrashExpirationDays, s.enqueueS3Deletion).Start(s.stopCh)
+	service.NewEventRetention(s.admin.SystemEventsStore).Start(s.stopCh)
+	service.NewChunkCleanup(s.upload.ChunkStore, s.cfg.Upload.ChunkCleanupHours, s.cfg.Upload.MaxChunkUploadAgeHours).Start(s.stopCh)
+	service.NewFolderPasswordCleanup(s.file.FolderPwStore).Start(s.stopCh)
 
 	s.setupRouter()
 	return s
@@ -306,31 +362,4 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"db_connected":  dbOK,
 		"s3_connected":  s3OK,
 	})
-}
-
-func (s *Server) startEventRetention() {
-	for {
-		select {
-		case <-s.stopCh:
-			return
-		case <-time.After(24 * time.Hour):
-		}
-		deleted, err := s.systemEventsStore.PurgeOlderThan(90 * 24 * time.Hour)
-		if err != nil {
-			slog.Warn("event retention purge failed", "error", err)
-		} else if deleted > 0 {
-			slog.Info("purged old system events", "deleted", deleted)
-		}
-	}
-}
-
-func (s *Server) startFolderPasswordCleanup() {
-	for {
-		select {
-		case <-s.stopCh:
-			return
-		case <-time.After(5 * time.Minute):
-		}
-		s.folderPasswordStore.DeleteExpired()
-	}
 }

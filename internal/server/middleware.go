@@ -181,18 +181,18 @@ func (s *Server) shareAccessMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) checkFolderAccess(folderID, userID string, r *http.Request) bool {
-	fp, err := s.folderPasswordStore.FindByFolderID(folderID)
+	fp, err := s.file.FolderPwStore.FindByFolderID(folderID)
 	if err != nil {
 		return true
 	}
 
 	now := time.Now().UTC()
 	if now.After(fp.ExpiresAt) {
-		s.folderPasswordStore.DeleteByFolderID(folderID)
+		s.file.FolderPwStore.DeleteByFolderID(folderID)
 		return true
 	}
 
-	if _, err := s.folderStore.FindByID(folderID); err != nil {
+	if _, err := s.file.FolderStore.FindByID(folderID); err != nil {
 		return false
 	}
 
@@ -224,7 +224,7 @@ func (s *Server) checkShareAccess(r *http.Request, permission model.SharePermiss
 		return nil, false
 	}
 
-	share, err := s.folderShareStore.FindByID(shareID)
+	share, err := s.share.FolderShareStore.FindByID(shareID)
 	if err != nil {
 		return nil, false
 	}

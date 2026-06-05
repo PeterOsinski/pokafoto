@@ -157,7 +157,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | HTTP caching | ETags, Cache-Control, 304 responses | Middleware | ❌ Only immutable cache header on thumbnails |
 | SQLite optimization | WAL mode, prepared statements, query plan analysis | `internal/db/` | ⚠️ WAL mode enabled; no statement caching |
 | Bundle optimization | Vite code splitting, tree shaking, compression | `vite.config.ts` | ❌ Basic Vite config, no explicit optimization |
-| Backend unit tests | Go tests for handlers, services, stores (target: 70%+ coverage) | `internal/**/*_test.go` | ✅ Tests exist for all layers |
+| Backend unit tests | Go tests for handlers, services, stores (target: 70%+ coverage) | `internal/**/*_test.go` | ✅ 2026-06-04 R2: config 95%, store 71.2% (from 64%), service 38.1%, server 46.7%, worker 53.9%. Added 14 album store tests (album.go, album_item.go, album_share.go), 3 chunk cleanup tests (CleanupOrphanedTempFiles, CleanupOldUploads). Fixed SQLite SetMaxOpenConns(1) → 5 deadlock. |
 | Frontend unit tests | Vitest component tests for Pinia stores, composables, key components | `web/src/**/*.test.ts` | ✅ 122 tests across 18 test files |
 | Lighthouse audit | Target: 95+ Performance, 100 Accessibility | — | ❌ Not performed |
 
@@ -176,7 +176,7 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Disk space monitoring | Alert when cache disk <10% free | `internal/monitor/disk.go` | ✅ Admin dashboard shows disk utilization |
 | Structured logging | `slog` (Go stdlib), JSON format, request IDs | Middleware | ⚠️ Uses slog; no request ID propagation |
 | Health checks | `/health` with DB + S3 connectivity check | `internal/handler/health.go` | ✅ |
-| System event logging + DB backup to S3 | system_events table, EventRecorder service, backup scheduler, admin API + UI, retention purge, wired into worker pool and cache evictor | internal/backup/, internal/service/eventrecorder.go, internal/store/event.go, internal/server/, web/src/views/AdminView.vue | ❌ |
+| System event logging + DB backup to S3 | system_events table, EventRecorder service, backup scheduler, admin API + UI, retention purge, wired into worker pool and cache evictor | internal/backup/, internal/service/eventrecorder.go, internal/store/event.go, internal/server/, web/src/views/AdminView.vue | ✅ 2026-06-04: EventRetention extracted to service/event_retention.go, FolderPasswordCleanup to service/folder_password_cleanup.go. CacheEvictor, TrashCleanup, ChunkCleanup all moved to service/. |
 
 ### Week 10b: File Viewer (Non-Media Documents) — Frontend-Only Feature
 

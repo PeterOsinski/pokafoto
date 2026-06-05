@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -50,13 +49,13 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		role = model.RoleAdmin
 	}
 
-	existing, _ := s.userStore.FindByUsername(req.Username)
+	existing, _ := s.auth.UserStore.FindByUsername(req.Username)
 	if existing != nil {
 		writeError(w, http.StatusConflict, "USERNAME_EXISTS", "Username is already taken")
 		return
 	}
 
-	user, err := s.userStore.Create(req.Username, req.Password, role, req.DisplayName)
+	user, err := s.auth.UserStore.Create(req.Username, req.Password, role, req.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user")
 		return
@@ -90,7 +89,7 @@ func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Re
 	if req.Enabled {
 		val = "true"
 	}
-	if err := s.settingStore.Set("allow_registration", val); err != nil {
+	if err := s.auth.SettingStore.Set("allow_registration", val); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update setting")
 		return
 	}
@@ -101,7 +100,7 @@ func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.userStore.List()
+	users, err := s.auth.UserStore.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list users")
 		return
@@ -109,8 +108,8 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 	userResponses := make([]map[string]interface{}, 0, len(users))
 	for _, u := range users {
-		fileCount, _ := s.fileStore.Stats(u.ID)
-		thumbSize, _ := s.userStore.GetThumbnailSize(u.ID)
+		fileCount, _ := s.file.FileStore.Stats(u.ID)
+		thumbSize, _ := s.auth.UserStore.GetThumbnailSize(u.ID)
 
 		resp := map[string]interface{}{
 			"id":          u.ID,
@@ -143,7 +142,7 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
-	if err := s.userStore.Delete(userID); err != nil {
+	if err := s.auth.UserStore.Delete(userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete user")
 		return
 	}
@@ -165,7 +164,7 @@ func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.userStore.UpdateRole(userID, model.UserRole(req.Role)); err != nil {
+	if err := s.auth.UserStore.UpdateRole(userID, model.UserRole(req.Role)); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update role")
 		return
 	}
@@ -189,7 +188,7 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if req.SpaceQuota != nil {
-		used, err := s.userStore.GetUsedSpace(userID)
+		used, err := s.auth.UserStore.GetUsedSpace(userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check usage")
 			return
@@ -200,12 +199,12 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := s.userStore.UpdateSpaceQuota(userID, req.SpaceQuota); err != nil {
+	if err := s.auth.UserStore.UpdateSpaceQuota(userID, req.SpaceQuota); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update quota")
 		return
 	}
 
-	user, _ := s.userStore.FindByID(userID)
+	user, _ := s.auth.UserStore.FindByID(userID)
 	if user == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 		return
@@ -229,9 +228,9 @@ func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request
 	var breakdown *store.AdminFileBreakdown
 	var err error
 	if userID != "" {
-		breakdown, err = s.fileStore.AdminFileBreakdownByUser(userID)
+		breakdown, err = s.file.FileStore.AdminFileBreakdownByUser(userID)
 	} else {
-		breakdown, err = s.fileStore.AdminFileBreakdown()
+		breakdown, err = s.file.FileStore.AdminFileBreakdown()
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file breakdown")
@@ -249,13 +248,13 @@ func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	statusFilter := r.URL.Query().Get("status")
 
-	jobs, total, err := s.uploadJobStore.ListAll(limit, offset, statusFilter)
+	jobs, total, err := s.upload.UploadJobStore.ListAll(limit, offset, statusFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list jobs")
 		return
 	}
 
-	summary, _ := s.uploadJobStore.CountByStatus()
+	summary, _ := s.upload.UploadJobStore.CountByStatus()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"jobs":    jobs,
@@ -266,7 +265,7 @@ func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminRetryJob(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
-	if err := s.uploadJobStore.Requeue(jobID); err != nil {
+	if err := s.upload.UploadJobStore.Requeue(jobID); err != nil {
 		writeError(w, http.StatusConflict, "RETRY_FAILED", err.Error())
 		return
 	}
@@ -288,9 +287,9 @@ func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Reques
 	var breakdown []store.ThumbnailBreakdown
 	var err error
 	if userID != "" {
-		breakdown, err = s.thumbnailStore.BreakdownByUser(userID)
+		breakdown, err = s.file.ThumbnailStore.BreakdownByUser(userID)
 	} else {
-		breakdown, err = s.thumbnailStore.Breakdown()
+		breakdown, err = s.file.ThumbnailStore.Breakdown()
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get thumbnail stats")
@@ -315,7 +314,7 @@ func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
-	users, err := s.userStore.List()
+	users, err := s.auth.UserStore.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list users")
 		return
@@ -326,11 +325,11 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	userStats := make([]map[string]interface{}, 0, len(users))
 
 	for _, u := range users {
-		stats, err := s.fileStore.Stats(u.ID)
+		stats, err := s.file.FileStore.Stats(u.ID)
 		if err != nil {
 			continue
 		}
-		thumbSize, _ := s.userStore.GetThumbnailSize(u.ID)
+		thumbSize, _ := s.auth.UserStore.GetThumbnailSize(u.ID)
 		totalFiles += stats.TotalFiles
 		totalSize += stats.TotalSize
 		ustat := map[string]interface{}{
@@ -349,7 +348,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		userStats = append(userStats, ustat)
 	}
 
-	cacheSize, _ := s.thumbnailStore.TotalSize()
+	cacheSize, _ := s.file.ThumbnailStore.TotalSize()
 	diskTotal, diskFree, diskUsed := diskUsage(s.cfg.Storage.Local.Path)
 	diskPct := float64(0)
 	if diskTotal > 0 {
@@ -357,7 +356,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var originalsSize int64
-	filepath.Walk(s.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
+	s.fs.Walk(s.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -399,7 +398,7 @@ func (s *Server) handleAdminListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	events, total, err := s.systemEventsStore.List(
+	events, total, err := s.admin.SystemEventsStore.List(
 		limit, offset,
 		r.URL.Query().Get("event_type"),
 		r.URL.Query().Get("severity"),
@@ -418,7 +417,7 @@ func (s *Server) handleAdminListEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminEventCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := s.systemEventsStore.EventCounts()
+	counts, err := s.admin.SystemEventsStore.EventCounts()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get event counts")
 		return

@@ -57,6 +57,8 @@ type FileRepository interface {
 	ListFilesByFolderID(folderID, cursor string, limit int) ([]*model.File, string, int, error)
 	Rename(id, userID, newName string) error
 	SoftDeleteByFolderIDs(userID string, folderIDs []string) (int64, error)
+	ListTrashFiles(userID string, ids []string) ([]ExpiredFile, error)
+	ListAllTrashFiles(userID string) ([]ExpiredFile, error)
 	AdminFileBreakdown() (*AdminFileBreakdown, error)
 	AdminFileBreakdownByUser(userID string) (*AdminFileBreakdown, error)
 }
@@ -83,6 +85,7 @@ type ExifRepository interface {
 type ThumbnailRepository interface {
 	Create(thumb *model.Thumbnail) error
 	FindByFileIDAndSize(fileID string, size model.ThumbnailSize) (*model.Thumbnail, error)
+	FindThumbnailRefsByFileID(fileID string) ([]ThumbnailRef, error)
 	CountByFileID(fileID string) (int, error)
 	SetS3Key(fileID string, size model.ThumbnailSize, s3Key string) error
 	TotalSize() (int64, error)
@@ -148,12 +151,22 @@ type AlbumRepository interface {
 	HasShares(albumID string) bool
 }
 
+type AlbumFileInfo struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	OwnerID string `json:"owner_id"`
+	IsOwner bool   `json:"is_owner"`
+}
+
 type AlbumItemRepository interface {
 	Add(albumID, fileID, addedByUserID string) (*model.AlbumItem, error)
 	Remove(albumID, fileID string) error
 	RemoveByID(id string) error
 	ListFileIDs(albumID string, limit, offset int) ([]string, int64, error)
 	FindByAlbumAndFile(albumID, fileID string) (*model.AlbumItem, error)
+	HasSharedAccess(fileID, userID string) (bool, error)
+	GetSharedPermission(fileID, userID string) (string, error)
+	ListAlbumsByFile(fileID, userID string) ([]AlbumFileInfo, error)
 }
 
 type AlbumShareRepository interface {

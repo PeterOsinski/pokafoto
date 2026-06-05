@@ -641,7 +641,7 @@ func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
-	u, _ := srv.userStore.Create("vidproxy_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u, _ := srv.auth.UserStore.Create("vidproxy_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
 
 	userDir := filepath.Join(srv.cfg.OriginalsDir(), u.ID, "2024/07")
 	os.MkdirAll(userDir, 0755)
@@ -659,7 +659,7 @@ func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T
 		SHA256:       makeHandlerSHA256("test-video-proxy"),
 		MediaType:    model.MediaTypeVideo,
 	}
-	if err := srv.fileStore.Create(f); err != nil {
+	if err := srv.file.FileStore.Create(f); err != nil {
 		t.Fatalf("create file: %v", err)
 	}
 
@@ -674,7 +674,7 @@ func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T
 		S3Key:     &s3Key,
 		SizeBytes: 2000000,
 	}
-	if err := srv.thumbnailStore.Create(proxy); err != nil {
+	if err := srv.file.ThumbnailStore.Create(proxy); err != nil {
 		t.Fatalf("create thumbnail: %v", err)
 	}
 

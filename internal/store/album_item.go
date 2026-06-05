@@ -93,3 +93,61 @@ func (s *AlbumItemStore) FindByAlbumAndFile(albumID, fileID string) (*model.Albu
 	item.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return item, nil
 }
+
+func (s *AlbumItemStore) HasSharedAccess(fileID, userID string) (bool, error) {
+	rows, err := s.db.Query(
+		`SELECT 1 FROM album_items ai
+		 JOIN album_shares sh ON ai.album_id = sh.album_id
+		 WHERE ai.file_id = ? AND sh.shared_with_user_id = ? LIMIT 1`,
+		fileID, userID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("check shared access: %w", err)
+	}
+	defer rows.Close()
+	return rows.Next(), nil
+}
+
+func (s *AlbumItemStore) GetSharedPermission(fileID, userID string) (string, error) {
+	var perm string
+	err := s.db.QueryRow(
+		`SELECT sh.permission FROM album_items ai
+		 JOIN album_shares sh ON ai.album_id = sh.album_id
+		 WHERE ai.file_id = ? AND sh.shared_with_user_id = ?
+		 ORDER BY CASE sh.permission WHEN 'edit' THEN 0 WHEN 'comment' THEN 1 WHEN 'view' THEN 2 END LIMIT 1`,
+		fileID, userID,
+	).Scan(&perm)
+	if err != nil {
+		return "", fmt.Errorf("get shared permission: %w", err)
+	}
+	return perm, nil
+}
+
+func (s *AlbumItemStore) ListAlbumsByFile(fileID, userID string) ([]AlbumFileInfo, error) {
+	rows, err := s.db.Query(
+		`SELECT a.id, a.name, a.user_id, a.user_id = ? as is_owner
+		 FROM albums a
+		 JOIN album_items ai ON a.id = ai.album_id
+		 WHERE ai.file_id = ?
+		 AND (a.user_id = ? OR EXISTS (
+			SELECT 1 FROM album_shares s
+			WHERE s.album_id = a.id AND s.shared_with_user_id = ?
+		 ))
+		 ORDER BY a.created_at DESC`,
+		userID, fileID, userID, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list albums by file: %w", err)
+	}
+	defer rows.Close()
+
+	var albums []AlbumFileInfo
+	for rows.Next() {
+		var a AlbumFileInfo
+		if err := rows.Scan(&a.ID, &a.Name, &a.OwnerID, &a.IsOwner); err != nil {
+			continue
+		}
+		albums = append(albums, a)
+	}
+	return albums, rows.Err()
+}

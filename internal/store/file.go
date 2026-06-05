@@ -1141,3 +1141,48 @@ func (s *FileStore) SoftDeleteByFolderIDs(userID string, folderIDs []string) (in
 	affected, _ := result.RowsAffected()
 	return affected, nil
 }
+
+func (s *FileStore) ListTrashFiles(userID string, ids []string) ([]ExpiredFile, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, 0, len(ids)+1)
+	args = append(args, userID)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	query := fmt.Sprintf("SELECT id, user_id, filename FROM files WHERE user_id = ? AND is_deleted = 1 AND id IN (%s)", strings.Join(placeholders, ", "))
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list trash files: %w", err)
+	}
+	defer rows.Close()
+	var files []ExpiredFile
+	for rows.Next() {
+		var f ExpiredFile
+		if err := rows.Scan(&f.ID, &f.UserID, &f.Filename); err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+func (s *FileStore) ListAllTrashFiles(userID string) ([]ExpiredFile, error) {
+	rows, err := s.db.Query("SELECT id, user_id, filename FROM files WHERE user_id = ? AND is_deleted = 1", userID)
+	if err != nil {
+		return nil, fmt.Errorf("list all trash files: %w", err)
+	}
+	defer rows.Close()
+	var files []ExpiredFile
+	for rows.Next() {
+		var f ExpiredFile
+		if err := rows.Scan(&f.ID, &f.UserID, &f.Filename); err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}

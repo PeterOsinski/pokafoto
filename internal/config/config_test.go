@@ -33,7 +33,6 @@ func TestDefaultConfig_shouldSetExpectedDefaults(t *testing.T) {
 func TestConfig_EnvOverridesPort(t *testing.T) {
 	os.Setenv("DRIVE_PORT", "9090")
 	defer os.Unsetenv("DRIVE_PORT")
-
 	cfg := Load()
 	if cfg.Server.Port != 9090 {
 		t.Errorf("expected port 9090, got %d", cfg.Server.Port)
@@ -43,7 +42,6 @@ func TestConfig_EnvOverridesPort(t *testing.T) {
 func TestConfig_EnvOverridesJWTSecret(t *testing.T) {
 	os.Setenv("DRIVE_JWT_SECRET", "my-secret")
 	defer os.Unsetenv("DRIVE_JWT_SECRET")
-
 	cfg := Load()
 	if cfg.Auth.JWTSecret != "my-secret" {
 		t.Errorf("expected jwt secret 'my-secret', got %q", cfg.Auth.JWTSecret)
@@ -53,7 +51,6 @@ func TestConfig_EnvOverridesJWTSecret(t *testing.T) {
 func TestConfig_EnvOverridesStoragePath(t *testing.T) {
 	os.Setenv("DRIVE_STORAGE_PATH", "/custom/data")
 	defer os.Unsetenv("DRIVE_STORAGE_PATH")
-
 	cfg := Load()
 	if cfg.Storage.Local.Path != "/custom/data" {
 		t.Errorf("expected /custom/data, got %s", cfg.Storage.Local.Path)
@@ -63,7 +60,6 @@ func TestConfig_EnvOverridesStoragePath(t *testing.T) {
 func TestConfig_EnvOverridesDBPath(t *testing.T) {
 	os.Setenv("DRIVE_DB_PATH", "/custom/db.db")
 	defer os.Unsetenv("DRIVE_DB_PATH")
-
 	cfg := Load()
 	if cfg.Database.Path != "/custom/db.db" {
 		t.Errorf("expected /custom/db.db, got %s", cfg.Database.Path)
@@ -73,7 +69,6 @@ func TestConfig_EnvOverridesDBPath(t *testing.T) {
 func TestConfig_EnvOverridesS3Enabled(t *testing.T) {
 	os.Setenv("DRIVE_S3_ENABLED", "true")
 	defer os.Unsetenv("DRIVE_S3_ENABLED")
-
 	cfg := Load()
 	if !cfg.Storage.S3.Enabled {
 		t.Error("expected S3 enabled")
@@ -83,7 +78,6 @@ func TestConfig_EnvOverridesS3Enabled(t *testing.T) {
 func TestConfig_StoragePath(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
-
 	got := cfg.StoragePath("originals")
 	if got != "/data/originals" {
 		t.Errorf("expected /data/originals, got %s", got)
@@ -168,7 +162,6 @@ func TestConfig_EnvOverridesBackup(t *testing.T) {
 	defer os.Unsetenv("DRIVE_BACKUP_ENABLED")
 	defer os.Unsetenv("DRIVE_BACKUP_INTERVAL_H")
 	defer os.Unsetenv("DRIVE_BACKUP_RETENTION_DAYS")
-
 	cfg := Load()
 	if !cfg.Backup.Enabled {
 		t.Error("expected backup enabled")
@@ -178,5 +171,76 @@ func TestConfig_EnvOverridesBackup(t *testing.T) {
 	}
 	if cfg.Backup.RetentionDays != 14 {
 		t.Errorf("expected retention 14, got %d", cfg.Backup.RetentionDays)
+	}
+}
+
+func TestConfig_MaxDiskUsagePercent_default(t *testing.T) {
+	cfg := DefaultConfig()
+	got := cfg.MaxDiskUsagePercent()
+	if got != 70 {
+		t.Errorf("expected 70, got %d", got)
+	}
+}
+
+func TestConfig_MaxDiskUsagePercent_custom(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Storage.MaxDiskUsagePct = 80
+	got := cfg.MaxDiskUsagePercent()
+	if got != 80 {
+		t.Errorf("expected 80, got %d", got)
+	}
+}
+
+func TestConfig_WebDistPath_default(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Storage.Local.Path = "/base"
+	if cfg.WebDistPath() != "/base/../web/dist" {
+		t.Errorf("expected /base/../web/dist, got %s", cfg.WebDistPath())
+	}
+}
+
+func TestConfig_EnvOverridesMaxDiskUsage(t *testing.T) {
+	os.Setenv("DRIVE_MAX_DISK_USAGE_PCT", "75")
+	defer os.Unsetenv("DRIVE_MAX_DISK_USAGE_PCT")
+	cfg := Load()
+	if cfg.Storage.MaxDiskUsagePct != 75 {
+		t.Errorf("expected 75, got %d", cfg.Storage.MaxDiskUsagePct)
+	}
+}
+
+func TestConfig_EnvOverridesRegistration(t *testing.T) {
+	os.Setenv("DRIVE_ALLOW_REGISTRATION", "true")
+	defer os.Unsetenv("DRIVE_ALLOW_REGISTRATION")
+	cfg := Load()
+	if !cfg.Auth.AllowRegistration {
+		t.Error("expected registration enabled")
+	}
+}
+
+func TestConfig_EnvOverridesTrashExpiration(t *testing.T) {
+	os.Setenv("DRIVE_TRASH_EXPIRATION_DAYS", "14")
+	defer os.Unsetenv("DRIVE_TRASH_EXPIRATION_DAYS")
+	cfg := Load()
+	if cfg.TrashExpirationDays != 14 {
+		t.Errorf("expected 14, got %d", cfg.TrashExpirationDays)
+	}
+}
+
+func TestConfig_EnvOverridesS3Details(t *testing.T) {
+	os.Setenv("DRIVE_S3_ENDPOINT", "s3.example.com")
+	os.Setenv("DRIVE_S3_BUCKET", "my-bucket")
+	os.Setenv("DRIVE_S3_REGION", "us-east-1")
+	defer os.Unsetenv("DRIVE_S3_ENDPOINT")
+	defer os.Unsetenv("DRIVE_S3_BUCKET")
+	defer os.Unsetenv("DRIVE_S3_REGION")
+	cfg := Load()
+	if cfg.Storage.S3.Endpoint != "s3.example.com" {
+		t.Errorf("expected s3 endpoint s3.example.com, got %s", cfg.Storage.S3.Endpoint)
+	}
+	if cfg.Storage.S3.Bucket != "my-bucket" {
+		t.Errorf("expected bucket my-bucket, got %s", cfg.Storage.S3.Bucket)
+	}
+	if cfg.Storage.S3.Region != "us-east-1" {
+		t.Errorf("expected region us-east-1, got %s", cfg.Storage.S3.Region)
 	}
 }

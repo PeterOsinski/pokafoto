@@ -12,13 +12,13 @@ import (
 func (s *Server) handleListAlbums(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	ownAlbums, err := s.albumStore.ListByUser(userID)
+	ownAlbums, err := s.file.AlbumStore.ListByUser(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list albums")
 		return
 	}
 
-	sharedAlbums, err := s.albumStore.ListSharedWithUser(userID)
+	sharedAlbums, err := s.file.AlbumStore.ListSharedWithUser(userID)
 	if err != nil {
 		sharedAlbums = nil
 	}
@@ -41,9 +41,9 @@ func (s *Server) handleListAlbums(w http.ResponseWriter, r *http.Request) {
 			ID:          a.ID,
 			Name:        a.Name,
 			Description: a.Description,
-			ItemCount:   s.albumStore.ItemCount(a.ID),
+			ItemCount:   s.file.AlbumStore.ItemCount(a.ID),
 			OwnerID:     a.UserID,
-			IsShared:    s.albumStore.HasShares(a.ID),
+			IsShared:    s.file.AlbumStore.HasShares(a.ID),
 			CreatedAt:   a.CreatedAt.Format(timeRFC3339),
 			UpdatedAt:   a.UpdatedAt.Format(timeRFC3339),
 		}
@@ -89,7 +89,7 @@ func (s *Server) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	album, err := s.albumStore.Create(userID, req.Name, req.Description)
+	album, err := s.file.AlbumStore.Create(userID, req.Name, req.Description)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create album")
 		return
@@ -107,24 +107,24 @@ func (s *Server) handleGetAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	album, err := s.albumStore.FindByID(albumID)
+	album, err := s.file.AlbumStore.FindByID(albumID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
 	}
 
-	_, found, err := s.albumStore.CheckAccess(albumID, userID)
+	_, found, err := s.file.AlbumStore.CheckAccess(albumID, userID)
 	if err != nil || !found {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
 	}
 
-	awd, err := s.albumStore.FindByIDWithOwner(albumID)
+	awd, err := s.file.AlbumStore.FindByIDWithOwner(albumID)
 	if err != nil {
 		awd = &model.AlbumWithDetails{Album: album}
 	}
 
-	shares, _ := s.albumStore.ListShares(albumID)
+	shares, _ := s.file.AlbumStore.ListShares(albumID)
 	if shares == nil {
 		shares = []model.SharedUser{}
 	}
@@ -132,7 +132,7 @@ func (s *Server) handleGetAlbum(w http.ResponseWriter, r *http.Request) {
 	isOwner := album.UserID == userID
 	perm := ""
 	if !isOwner {
-		p, _, _ := s.albumStore.CheckAccess(albumID, userID)
+		p, _, _ := s.file.AlbumStore.CheckAccess(albumID, userID)
 		perm = p
 	}
 
@@ -155,7 +155,7 @@ func (s *Server) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	album, err := s.albumStore.FindByID(albumID)
+	album, err := s.file.AlbumStore.FindByID(albumID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -180,7 +180,7 @@ func (s *Server) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.albumStore.Update(albumID, req.Name, req.Description); err != nil {
+	if err := s.file.AlbumStore.Update(albumID, req.Name, req.Description); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update album")
 		return
 	}
@@ -192,7 +192,7 @@ func (s *Server) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	album, err := s.albumStore.FindByID(albumID)
+	album, err := s.file.AlbumStore.FindByID(albumID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -203,7 +203,7 @@ func (s *Server) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.albumStore.Delete(albumID); err != nil {
+	if err := s.file.AlbumStore.Delete(albumID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete album")
 		return
 	}
@@ -215,7 +215,7 @@ func (s *Server) handleListAlbumItems(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	_, found, err := s.albumStore.CheckAccess(albumID, userID)
+	_, found, err := s.file.AlbumStore.CheckAccess(albumID, userID)
 	if err != nil || !found {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -226,7 +226,7 @@ func (s *Server) handleListAlbumItems(w http.ResponseWriter, r *http.Request) {
 		limit = 100
 	}
 
-	fileIDs, _, err := s.albumItemStore.ListFileIDs(albumID, limit+1, 0)
+	fileIDs, _, err := s.album.AlbumItemStore.ListFileIDs(albumID, limit+1, 0)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list album items")
 		return
@@ -234,7 +234,7 @@ func (s *Server) handleListAlbumItems(w http.ResponseWriter, r *http.Request) {
 
 	var items []interface{}
 	for _, fileID := range fileIDs {
-		f, err := s.fileStore.FindByID(fileID)
+		f, err := s.file.FileStore.FindByID(fileID)
 		if err != nil || f == nil || f.IsDeleted {
 			continue
 		}
@@ -270,7 +270,7 @@ func (s *Server) handleAddAlbumItems(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	perm, found, err := s.albumStore.CheckAccess(albumID, userID)
+	perm, found, err := s.file.AlbumStore.CheckAccess(albumID, userID)
 	if err != nil || !found {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -291,7 +291,7 @@ func (s *Server) handleAddAlbumItems(w http.ResponseWriter, r *http.Request) {
 
 	added := 0
 	for _, fileID := range req.FileIDs {
-		_, err := s.albumItemStore.Add(albumID, fileID, userID)
+		_, err := s.album.AlbumItemStore.Add(albumID, fileID, userID)
 		if err == nil {
 			added++
 		}
@@ -307,7 +307,7 @@ func (s *Server) handleRemoveAlbumItem(w http.ResponseWriter, r *http.Request) {
 	itemID := chi.URLParam(r, "itemId")
 	userID := getUserID(r)
 
-	perm, found, err := s.albumStore.CheckAccess(albumID, userID)
+	perm, found, err := s.file.AlbumStore.CheckAccess(albumID, userID)
 	if err != nil || !found {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -318,7 +318,7 @@ func (s *Server) handleRemoveAlbumItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.albumItemStore.RemoveByID(itemID); err != nil {
+	if err := s.album.AlbumItemStore.RemoveByID(itemID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove item")
 		return
 	}
@@ -330,7 +330,7 @@ func (s *Server) handleShareAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	album, err := s.albumStore.FindByID(albumID)
+	album, err := s.file.AlbumStore.FindByID(albumID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -358,7 +358,7 @@ func (s *Server) handleShareAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetUser, err := s.userStore.FindByUsername(req.Username)
+	targetUser, err := s.auth.UserStore.FindByUsername(req.Username)
 	if err != nil || targetUser == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "User not found")
 		return
@@ -369,7 +369,7 @@ func (s *Server) handleShareAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.albumShareStore.Add(albumID, targetUser.ID, req.Permission)
+	share, err := s.album.AlbumShareStore.Add(albumID, targetUser.ID, req.Permission)
 	if err != nil {
 		writeError(w, http.StatusConflict, "CONFLICT", "Already shared with this user")
 		return
@@ -388,7 +388,7 @@ func (s *Server) handleRemoveShare(w http.ResponseWriter, r *http.Request) {
 	shareID := chi.URLParam(r, "shareId")
 	userID := getUserID(r)
 
-	album, err := s.albumStore.FindByID(albumID)
+	album, err := s.file.AlbumStore.FindByID(albumID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Album not found")
 		return
@@ -399,7 +399,7 @@ func (s *Server) handleRemoveShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.albumShareStore.Remove(shareID); err != nil {
+	if err := s.album.AlbumShareStore.Remove(shareID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove share")
 		return
 	}

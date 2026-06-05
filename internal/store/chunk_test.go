@@ -305,3 +305,67 @@ func TestChunkStore_DeleteAbandonedChunks_shouldCleanOld(t *testing.T) {
 		t.Error("expected abandoned chunks to be deleted")
 	}
 }
+
+func TestChunkStore_CleanupOrphanedTempFiles_shouldRemoveFiles(t *testing.T) {
+	cs, _, uploadID, _, _ := setupChunkStore(t)
+
+	dir := t.TempDir()
+	chunk1Path := filepath.Join(dir, "chunk_0")
+	chunk2Path := filepath.Join(dir, "chunk_1")
+	os.WriteFile(chunk1Path, []byte("aaa"), 0644)
+	os.WriteFile(chunk2Path, []byte("bbb"), 0644)
+
+	cs.CreateChunkRecord(uploadID, 0, 3, 0, "", chunk1Path)
+	cs.CreateChunkRecord(uploadID, 1, 3, 3, "", chunk2Path)
+
+	cs.CleanupOrphanedTempFiles(uploadID)
+
+	if _, err := os.Stat(chunk1Path); !os.IsNotExist(err) {
+		t.Error("expected chunk_0 file to be removed")
+	}
+	if _, err := os.Stat(chunk2Path); !os.IsNotExist(err) {
+		t.Error("expected chunk_1 file to be removed")
+	}
+}
+
+func TestChunkStore_CleanupOldUploads_shouldExpireQueuedJobs(t *testing.T) {
+	_, db, uploadID, _, _ := setupChunkStore(t)
+	cs := NewChunkStore(db)
+
+	cutoff := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
+	db.Exec(`UPDATE upload_jobs SET updated_at = ? WHERE id = ?`, cutoff, uploadID)
+
+	ids, err := cs.CleanupOldUploads(1)
+	if err != nil {
+		t.Fatalf("CleanupOldUploads() error = %v", err)
+	}
+	if len(ids) != 1 {
+		t.Errorf("expected 1 expired upload, got %d", len(ids))
+	}
+
+	var status string
+	var errorMsg string
+	db.QueryRow(`SELECT status, error FROM upload_jobs WHERE id = ?`, uploadID).Scan(&status, &errorMsg)
+	if status != "failed" {
+		t.Errorf("expected status 'failed', got %q", status)
+	}
+	if errorMsg != "upload_expired" {
+		t.Errorf("expected error 'upload_expired', got %q", errorMsg)
+	}
+}
+
+func TestChunkStore_CleanupOldUploads_shouldSkipRecentJobs(t *testing.T) {
+	_, db, uploadID, _, _ := setupChunkStore(t)
+	cs := NewChunkStore(db)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	db.Exec(`UPDATE upload_jobs SET updated_at = ? WHERE id = ?`, now, uploadID)
+
+	ids, err := cs.CleanupOldUploads(1)
+	if err != nil {
+		t.Fatalf("CleanupOldUploads() error = %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("expected 0 expired uploads, got %d", len(ids))
+	}
+}

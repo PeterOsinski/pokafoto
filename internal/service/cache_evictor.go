@@ -1,31 +1,34 @@
-package server
+package service
 
 import (
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/drive/drive/internal/config"
-	"github.com/drive/drive/internal/service"
-	"golang.org/x/sys/unix"
 )
 
 const evictionInterval = 5 * time.Minute
 
 type CacheEvictor struct {
 	cfg           *config.Config
+	fs            FileSystem
 	thumbnailsDir string
+	originalsDir  string
+	storagePath   string
 	maxBytes      int64
-	eventRecorder *service.EventRecorder
+	eventRecorder *EventRecorder
 }
 
-func NewCacheEvictor(cfg *config.Config, eventRecorder *service.EventRecorder) *CacheEvictor {
+func NewCacheEvictor(cfg *config.Config, fs FileSystem, eventRecorder *EventRecorder) *CacheEvictor {
 	return &CacheEvictor{
 		cfg:           cfg,
+		fs:            fs,
 		thumbnailsDir: cfg.ThumbnailsDir(),
+		originalsDir:  cfg.OriginalsDir(),
+		storagePath:   cfg.Storage.Local.Path,
 		eventRecorder: eventRecorder,
 	}
 }
@@ -41,22 +44,19 @@ func (c *CacheEvictor) Start() {
 	}()
 }
 
-type fileInfo struct {
+type cacheFileInfo struct {
 	path    string
 	modTime time.Time
 	size    int64
 }
 
 func (c *CacheEvictor) ComputeMaxBytes() int64 {
-	var stat unix.Statfs_t
-	if err := unix.Statfs(c.cfg.Storage.Local.Path, &stat); err != nil {
-		return 50 * 1024 * 1024 * 1024
-	}
-	total := stat.Blocks * uint64(stat.Bsize)
+	totalBlocks, blockSize, _ := c.fs.Statfs(c.storagePath)
+	total := totalBlocks * uint64(blockSize)
 	maxAllowed := int64(total) * int64(c.cfg.MaxDiskUsagePercent()) / 100
 
 	var originalsSize int64
-	filepath.Walk(c.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
+	c.fs.Walk(c.originalsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -78,9 +78,9 @@ func (c *CacheEvictor) evictIfNeeded() error {
 	maxBytes := c.maxBytes
 
 	var totalSize int64
-	var files []fileInfo
+	var files []cacheFileInfo
 
-	err := filepath.Walk(c.thumbnailsDir, func(path string, info os.FileInfo, err error) error {
+	err := c.fs.Walk(c.thumbnailsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -88,7 +88,7 @@ func (c *CacheEvictor) evictIfNeeded() error {
 			return nil
 		}
 		totalSize += info.Size()
-		files = append(files, fileInfo{path: path, modTime: info.ModTime(), size: info.Size()})
+		files = append(files, cacheFileInfo{path: path, modTime: info.ModTime(), size: info.Size()})
 		return nil
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func (c *CacheEvictor) evictIfNeeded() error {
 		if totalSize-freed <= target {
 			break
 		}
-		if err := os.Remove(f.path); err == nil {
+		if err := c.fs.Remove(f.path); err == nil {
 			freed += f.size
 		}
 	}
@@ -139,7 +139,7 @@ func (c *CacheEvictor) evictIfNeeded() error {
 	}
 
 	var mu sync.Mutex
-	err = filepath.Walk(c.thumbnailsDir, func(path string, info os.FileInfo, err error) error {
+	err = c.fs.Walk(c.thumbnailsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -151,9 +151,9 @@ func (c *CacheEvictor) evictIfNeeded() error {
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		entries, _ := os.ReadDir(path)
+		entries, _ := c.fs.ReadDir(path)
 		if len(entries) == 0 {
-			os.Remove(path)
+			c.fs.Remove(path)
 		}
 		return nil
 	})

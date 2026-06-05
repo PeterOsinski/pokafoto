@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -39,7 +38,7 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 	defer zw.Close()
 
 	for _, fileID := range req.FileIDs {
-		file, err := s.fileStore.FindByID(fileID)
+		file, err := s.file.FileStore.FindByID(fileID)
 		if err != nil || file == nil || file.UserID != userID {
 			continue
 		}
@@ -51,7 +50,7 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 		}
 
 		if file.IsAppManaged {
-			doc, err := s.docStore.FindByFileID(fileID)
+			doc, err := s.doc.DocumentStore.FindByFileID(fileID)
 			if err != nil {
 				continue
 			}
@@ -60,7 +59,7 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 		}
 
 		filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-		f, err := os.Open(filePath)
+		f, err := s.fs.Open(filePath)
 		if err != nil {
 			continue
 		}

@@ -12,7 +12,7 @@ func (s *Server) handleSetFolderPassword(w http.ResponseWriter, r *http.Request)
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -38,12 +38,12 @@ func (s *Server) handleSetFolderPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	expiresAt := time.Now().UTC().Add(s.folderPasswordExpiryDuration())
-	existing, _ := s.folderPasswordStore.FindByFolderID(folderID)
+	existing, _ := s.file.FolderPwStore.FindByFolderID(folderID)
 	if existing != nil {
-		s.folderPasswordStore.DeleteByFolderID(folderID)
+		s.file.FolderPwStore.DeleteByFolderID(folderID)
 	}
 
-	fp, err := s.folderPasswordStore.Create(folderID, string(hash), req.PasswordHint, expiresAt)
+	fp, err := s.file.FolderPwStore.Create(folderID, string(hash), req.PasswordHint, expiresAt)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to set folder password")
 		return
@@ -59,7 +59,7 @@ func (s *Server) handleRemoveFolderPassword(w http.ResponseWriter, r *http.Reque
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -69,7 +69,7 @@ func (s *Server) handleRemoveFolderPassword(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := s.folderPasswordStore.DeleteByFolderID(folderID); err != nil {
+	if err := s.file.FolderPwStore.DeleteByFolderID(folderID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove folder password")
 		return
 	}
@@ -81,7 +81,7 @@ func (s *Server) handleUnlockFolder(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -91,7 +91,7 @@ func (s *Server) handleUnlockFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fp, err := s.folderPasswordStore.FindByFolderID(folderID)
+	fp, err := s.file.FolderPwStore.FindByFolderID(folderID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder does not have a password")
 		return
@@ -99,7 +99,7 @@ func (s *Server) handleUnlockFolder(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	if now.After(fp.ExpiresAt) {
-		s.folderPasswordStore.DeleteByFolderID(folderID)
+		s.file.FolderPwStore.DeleteByFolderID(folderID)
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"message":      "Folder password has expired, no unlock needed",
 			"unlock_token": nil,
@@ -121,8 +121,8 @@ func (s *Server) handleUnlockFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	expiresAt := time.Now().UTC().Add(s.folderPasswordExpiryDuration())
-	s.folderPasswordStore.DeleteByFolderID(folderID)
-	if _, err := s.folderPasswordStore.Create(folderID, fp.PasswordHash, fp.PasswordHint, expiresAt); err != nil {
+	s.file.FolderPwStore.DeleteByFolderID(folderID)
+	if _, err := s.file.FolderPwStore.Create(folderID, fp.PasswordHash, fp.PasswordHint, expiresAt); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to refresh unlock")
 		return
 	}
@@ -144,7 +144,7 @@ func (s *Server) handleGetFolderPasswordStatus(w http.ResponseWriter, r *http.Re
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.folderStore.FindByID(folderID)
+	folder, err := s.file.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -154,7 +154,7 @@ func (s *Server) handleGetFolderPasswordStatus(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	fp, err := s.folderPasswordStore.FindByFolderID(folderID)
+	fp, err := s.file.FolderPwStore.FindByFolderID(folderID)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"has_password": false,
@@ -165,7 +165,7 @@ func (s *Server) handleGetFolderPasswordStatus(w http.ResponseWriter, r *http.Re
 	now := time.Now().UTC()
 	active := now.Before(fp.ExpiresAt)
 	if !active {
-		s.folderPasswordStore.DeleteByFolderID(folderID)
+		s.file.FolderPwStore.DeleteByFolderID(folderID)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
