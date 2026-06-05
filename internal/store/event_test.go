@@ -203,3 +203,55 @@ func TestSystemEventsStore_PurgeOlderThan_shouldDelete(t *testing.T) {
 		t.Errorf("expected 1 remaining, got %d", total)
 	}
 }
+
+func TestSystemEventsStore_EventCounts_shouldReturnEmptyForNoEvents(t *testing.T) {
+	db := OpenTestDB(t)
+	defer db.Close()
+
+	s := NewSystemEventsStore(db)
+	counts, err := s.EventCounts()
+	if err != nil {
+		t.Fatalf("EventCounts: %v", err)
+	}
+	if len(counts) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(counts))
+	}
+}
+
+func TestSystemEventsStore_List_shouldHandleCombinedFilters(t *testing.T) {
+	db := OpenTestDB(t)
+	defer db.Close()
+
+	s := NewSystemEventsStore(db)
+	s.Create(&model.SystemEvent{EventType: "type_a", Severity: model.SeverityError, Message: "error a"})
+	s.Create(&model.SystemEvent{EventType: "type_a", Severity: model.SeverityInfo, Message: "info a"})
+	s.Create(&model.SystemEvent{EventType: "type_b", Severity: model.SeverityError, Message: "error b"})
+
+	events, total, err := s.List(10, 0, "type_a", "error", "", "")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("expected 1 combined match, got %d", total)
+	}
+	if len(events) != 1 {
+		t.Errorf("expected 1 event, got %d", len(events))
+	}
+}
+
+func TestSystemEventsStore_List_shouldReturnEmpty(t *testing.T) {
+	db := OpenTestDB(t)
+	defer db.Close()
+
+	s := NewSystemEventsStore(db)
+	events, total, err := s.List(10, 0, "nonexistent", "", "", "")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 0 {
+		t.Errorf("expected 0 total, got %d", total)
+	}
+	if len(events) != 0 {
+		t.Errorf("expected empty slice, got %d", len(events))
+	}
+}

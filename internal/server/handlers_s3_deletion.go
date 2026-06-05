@@ -4,8 +4,8 @@ import (
 	"github.com/drive/drive/internal/service"
 )
 
-func (s *Server) enqueueS3Deletion(fileID, userID, filename string) {
-	refs, err := s.file.ThumbnailStore.FindThumbnailRefsByFileID(fileID)
+func (c *FileCtl) enqueueS3Deletion(fileID, userID, filename string) {
+	refs, err := c.ThumbnailStore.FindThumbnailRefsByFileID(fileID)
 	if err != nil {
 		return
 	}
@@ -21,5 +21,5 @@ func (s *Server) enqueueS3Deletion(fileID, userID, filename string) {
 		Filename: filename,
 		Thumbs:   thumbs,
 	}
-	s.s3DeletionPool.Enqueue(task)
+	c.S3DeletionPool.Enqueue(task)
 }

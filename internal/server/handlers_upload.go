@@ -138,7 +138,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(files) > 0 {
-		s.workerPool.NotifyJobsAvailable()
+		s.upload.WorkerPool.NotifyJobsAvailable()
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
@@ -304,12 +304,12 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 	var ch chan *model.UploadJob
 
 	if batchID != "" {
-		ch = s.workerPool.Subscribe(batchID, wsID)
-		defer s.workerPool.Unsubscribe(batchID, wsID)
+		ch = s.upload.WorkerPool.Subscribe(batchID, wsID)
+		defer s.upload.WorkerPool.Unsubscribe(batchID, wsID)
 		s.sendBatchSnapshot(conn, batchID, userID)
 	} else {
-		ch = s.workerPool.SubscribeUser(userID, wsID)
-		defer s.workerPool.UnsubscribeUser(userID, wsID)
+		ch = s.upload.WorkerPool.SubscribeUser(userID, wsID)
+		defer s.upload.WorkerPool.UnsubscribeUser(userID, wsID)
 	}
 
 	done := make(chan struct{})

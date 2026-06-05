@@ -265,9 +265,9 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
 		s3Key := fmt.Sprintf("thumbnails/%s/%s", fileID, size)
-		if err := s.storageService.GetObject(s3Key, thumbPath); err != nil {
+		if err := s.file.Storage.GetObject(s3Key, thumbPath); err != nil {
 			slog.Warn("s3 thumbnail fallback failed", "key", s3Key, "error", err)
 			s.fallbackThumbnail(w, r, fileID, size)
 			return
@@ -641,7 +641,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
 		w.Header().Set("Accept-Ranges", "bytes")
@@ -651,7 +651,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		if file.SHA256 != "" {
 			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, file.SHA256))
 		}
-		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.storageService, s.fs, file.MimeType, file.SizeBytes)
+		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
 		return
 	}
 
@@ -730,20 +730,20 @@ func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
 	if quality == "proxy" {
 		thumb, err := s.file.ThumbnailStore.FindByFileIDAndSize(fileID, model.ThumbSizeVideoProxy)
 		if err == nil && thumb != nil {
-			serveFileWithRange(w, r, thumb.LocalPath, thumb.S3Key, s.cfg, s.storageService, s.fs, "video/mp4", thumb.SizeBytes)
+			serveFileWithRange(w, r, thumb.LocalPath, thumb.S3Key, s.cfg, s.file.Storage, s.fs, "video/mp4", thumb.SizeBytes)
 			return
 		}
 	}
 
 	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
 	if _, err := s.fs.Stat(filePath); err == nil {
-		serveFileWithRange(w, r, filePath, nil, s.cfg, s.storageService, s.fs, file.MimeType, file.SizeBytes)
+		serveFileWithRange(w, r, filePath, nil, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
-		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.storageService, s.fs, file.MimeType, file.SizeBytes)
+		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
 		return
 	}
 
@@ -999,7 +999,7 @@ func (s *Server) handlePermanentDeleteTrash(w http.ResponseWriter, r *http.Reque
 	thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), file.ID)
 	s.fs.RemoveAll(thumbDir)
 
-	s.enqueueS3Deletion(file.ID, file.UserID, file.Filename)
+	s.file.enqueueS3Deletion(file.ID, file.UserID, file.Filename)
 
 	if err := s.file.FileStore.PermanentDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete file")
@@ -1031,7 +1031,7 @@ func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.
 		s.fs.Remove(originalPath)
 		thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), f.ID)
 		s.fs.RemoveAll(thumbDir)
-		s.enqueueS3Deletion(f.ID, f.UserID, f.Filename)
+		s.file.enqueueS3Deletion(f.ID, f.UserID, f.Filename)
 		deleteIDs = append(deleteIDs, f.ID)
 	}
 
@@ -1070,7 +1070,7 @@ func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 
 	var allIDs []string
 	for _, r := range records {
-		s.enqueueS3Deletion(r.id, r.uid, r.fn)
+		s.file.enqueueS3Deletion(r.id, r.uid, r.fn)
 		allIDs = append(allIDs, r.id)
 	}
 

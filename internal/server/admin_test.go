@@ -407,3 +407,194 @@ func TestAdmin_Stats_shouldIncludePerUserThumbnails(t *testing.T) {
 		t.Error("expected space_quota in per-user stats")
 	}
 }
+
+func TestAdmin_S3DeletionQueue_shouldReturnPendingCount(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("s3qadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/s3-deletion-queue", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["pending"]; !ok {
+		t.Error("expected pending field in response")
+	}
+}
+
+func TestAdmin_Workers_shouldReturnStats(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("wrkadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/workers", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["active_workers"]; !ok {
+		t.Error("expected active_workers in response")
+	}
+	if _, ok := resp["total_workers"]; !ok {
+		t.Error("expected total_workers in response")
+	}
+}
+
+func TestAdmin_BackupStatus_shouldReturnResult(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("bkupadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/backup/status", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["enabled"]; !ok {
+		t.Error("expected enabled field in backup status")
+	}
+}
+
+func TestAdmin_Events_shouldReturnEvents(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("evtadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/events", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["events"]; !ok {
+		t.Error("expected events field in response")
+	}
+	if _, ok := resp["total"]; !ok {
+		t.Error("expected total field in response")
+	}
+}
+
+func TestAdmin_EventCounts_shouldReturnCounts(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("evtcadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/events/counts", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["server_start"]; ok {
+	}
+}
+
+func TestAdmin_Jobs_shouldReturnJobs(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("jobadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/jobs", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["jobs"]; !ok {
+		t.Error("expected jobs field in response")
+	}
+}
+
+func TestAdmin_Reconcile_shouldReturnCreated(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("recadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "POST", "/api/v1/admin/jobs/reconcile", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if _, ok := resp["created"]; !ok {
+		t.Error("expected created field in response")
+	}
+}
+
+func TestAdmin_ThumbnailStats_shouldReturnBreakdown(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("tadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/thumbnails/stats", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdmin_FileBreakdown_shouldReturnBreakdown(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("fbadmin_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/files/breakdown", "", map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}

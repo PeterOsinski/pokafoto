@@ -16,16 +16,11 @@ import (
 )
 
 type Server struct {
-	cfg             *config.Config
-	db              *store.DB
-	router          *chi.Mux
-	fs              service.FileSystem
-	storageService  *service.StorageService
-	workerPool      *worker.Pool
-	s3DeletionPool  *service.S3DeletionPool
-	eventRecorder   *service.EventRecorder
-	backupScheduler *backup.Scheduler
-	stopCh          chan struct{}
+	cfg           *config.Config
+	router        *chi.Mux
+	fs            service.FileSystem
+	eventRecorder *service.EventRecorder
+	stopCh        chan struct{}
 
 	auth     *AuthCtl
 	file     *FileCtl
@@ -64,11 +59,21 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	geoStore := store.NewGeoStore(db)
 	systemEventsStore := store.NewSystemEventsStore(db)
 
+	storageService, err := service.NewStorageService(cfg, fs)
+	if err != nil {
+		slog.Warn("storage service init failed, continuing without S3", "error", err)
+		storageService, _ = service.NewStorageService(&config.Config{}, fs)
+	}
+
+	s3DeletionPool := service.NewS3DeletionPool(storageService, thumbnailStore)
+	eventRecorder := service.NewEventRecorder(db)
+	workerPool := worker.NewPool(cfg, fs, fileStore, exifStore, thumbnailStore, storageService, uploadJobStore, chunkStore, eventRecorder)
+
 	s := &Server{
-		cfg:  cfg,
-		db:   db,
-		fs:   fs,
-		stopCh: make(chan struct{}),
+		cfg:           cfg,
+		fs:            fs,
+		stopCh:        make(chan struct{}),
+		eventRecorder: eventRecorder,
 		auth: &AuthCtl{
 			UserStore:    userStore,
 			SessionStore: sessStore,
@@ -83,12 +88,15 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			FolderStore:    folderStore,
 			FolderPwStore:  folderPasswordStore,
 			AlbumStore:     albumStore,
+			Storage:        storageService,
+			S3DeletionPool: s3DeletionPool,
 		},
 		upload: &UploadCtl{
 			UploadJobStore: uploadJobStore,
 			ChunkStore:     chunkStore,
 			FileStore:      fileStore,
 			UserStore:      userStore,
+			WorkerPool:     workerPool,
 		},
 		folder: &FolderCtl{
 			FolderStore:      folderStore,
@@ -115,6 +123,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		},
 		download: &DownloadCtl{
 			FileStore: fileStore,
+			Storage:   storageService,
 		},
 		share: &ShareCtl{
 			FolderShareStore: folderShareStore,
@@ -131,21 +140,13 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			SettingStore:      settingStore,
 			ExifStore:         exifStore,
 			GeoStore:          geoStore,
+			DB:                db,
+			Storage:           storageService,
+			WorkerPool:        workerPool,
+			S3DeletionPool:    s3DeletionPool,
+			S3Enabled:         cfg.Storage.S3.Enabled,
 		},
 	}
-
-	storageService, err := service.NewStorageService(cfg, fs)
-	if err != nil {
-		slog.Warn("storage service init failed, continuing without S3", "error", err)
-		storageService, _ = service.NewStorageService(&config.Config{}, fs) // disabled client
-	}
-
-	s.eventRecorder = service.NewEventRecorder(db)
-
-	s.workerPool = worker.NewPool(cfg, fs, s.file.FileStore, s.file.ExifStore, s.file.ThumbnailStore, storageService, s.upload.UploadJobStore, s.upload.ChunkStore, s.eventRecorder)
-	s.storageService = storageService
-
-	s.s3DeletionPool = service.NewS3DeletionPool(storageService, s.file.ThumbnailStore)
 
 	if err != nil {
 		s.eventRecorder.Warn("s3_disconnect", "S3 storage init failed", map[string]interface{}{"error": err.Error()})
@@ -157,13 +158,13 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		"workers":    cfg.Upload.ConcurrentWorkers,
 	})
 
-	s.backupScheduler = backup.NewScheduler(cfg, db, storageService, s.eventRecorder, fs)
-	s.backupScheduler.Start()
+	s.admin.Scheduler = backup.NewScheduler(cfg, db, storageService, s.eventRecorder, fs)
+	s.admin.Scheduler.Start()
 
-	s.workerPool.StartReconciler(30 * time.Minute)
+	s.upload.WorkerPool.StartReconciler(30 * time.Minute)
 
 	service.NewCacheEvictor(cfg, s.fs, s.eventRecorder).Start()
-	service.NewTrashCleanup(s.file.FileStore, s.fs, s.cfg.OriginalsDir(), s.cfg.ThumbnailsDir(), s.cfg.TrashExpirationDays, s.enqueueS3Deletion).Start(s.stopCh)
+	service.NewTrashCleanup(s.file.FileStore, s.fs, s.cfg.OriginalsDir(), s.cfg.ThumbnailsDir(), s.cfg.TrashExpirationDays, s.file.enqueueS3Deletion).Start(s.stopCh)
 	service.NewEventRetention(s.admin.SystemEventsStore).Start(s.stopCh)
 	service.NewChunkCleanup(s.upload.ChunkStore, s.cfg.Upload.ChunkCleanupHours, s.cfg.Upload.MaxChunkUploadAgeHours).Start(s.stopCh)
 	service.NewFolderPasswordCleanup(s.file.FolderPwStore).Start(s.stopCh)
@@ -175,9 +176,9 @@ func New(cfg *config.Config, db *store.DB) *Server {
 func (s *Server) Shutdown() {
 	s.eventRecorder.Info("server_shutdown", "server shutting down gracefully", nil)
 	close(s.stopCh)
-	s.backupScheduler.Shutdown()
-	s.workerPool.Shutdown()
-	s.s3DeletionPool.Shutdown()
+	s.admin.Scheduler.Shutdown()
+	s.upload.WorkerPool.Shutdown()
+	s.admin.S3DeletionPool.Shutdown()
 }
 
 func (s *Server) setupRouter() {
@@ -196,7 +197,7 @@ func (s *Server) setupRouter() {
 		MaxAge:           300,
 	}))
 
-	r.Get("/api/v1/health", s.handleHealth)
+	r.Get("/api/v1/health", s.admin.handleHealth)
 	r.Get("/api/v1/auth/config", s.handleAuthConfig)
 
 	r.Get("/api/v1/share/{token}", s.handleShareInfo)
@@ -350,13 +351,13 @@ func (s *Server) Start(addr string) error {
 	return http.ListenAndServe(addr, s.router)
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) handleHealth(w http.ResponseWriter, r *http.Request) {
 	dbOK := true
-	if err := s.db.Ping(); err != nil {
+	if err := c.DB.Ping(); err != nil {
 		dbOK = false
 	}
 
-	s3OK := !s.cfg.Storage.S3.Enabled || s.storageService.IsConnected()
+	s3OK := !c.S3Enabled || c.Storage.IsConnected()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":        "ok",

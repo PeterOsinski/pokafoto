@@ -14,7 +14,7 @@ import (
 
 func (s *Server) handleAdminS3DeletionQueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"pending": s.s3DeletionPool.PendingCount(),
+		"pending": s.admin.S3DeletionPool.PendingCount(),
 	})
 }
 
@@ -273,12 +273,12 @@ func (s *Server) handleAdminRetryJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminReconcileJobs(w http.ResponseWriter, r *http.Request) {
-	result := s.workerPool.RunReconciliation()
+	result := s.admin.WorkerPool.RunReconciliation()
 	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleAdminWorkers(w http.ResponseWriter, r *http.Request) {
-	stats := s.workerPool.Stats()
+	stats := s.admin.WorkerPool.Stats()
 	writeJSON(w, http.StatusOK, stats)
 }
 
@@ -425,7 +425,7 @@ func (s *Server) handleAdminEventCounts(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminBackupStatus(w http.ResponseWriter, r *http.Request) {
-	result := s.backupScheduler.LastResult()
+	result := s.admin.Scheduler.LastResult()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled":        s.cfg.Backup.Enabled,
 		"interval_h":     s.cfg.Backup.IntervalH,
@@ -435,11 +435,11 @@ func (s *Server) handleAdminBackupStatus(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleAdminTriggerBackup(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.Backup.Enabled || !s.storageService.IsConnected() {
+	if !s.cfg.Backup.Enabled || !s.admin.Storage.IsConnected() {
 		writeError(w, http.StatusConflict, "BACKUP_UNAVAILABLE", "Backup is not enabled or S3 is not connected")
 		return
 	}
-	go s.backupScheduler.RunBackup()
+	go s.admin.Scheduler.RunBackup()
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"status": "backup_started",
 	})

@@ -102,3 +102,42 @@ func TestGeoStore_GetPoints_shouldFilterByUser(t *testing.T) {
 		t.Errorf("expected 1 point for user1, got %d", len(points))
 	}
 }
+
+func TestGeoStore_GetPoints_shouldExcludeDeletedFiles(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	gs := NewGeoStore(db)
+
+	user := createTestUser(t, us)
+	createTestFileWithGPS(t, db, user.ID, 52.0, 21.0)
+
+	deleted := createTestFileWithGPS(t, db, user.ID, 53.0, 22.0)
+	db.Exec("UPDATE files SET is_deleted = 1 WHERE id = ?", deleted.ID)
+
+	points, err := gs.GetPoints(user.ID, GeoBounds{
+		LatMin: 50, LatMax: 55,
+		LonMin: 20, LonMax: 25,
+	})
+	if err != nil {
+		t.Fatalf("get points: %v", err)
+	}
+	if len(points) != 1 {
+		t.Errorf("expected 1 point excluding deleted, got %d", len(points))
+	}
+}
+
+func TestGeoStore_GetPoints_shouldReturnEmptyForUnknownUser(t *testing.T) {
+	db := OpenTestDB(t)
+	gs := NewGeoStore(db)
+
+	points, err := gs.GetPoints("nonexistent", GeoBounds{
+		LatMin: -90, LatMax: 90,
+		LonMin: -180, LonMax: 180,
+	})
+	if err != nil {
+		t.Fatalf("get points: %v", err)
+	}
+	if len(points) != 0 {
+		t.Errorf("expected 0 points, got %d", len(points))
+	}
+}

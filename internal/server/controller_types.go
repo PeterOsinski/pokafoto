@@ -1,6 +1,11 @@
 package server
 
-import "github.com/drive/drive/internal/store"
+import (
+	"github.com/drive/drive/internal/backup"
+	"github.com/drive/drive/internal/service"
+	"github.com/drive/drive/internal/store"
+	"github.com/drive/drive/internal/worker"
+)
 
 type AuthCtl struct {
 	UserStore    *store.UserStore
@@ -9,14 +14,16 @@ type AuthCtl struct {
 }
 
 type FileCtl struct {
-	FileStore      *store.FileStore
-	ExifStore      *store.ExifStore
-	GeoStore       *store.GeoStore
-	TagStore       *store.TagStore
-	ThumbnailStore *store.ThumbnailStore
-	FolderStore    *store.FolderStore
-	FolderPwStore  *store.FolderPasswordStore
-	AlbumStore     *store.AlbumStore
+	FileStore        *store.FileStore
+	ExifStore        *store.ExifStore
+	GeoStore         *store.GeoStore
+	TagStore         *store.TagStore
+	ThumbnailStore   *store.ThumbnailStore
+	FolderStore      *store.FolderStore
+	FolderPwStore    *store.FolderPasswordStore
+	AlbumStore       *store.AlbumStore
+	Storage          *service.StorageService
+	S3DeletionPool   *service.S3DeletionPool
 }
 
 type UploadCtl struct {
@@ -24,6 +31,7 @@ type UploadCtl struct {
 	ChunkStore     *store.ChunkStore
 	FileStore      *store.FileStore
 	UserStore      *store.UserStore
+	WorkerPool     *worker.Pool
 }
 
 type FolderCtl struct {
@@ -55,6 +63,7 @@ type DocCtl struct {
 
 type DownloadCtl struct {
 	FileStore *store.FileStore
+	Storage   *service.StorageService
 }
 
 type ShareCtl struct {
@@ -73,4 +82,10 @@ type AdminCtl struct {
 	SettingStore      *store.SettingStore
 	ExifStore         *store.ExifStore
 	GeoStore          *store.GeoStore
+	DB                *store.DB
+	Storage           *service.StorageService
+	WorkerPool        *worker.Pool
+	S3DeletionPool    *service.S3DeletionPool
+	Scheduler         *backup.Scheduler
+	S3Enabled         bool
 }

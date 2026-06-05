@@ -1405,4 +1405,99 @@ func TestPool_s3Worker_shouldSkipWithNilStorageService(t *testing.T) {
 	}
 }
 
+func TestPool_Reconciliation_shouldRunAndReport(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("reconuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	userDir := filepath.Join(cfg.OriginalsDir(), u.ID, "2024/07")
+	os.MkdirAll(userDir, 0755)
+	realPath := filepath.Join(userDir, "recon_photo.jpg")
+	os.WriteFile(realPath, []byte("recon test data"), 0644)
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/07/recon_photo.jpg",
+		OriginalName: "recon_photo.jpg",
+		Path:         "2024/07",
+		SizeBytes:    1024,
+		MimeType:     "image/jpeg",
+		SHA256:       fmt.Sprintf("%x", sha256.Sum256([]byte("recon test data"))),
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(f); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, fs, store.NewExifStore(db), ts, nil, ujs, nil, nil)
+	defer pool.Shutdown()
+
+	result := pool.RunReconciliation()
+	if created, ok := result["created"].(int); !ok || created == 0 {
+		t.Errorf("expected at least 1 reconciliation job created, got %v", result["created"])
+	}
+}
+
+func TestPool_StandardJob_tempFileRemovedBeforeProcessing(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("tmpfileuser_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.jpg")
+	job := &model.UploadJob{
+		BatchID:           "batch-missing-temp",
+		UserID:            u.ID,
+		Filename:          "missing.jpg",
+		SizeBytes:         100,
+		TempPath:          nonexistentPath,
+		Status:            model.JobStatusQueued,
+		SkipNameSizeDedup: true,
+	}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, store.NewFileStore(db), store.NewExifStore(db), store.NewThumbnailStore(db), nil, ujs, nil, nil)
+	defer pool.Shutdown()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		fetched, _ := ujs.FindByID(job.ID)
+		if fetched != nil && fetched.Status == model.JobStatusFailed {
+			if fetched.Error == nil || *fetched.Error != "temp_file_missing" {
+				t.Errorf("expected temp_file_missing error, got %v", fetched.Error)
+			}
+			return
+		}
+		select {
+		case <-deadline:
+		fetched, _ := ujs.FindByID(job.ID)
+		t.Fatalf("timed out, status=%s error=%v", fetched.Status, fetched.Error)
+	default:
+	}
+	time.Sleep(200 * time.Millisecond)
+	}
+}
 func intPtr(n int) *int { return &n }

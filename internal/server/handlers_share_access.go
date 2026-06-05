@@ -308,9 +308,9 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.storageService != nil {
+	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
-		stream, err := s.storageService.GetObjectStream(s3Key)
+		stream, err := s.file.Storage.GetObjectStream(s3Key)
 		if err != nil {
 			slog.Warn("share download s3 stream failed", "file_id", fileID, "error", err)
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk or in S3")
@@ -506,7 +506,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	s.workerPool.NotifyJobsAvailable()
+	s.upload.WorkerPool.NotifyJobsAvailable()
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"batch_id": batchID,
