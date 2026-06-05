@@ -40,13 +40,15 @@ type Server struct {
 }
 
 func New(cfg *config.Config, db *store.DB) *Server {
+	fs := service.NewRealFS()
+
 	userStore := store.NewUserStore(db)
 	sessStore := store.NewSessionStore(db)
 	fileStore := store.NewFileStore(db)
 	folderStore := store.NewFolderStore(db)
 	thumbnailStore := store.NewThumbnailStore(db)
 	uploadJobStore := store.NewUploadJobStore(db)
-	chunkStore := store.NewChunkStore(db)
+	chunkStore := store.NewChunkStore(db, fs)
 	settingStore := store.NewSettingStore(db)
 	albumStore := store.NewAlbumStore(db)
 	albumItemStore := store.NewAlbumItemStore(db)
@@ -65,7 +67,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 	s := &Server{
 		cfg:  cfg,
 		db:   db,
-		fs:   service.NewRealFS(),
+		fs:   fs,
 		stopCh: make(chan struct{}),
 		auth: &AuthCtl{
 			UserStore:    userStore,
@@ -132,15 +134,15 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		},
 	}
 
-	storageService, err := service.NewStorageService(cfg)
+	storageService, err := service.NewStorageService(cfg, fs)
 	if err != nil {
 		slog.Warn("storage service init failed, continuing without S3", "error", err)
-		storageService, _ = service.NewStorageService(&config.Config{}) // disabled client
+		storageService, _ = service.NewStorageService(&config.Config{}, fs) // disabled client
 	}
 
 	s.eventRecorder = service.NewEventRecorder(db)
 
-	s.workerPool = worker.NewPool(cfg, s.file.FileStore, s.file.ExifStore, s.file.ThumbnailStore, storageService, s.upload.UploadJobStore, s.upload.ChunkStore, s.eventRecorder)
+	s.workerPool = worker.NewPool(cfg, fs, s.file.FileStore, s.file.ExifStore, s.file.ThumbnailStore, storageService, s.upload.UploadJobStore, s.upload.ChunkStore, s.eventRecorder)
 	s.storageService = storageService
 
 	s.s3DeletionPool = service.NewS3DeletionPool(storageService, s.file.ThumbnailStore)
@@ -155,7 +157,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 		"workers":    cfg.Upload.ConcurrentWorkers,
 	})
 
-	s.backupScheduler = backup.NewScheduler(cfg, db, storageService, s.eventRecorder)
+	s.backupScheduler = backup.NewScheduler(cfg, db, storageService, s.eventRecorder, fs)
 	s.backupScheduler.Start()
 
 	s.workerPool.StartReconciler(30 * time.Minute)

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/drive/drive/internal/model"
+	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
 	"github.com/google/uuid"
 )
@@ -147,7 +148,7 @@ func TestServer_ChunkUpload_multipleChunks_shouldTrackAll(t *testing.T) {
 		t.Fatal("expected upload_id")
 	}
 
-	cs := store.NewChunkStore(db)
+	cs := store.NewChunkStore(db, service.NewMockFS())
 	count, err := cs.GetStoredChunkCount(uploadID)
 	if err != nil {
 		t.Fatalf("get stored chunk count: %v", err)

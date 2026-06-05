@@ -11,12 +11,20 @@ import (
 	"time"
 )
 
-type ChunkStore struct {
-	db *DB
+type chunkFS interface {
+	Create(name string) (*os.File, error)
+	Open(name string) (*os.File, error)
+	Remove(name string) error
+	Stat(name string) (os.FileInfo, error)
 }
 
-func NewChunkStore(db *DB) *ChunkStore {
-	return &ChunkStore{db: db}
+type ChunkStore struct {
+	db *DB
+	fs chunkFS
+}
+
+func NewChunkStore(db *DB, fs chunkFS) *ChunkStore {
+	return &ChunkStore{db: db, fs: fs}
 }
 
 func (s *ChunkStore) CreateChunkRecord(uploadID string, index int, size, offset int64, sha256hex, tempPath string) error {
@@ -112,7 +120,7 @@ func (s *ChunkStore) FindMissingChunks(uploadID string, totalChunks int) ([]int,
 }
 
 func (s *ChunkStore) AssembleFile(uploadID string, totalChunks int, destPath string) (string, error) {
-	destFile, err := os.Create(destPath)
+	destFile, err := s.fs.Create(destPath)
 	if err != nil {
 		return "", fmt.Errorf("create assembled file: %w", err)
 	}
@@ -130,7 +138,7 @@ func (s *ChunkStore) AssembleFile(uploadID string, totalChunks int, destPath str
 			return "", fmt.Errorf("chunk %d missing for upload %s", i, uploadID)
 		}
 
-		chunkFile, err := os.Open(chunkPath)
+		chunkFile, err := s.fs.Open(chunkPath)
 		if err != nil {
 			return "", fmt.Errorf("open chunk %d: %w", i, err)
 		}
@@ -170,7 +178,7 @@ func (s *ChunkStore) DeleteChunks(uploadID string) error {
 
 	for _, p := range paths {
 		if p != "" {
-			os.Remove(p)
+			s.fs.Remove(p)
 		}
 	}
 
@@ -208,7 +216,7 @@ func (s *ChunkStore) DeleteAbandonedChunks(maxAgeHours int) (int64, error) {
 	}
 
 	for _, p := range paths {
-		os.Remove(p)
+		s.fs.Remove(p)
 	}
 
 	result, err := s.db.Exec(
@@ -243,8 +251,8 @@ func (s *ChunkStore) CleanupOrphanedTempFiles(uploadID string) {
 			continue
 		}
 		if p != "" {
-			if _, err := os.Stat(p); err == nil {
-				os.Remove(p)
+			if _, err := s.fs.Stat(p); err == nil {
+				s.fs.Remove(p)
 			}
 		}
 	}

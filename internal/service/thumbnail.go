@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -17,10 +16,11 @@ import (
 
 type ThumbnailService struct {
 	thumbnailsDir string
+	fs            FileSystem
 }
 
-func NewThumbnailService(thumbnailsDir string) *ThumbnailService {
-	return &ThumbnailService{thumbnailsDir: thumbnailsDir}
+func NewThumbnailService(thumbnailsDir string, fs FileSystem) *ThumbnailService {
+	return &ThumbnailService{thumbnailsDir: thumbnailsDir, fs: fs}
 }
 
 func (s *ThumbnailService) GenerateAll(fileID, sourcePath, mimeType string) ([]*model.Thumbnail, error) {
@@ -46,7 +46,7 @@ func (s *ThumbnailService) GenerateAll(fileID, sourcePath, mimeType string) ([]*
 }
 
 func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType string) ([]*model.Thumbnail, error) {
-	img, err := decodeImage(sourcePath, mimeType)
+	img, err := s.decodeImage(sourcePath, mimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *ThumbnailService) generateImageThumbs(fileID, sourcePath, mimeType stri
 
 func (s *ThumbnailService) generateSize(fileID string, img image.Image, size model.ThumbnailSize, width int, format string) (*model.Thumbnail, error) {
 	dir := filepath.Join(s.thumbnailsDir, fileID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := s.fs.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -92,7 +92,7 @@ func (s *ThumbnailService) generateSize(fileID string, img image.Image, size mod
 	ext := ".jpg"
 	thumbPath := filepath.Join(dir, string(size)+ext)
 
-	f, err := os.Create(thumbPath)
+	f, err := s.fs.Create(thumbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (s *ThumbnailService) generateSize(fileID string, img image.Image, size mod
 		return nil, err
 	}
 
-	stat, _ := os.Stat(thumbPath)
+	stat, _ := s.fs.Stat(thumbPath)
 	bounds := resized.Bounds()
 
 	return &model.Thumbnail{
@@ -126,7 +126,7 @@ func (s *ThumbnailService) generateSize(fileID string, img image.Image, size mod
 
 func (s *ThumbnailService) generateMaxDim(fileID string, img image.Image, size model.ThumbnailSize, maxDim int, format string) (*model.Thumbnail, error) {
 	dir := filepath.Join(s.thumbnailsDir, fileID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := s.fs.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -138,7 +138,7 @@ func (s *ThumbnailService) generateMaxDim(fileID string, img image.Image, size m
 	}
 	thumbPath := filepath.Join(dir, string(size)+ext)
 
-	f, err := os.Create(thumbPath)
+	f, err := s.fs.Create(thumbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (s *ThumbnailService) generateMaxDim(fileID string, img image.Image, size m
 		return nil, err
 	}
 
-	stat, _ := os.Stat(thumbPath)
+	stat, _ := s.fs.Stat(thumbPath)
 	bounds := resized.Bounds()
 
 	return &model.Thumbnail{
@@ -180,7 +180,7 @@ func (s *ThumbnailService) generateMaxDim(fileID string, img image.Image, size m
 func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*model.Thumbnail, error) {
 	stillPath := filepath.Join(s.thumbnailsDir, fileID, "video_still.jpg")
 	dir := filepath.Dir(stillPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := s.fs.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +203,7 @@ func (s *ThumbnailService) generateVideoStills(fileID, sourcePath string) ([]*mo
 		}
 		_ = out
 
-		stat, err := os.Stat(stillPath)
+		stat, err := s.fs.Stat(stillPath)
 		if err != nil {
 			continue
 		}
@@ -236,7 +236,7 @@ func (s *ThumbnailService) generateVideoProxy(fileID, sourcePath string) (*model
 
 	proxyPath := filepath.Join(s.thumbnailsDir, fileID, "video_proxy.mp4")
 	dir := filepath.Dir(proxyPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := s.fs.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -258,7 +258,7 @@ func (s *ThumbnailService) generateVideoProxy(fileID, sourcePath string) (*model
 		return nil, fmt.Errorf("ffmpeg video proxy: %w: %s", err, string(out))
 	}
 
-	stat, err := os.Stat(proxyPath)
+	stat, err := s.fs.Stat(proxyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -309,10 +309,10 @@ func probeVideoResolution(sourcePath string) (int, int, error) {
 	return 0, 0, fmt.Errorf("no video stream found")
 }
 
-func decodeImage(path, mimeType string) (image.Image, error) {
+func (s *ThumbnailService) decodeImage(path, mimeType string) (image.Image, error) {
 	switch mimeType {
 	case "image/webp":
-		f, err := os.Open(path)
+		f, err := s.fs.Open(path)
 		if err != nil {
 			return nil, err
 		}

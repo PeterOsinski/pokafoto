@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"os"
 	"os/exec"
 	"strconv"
 	"time"
@@ -18,10 +17,12 @@ import (
 	"github.com/drive/drive/internal/model"
 )
 
-type ExifService struct{}
+type ExifService struct {
+	fs FileSystem
+}
 
-func NewExifService() *ExifService {
-	return &ExifService{}
+func NewExifService(fs FileSystem) *ExifService {
+	return &ExifService{fs: fs}
 }
 
 type exifToolEntry struct {
@@ -163,7 +164,7 @@ func (s *ExifService) extractViaDsoprea(filePath string) (*model.ExifData, error
 }
 
 func (s *ExifService) ExtractVideoDate(filePath string) (*model.ExifData, error) {
-	f, err := os.Open(filePath)
+	f, err := s.fs.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("open video: %w", err)
 	}

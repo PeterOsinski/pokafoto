@@ -31,6 +31,7 @@ type s3Task struct {
 
 type Pool struct {
 	cfg              *config.Config
+	fs               service.FileSystem
 	fileStore        *store.FileStore
 	exifStore        *store.ExifStore
 	thumbnailStore   *store.ThumbnailStore
@@ -76,18 +77,19 @@ type JobInfo struct {
 	Progress float64 `json:"progress"`
 }
 
-func NewPool(cfg *config.Config, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore, chunkStore *store.ChunkStore, eventRecorder *service.EventRecorder) *Pool {
+func NewPool(cfg *config.Config, fs service.FileSystem, fileStore *store.FileStore, exifStore *store.ExifStore, thumbnailStore *store.ThumbnailStore, storageService *service.StorageService, uploadJobStore *store.UploadJobStore, chunkStore *store.ChunkStore, eventRecorder *service.EventRecorder) *Pool {
 	workers := cfg.Upload.ConcurrentWorkers
 	if workers <= 0 {
 		workers = 4
 	}
 	p := &Pool{
 		cfg:              cfg,
+		fs:               fs,
 		fileStore:        fileStore,
 		exifStore:        exifStore,
 		thumbnailStore:   thumbnailStore,
-		exifService:      service.NewExifService(),
-		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir()),
+		exifService:      service.NewExifService(fs),
+		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir(), fs),
 		storageService:   storageService,
 		uploadJobStore:   uploadJobStore,
 		chunkStore:       chunkStore,
@@ -197,13 +199,13 @@ func (p *Pool) s3Worker(id int) {
 						"error":   err.Error(),
 					})
 				} else {
-					if err := os.Remove(task.DestPath); err != nil {
+					if err := p.fs.Remove(task.DestPath); err != nil {
 						slog.Warn("failed to remove local original after s3 upload", "file_id", task.FileID, "error", err)
 					}
 				}
 			}
 			for _, t := range task.Thumbnails {
-				if _, err := os.Stat(t.LocalPath); os.IsNotExist(err) {
+				if _, err := p.fs.Stat(t.LocalPath); os.IsNotExist(err) {
 					slog.Warn("thumbnail missing before s3 upload, skipping", "file_id", task.FileID, "size", t.Size, "path", t.LocalPath)
 					continue
 				}
@@ -224,7 +226,7 @@ func (p *Pool) s3Worker(id int) {
 						slog.Warn("failed to persist s3_key for thumbnail", "file_id", task.FileID, "size", t.Size, "error", err)
 					}
 					if t.Size == model.ThumbSizeVideoProxy {
-						if err := os.Remove(t.LocalPath); err != nil {
+						if err := p.fs.Remove(t.LocalPath); err != nil {
 							slog.Warn("failed to remove local video proxy after s3 upload", "file_id", task.FileID, "error", err)
 						}
 					}
@@ -246,7 +248,7 @@ func (p *Pool) worker(id int) {
 				return
 			}
 
-			if _, err := os.Stat(job.TempPath); os.IsNotExist(err) {
+			if _, err := p.fs.Stat(job.TempPath); os.IsNotExist(err) {
 				p.uploadJobStore.Fail(job.ID, "temp_file_missing")
 				p.notifySubscribers(job)
 				p.failedTotal.Add(1)
@@ -294,7 +296,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.1)
 	p.notifySubscribers(job)
 
-	f, err := os.Open(job.TempPath)
+	f, err := p.fs.Open(job.TempPath)
 	if err != nil {
 		p.uploadJobStore.Fail(job.ID, "cannot_open_temp_file")
 		p.notifySubscribers(job)
@@ -310,7 +312,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {
 		f.Close()
-		os.Remove(job.TempPath)
+		p.fs.Remove(job.TempPath)
 		p.uploadJobStore.Fail(job.ID, "hash_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -337,7 +339,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		existing, _ := p.fileStore.FindByNameAndSize(job.UserID, job.Filename, job.SizeBytes)
 		if existing != nil {
 			f.Close()
-			os.Remove(job.TempPath)
+			p.fs.Remove(job.TempPath)
 			p.uploadJobStore.Skip(job.ID, "duplicate_name_size", existing.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
@@ -353,7 +355,7 @@ func (p *Pool) processJob(job *model.UploadJob) {
 		existingHash, _ := p.fileStore.FindBySHA256(job.UserID, sha256Hash)
 		if existingHash != nil {
 			f.Close()
-			os.Remove(job.TempPath)
+			p.fs.Remove(job.TempPath)
 			p.uploadJobStore.Skip(job.ID, "duplicate_content", existingHash.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
@@ -398,9 +400,9 @@ func (p *Pool) processChunkedJob(job *model.UploadJob) {
 	p.uploadJobStore.UpdateProgress(job.ID, stage, 0.2)
 	p.notifySubscribers(job)
 
-	f, err := os.Open(destPath)
+	f, err := p.fs.Open(destPath)
 	if err != nil {
-		os.Remove(destPath)
+		p.fs.Remove(destPath)
 		p.uploadJobStore.Fail(job.ID, "cannot_open_assembled")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -414,7 +416,7 @@ func (p *Pool) processChunkedJob(job *model.UploadJob) {
 	if !job.SkipNameSizeDedup && p.cfg.Media.AutoOrganize && mediaType == model.MediaTypePhoto {
 		existing, _ := p.fileStore.FindByNameAndSize(job.UserID, job.Filename, job.SizeBytes)
 		if existing != nil {
-			os.Remove(destPath)
+			p.fs.Remove(destPath)
 			p.uploadJobStore.Skip(job.ID, "duplicate_name_size", existing.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
@@ -425,7 +427,7 @@ func (p *Pool) processChunkedJob(job *model.UploadJob) {
 	if !job.SkipNameSizeDedup {
 		existingHash, _ := p.fileStore.FindBySHA256(job.UserID, sha256Hash)
 		if existingHash != nil {
-			os.Remove(destPath)
+			p.fs.Remove(destPath)
 			p.uploadJobStore.Skip(job.ID, "duplicate_content", existingHash.ID)
 			p.notifySubscribers(job)
 			p.skippedTotal.Add(1)
@@ -484,8 +486,8 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 	}
 	destSubdir := filepath.Join(job.UserID, filepath.Join(pathPrefix, yearMonth))
 	destDir := filepath.Join(p.cfg.OriginalsDir(), destSubdir)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		os.Remove(job.TempPath)
+	if err := p.fs.MkdirAll(destDir, 0755); err != nil {
+		p.fs.Remove(job.TempPath)
 		p.uploadJobStore.Fail(job.ID, "storage_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -499,9 +501,9 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 	storedFilename := fmt.Sprintf("%s_%s", uuid.New().String(), job.Filename)
 	destPath := filepath.Join(destDir, storedFilename)
 
-	destFile, err := os.Create(destPath)
+	destFile, err := p.fs.Create(destPath)
 	if err != nil {
-		os.Remove(job.TempPath)
+		p.fs.Remove(job.TempPath)
 		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -514,8 +516,8 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 
 	if _, err := io.Copy(destFile, f); err != nil {
 		destFile.Close()
-		os.Remove(job.TempPath)
-		os.Remove(destPath)
+		p.fs.Remove(job.TempPath)
+		p.fs.Remove(destPath)
 		p.uploadJobStore.Fail(job.ID, "write_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -556,8 +558,8 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 	}
 
 	if err := p.fileStore.Create(fileRecord); err != nil {
-		os.Remove(job.TempPath)
-		os.Remove(destPath)
+		p.fs.Remove(job.TempPath)
+		p.fs.Remove(destPath)
 		p.uploadJobStore.Fail(job.ID, "db_error")
 		p.notifySubscribers(job)
 		p.failedTotal.Add(1)
@@ -613,7 +615,7 @@ func (p *Pool) finishJob(job *model.UploadJob, f *os.File, mimeType string, medi
 		}
 	}
 
-	os.Remove(job.TempPath)
+	p.fs.Remove(job.TempPath)
 	p.uploadJobStore.Complete(job.ID, fileRecord.ID)
 	job.FileID = &fileRecord.ID
 	job.Status = model.JobStatusCompleted
@@ -745,7 +747,7 @@ func (p *Pool) RunReconciliation() map[string]interface{} {
 		}
 
 		originalPath := filepath.Join(originalsDir, f.UserID, f.Filename)
-		if _, err := os.Stat(originalPath); os.IsNotExist(err) {
+		if _, err := p.fs.Stat(originalPath); os.IsNotExist(err) {
 			continue
 		}
 

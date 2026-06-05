@@ -3,7 +3,6 @@ package backup
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sync"
@@ -26,6 +25,7 @@ type Scheduler struct {
 	db            *store.DB
 	storage       *service.StorageService
 	eventRecorder *service.EventRecorder
+	fs            service.FileSystem
 	lastResult    *LastBackupResult
 	mu            sync.RWMutex
 	stopCh        chan struct{}
@@ -34,12 +34,13 @@ type Scheduler struct {
 
 var backupKeyPattern = regexp.MustCompile(`^backups/database/drive-backup-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.db$`)
 
-func NewScheduler(cfg *config.Config, db *store.DB, storage *service.StorageService, eventRecorder *service.EventRecorder) *Scheduler {
+func NewScheduler(cfg *config.Config, db *store.DB, storage *service.StorageService, eventRecorder *service.EventRecorder, fs service.FileSystem) *Scheduler {
 	return &Scheduler{
 		cfg:           cfg,
 		db:            db,
 		storage:       storage,
 		eventRecorder: eventRecorder,
+		fs:            fs,
 		stopCh:        make(chan struct{}),
 	}
 }
@@ -85,11 +86,11 @@ func (s *Scheduler) RunBackup() {
 	timestamp := startedAt.Format("2006-01-02T15-04-05")
 
 	tempPath := filepath.Join("/tmp/kilo", fmt.Sprintf("drive-backup-%s.db", timestamp))
-	defer os.Remove(tempPath)
+	defer s.fs.Remove(tempPath)
 
 	duration := func() int64 { return time.Since(startedAt).Milliseconds() }
 
-	if err := os.MkdirAll(filepath.Dir(tempPath), 0755); err != nil {
+	if err := s.fs.MkdirAll(filepath.Dir(tempPath), 0755); err != nil {
 		slog.Error("backup failed to create temp dir", "error", err)
 		s.eventRecorder.Error("backup_failure", "Failed to create temp directory", map[string]interface{}{
 			"error":       err.Error(),
@@ -113,7 +114,7 @@ func (s *Scheduler) RunBackup() {
 		return
 	}
 
-	stat, err := os.Stat(tempPath)
+	stat, err := s.fs.Stat(tempPath)
 	if err != nil {
 		slog.Error("backup stat failed", "error", err)
 		s.eventRecorder.Error("backup_failure", "Failed to stat backup file", map[string]interface{}{

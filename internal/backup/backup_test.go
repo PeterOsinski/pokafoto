@@ -16,10 +16,10 @@ func TestBackup_Disabled(t *testing.T) {
 	db := store.OpenTestDB(t)
 	defer db.Close()
 
-	storage, _ := service.NewStorageService(cfg)
+	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
 	eventRecorder := service.NewEventRecorder(db)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
 	sched.Start()
 	sched.Shutdown()
 }
@@ -31,10 +31,10 @@ func TestBackup_NoS3(t *testing.T) {
 	db := store.OpenTestDB(t)
 	defer db.Close()
 
-	storage, _ := service.NewStorageService(cfg)
+	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
 	eventRecorder := service.NewEventRecorder(db)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
 	sched.Start()
 	sched.Shutdown()
 }
@@ -49,14 +49,14 @@ func TestBackup_RunBackup_success(t *testing.T) {
 	db := store.OpenTestDB(t)
 	defer db.Close()
 
-	storage, err := service.NewStorageService(cfg)
+	storage, err := service.NewStorageService(cfg, service.NewMockFS())
 	if err != nil {
 		t.Skipf("S3 not available: %v", err)
 	}
 
 	eventRecorder := service.NewEventRecorder(db)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
 	sched.RunBackup()
 
 	result := sched.LastResult()
@@ -111,10 +111,10 @@ func TestBackup_LastResult_initialNil(t *testing.T) {
 	db := store.OpenTestDB(t)
 	defer db.Close()
 
-	storage, _ := service.NewStorageService(cfg)
+	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
 	eventRecorder := service.NewEventRecorder(db)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
 	if sched.LastResult() != nil {
 		t.Error("expected nil last result before any backup")
 	}
@@ -127,9 +127,9 @@ func TestBackup_PruneOldBackups_noRetention_skipsPruning(t *testing.T) {
 	db := store.OpenTestDB(t)
 	defer db.Close()
 
-	storage, _ := service.NewStorageService(cfg)
+	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
 	eventRecorder := service.NewEventRecorder(db)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder)
+	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
 	sched.pruneOldBackups()
 }

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/drive/drive/internal/model"
+	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
-	"golang.org/x/sys/unix"
 )
 
 func (s *Server) handleAdminS3DeletionQueue(w http.ResponseWriter, r *http.Request) {
@@ -349,7 +349,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cacheSize, _ := s.file.ThumbnailStore.TotalSize()
-	diskTotal, diskFree, diskUsed := diskUsage(s.cfg.Storage.Local.Path)
+	diskTotal, diskFree, diskUsed := diskUsage(s.fs, s.cfg.Storage.Local.Path)
 	diskPct := float64(0)
 	if diskTotal > 0 {
 		diskPct = float64(diskUsed) / float64(diskTotal) * 100
@@ -380,13 +380,10 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func diskUsage(path string) (total, free, used uint64) {
-	var stat unix.Statfs_t
-	if err := unix.Statfs(path, &stat); err != nil {
-		return 0, 0, 0
-	}
-	total = stat.Blocks * uint64(stat.Bsize)
-	free = stat.Bavail * uint64(stat.Bsize)
+func diskUsage(fs service.FileSystem, path string) (total, free, used uint64) {
+	blocks, blockSize, freeBlocks := fs.Statfs(path)
+	total = blocks * blockSize
+	free = freeBlocks * blockSize
 	used = total - free
 	return
 }

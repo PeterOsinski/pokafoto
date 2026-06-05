@@ -12,7 +12,7 @@ import (
 
 func TestExifService_ExtractVideoDate_shouldExtractMvhdCreationTime(t *testing.T) {
 	src := createTestMP4(t, t.TempDir(), "test.mp4")
-	svc := NewExifService()
+	svc := NewExifService(NewRealFS())
 
 	data, err := svc.ExtractVideoDate(src)
 	if err != nil {
@@ -33,7 +33,7 @@ func TestExifService_ExtractVideoDate_shouldExtractMvhdCreationTime(t *testing.T
 
 func TestExifService_ExtractVideoDate_shouldReturnNilForNonMP4File(t *testing.T) {
 	src := createTestJPEG(t, t.TempDir(), "test.jpg")
-	svc := NewExifService()
+	svc := NewExifService(NewRealFS())
 
 	data, err := svc.ExtractVideoDate(src)
 	if err == nil {
@@ -115,7 +115,7 @@ func TestExifService_ExtractViaExifTool_shouldParseOutput(t *testing.T) {
 	}
 
 	src := createTestJPEG(t, t.TempDir(), "test_exif.jpg")
-	svc := NewExifService()
+	svc := NewExifService(NewRealFS())
 
 	data, err := svc.Extract(src)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestExifService_ExtractViaExifTool_shouldParseOutput(t *testing.T) {
 
 func TestExifService_Extract_goexif_shouldExtractJPEG(t *testing.T) {
 	src := createTestJPEG(t, t.TempDir(), "test.jpg")
-	svc := NewExifService()
+	svc := NewExifService(NewRealFS())
 
 	data, err := svc.Extract(src)
 	if err != nil {

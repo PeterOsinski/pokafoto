@@ -9,10 +9,17 @@ import (
 	"github.com/drive/drive/internal/model"
 )
 
+type testFS struct{}
+
+func (fs *testFS) Create(name string) (*os.File, error) { return os.Create(name) }
+func (fs *testFS) Open(name string) (*os.File, error)   { return os.Open(name) }
+func (fs *testFS) Remove(name string) error             { return os.Remove(name) }
+func (fs *testFS) Stat(name string) (os.FileInfo, error) { return os.Stat(name) }
+
 func setupChunkStore(t *testing.T) (*ChunkStore, *DB, string, string, func()) {
 	t.Helper()
 	db := OpenTestDB(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 	us := NewUserStore(db)
 
 	user, err := us.Create("chunkuser_"+t.Name(), "password123", model.RoleMember, nil)
@@ -330,7 +337,7 @@ func TestChunkStore_CleanupOrphanedTempFiles_shouldRemoveFiles(t *testing.T) {
 
 func TestChunkStore_CleanupOldUploads_shouldExpireQueuedJobs(t *testing.T) {
 	_, db, uploadID, _, _ := setupChunkStore(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 
 	cutoff := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
 	db.Exec(`UPDATE upload_jobs SET updated_at = ? WHERE id = ?`, cutoff, uploadID)
@@ -356,7 +363,7 @@ func TestChunkStore_CleanupOldUploads_shouldExpireQueuedJobs(t *testing.T) {
 
 func TestChunkStore_CleanupOldUploads_shouldSkipRecentJobs(t *testing.T) {
 	_, db, uploadID, _, _ := setupChunkStore(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	db.Exec(`UPDATE upload_jobs SET updated_at = ? WHERE id = ?`, now, uploadID)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 
 	"github.com/drive/drive/internal/config"
@@ -16,10 +15,11 @@ type StorageService struct {
 	cfg     *config.Config
 	s3      *minio.Client
 	client  *minio.Client
+	fs      FileSystem
 }
 
-func NewStorageService(cfg *config.Config) (*StorageService, error) {
-	s := &StorageService{cfg: cfg}
+func NewStorageService(cfg *config.Config, fs FileSystem) (*StorageService, error) {
+	s := &StorageService{cfg: cfg, fs: fs}
 
 	if !cfg.Storage.S3.Enabled {
 		return s, nil
@@ -52,7 +52,7 @@ func (s *StorageService) PutObject(key string, filePath string) error {
 		return nil
 	}
 
-	f, err := os.Open(filePath)
+	f, err := s.fs.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("open file for s3 upload: %w", err)
 	}
@@ -72,7 +72,7 @@ func (s *StorageService) GetObject(key string, destPath string) error {
 		return fmt.Errorf("s3 not configured")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	if err := s.fs.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 		return err
 	}
 
@@ -82,14 +82,14 @@ func (s *StorageService) GetObject(key string, destPath string) error {
 	}
 	defer obj.Close()
 
-	f, err := os.Create(destPath)
+	f, err := s.fs.Create(destPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, obj); err != nil {
-		os.Remove(destPath)
+		s.fs.Remove(destPath)
 		return fmt.Errorf("s3 download: %w", err)
 	}
 

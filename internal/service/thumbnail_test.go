@@ -36,7 +36,7 @@ func TestThumbnailService_GeneratePreview_shouldBeWebP(t *testing.T) {
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-file-id", src, "image/jpeg")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -78,7 +78,7 @@ func TestThumbnailService_GenerateSmall_shouldBeJPEG(t *testing.T) {
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-file-id", src, "image/jpeg")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -103,7 +103,7 @@ func TestThumbnailService_GenerateLarge_shouldBe300pxJPEG(t *testing.T) {
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-file-id", src, "image/jpeg")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -134,7 +134,7 @@ func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-file-id", src, "image/jpeg")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -158,7 +158,7 @@ func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
 
 func TestThumbnailService_GenerateVideoProxy_shouldGenerate720pFor1080p(t *testing.T) {
 	dir := t.TempDir()
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-vid-proxy", "/tmp/test_video_1080p.mp4", "video/mp4")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -195,7 +195,7 @@ func TestThumbnailService_GenerateVideoProxy_shouldGenerate720pFor1080p(t *testi
 
 func TestThumbnailService_GenerateVideoProxy_shouldSkipFor720pVideo(t *testing.T) {
 	dir := t.TempDir()
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-vid-noproxy", "/tmp/test_video_720p.mp4", "video/mp4")
 	if err != nil {
 		t.Fatalf("GenerateAll failed: %v", err)
@@ -241,7 +241,7 @@ func TestThumbnailService_GenerateAll_shortVideoFallback(t *testing.T) {
 		t.Fatalf("test video not created: %v", err)
 	}
 
-	ts := NewThumbnailService(dir)
+	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-short", shortVideo, "video/mp4")
 	if err != nil {
 		t.Fatalf("GenerateAll failed for short video: %v", err)

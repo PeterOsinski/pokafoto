@@ -370,7 +370,7 @@ func TestEventStore_PurgeOlderThan_shouldNotRemoveRecentEvents(t *testing.T) {
 
 func TestChunkStore_FindMissingChunks_shouldReturnGaps(t *testing.T) {
 	db := OpenTestDB(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 
 	cs.CreateChunkRecord("upload-1", 0, 100, 0, "abc", "/tmp/chunks/u1-0")
 	cs.CreateChunkRecord("upload-1", 2, 100, 200, "def", "/tmp/chunks/u1-2")
@@ -389,7 +389,7 @@ func TestChunkStore_FindMissingChunks_shouldReturnGaps(t *testing.T) {
 
 func TestChunkStore_GetStoredChunks_shouldReturnSorted(t *testing.T) {
 	db := OpenTestDB(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 
 	cs.CreateChunkRecord("upload-2", 2, 100, 200, "ccc", "/tmp/u2-2")
 	cs.CreateChunkRecord("upload-2", 0, 100, 0, "aaa", "/tmp/u2-0")
@@ -409,7 +409,7 @@ func TestChunkStore_GetStoredChunks_shouldReturnSorted(t *testing.T) {
 
 func TestChunkStore_DeleteChunks_shouldRemoveRecords(t *testing.T) {
 	db := OpenTestDB(t)
-	cs := NewChunkStore(db)
+	cs := NewChunkStore(db, &testFS{})
 
 	cs.CreateChunkRecord("upload-3", 0, 100, 0, "xxx", "/tmp/u3-0")
 	cs.CreateChunkRecord("upload-3", 1, 100, 100, "yyy", "/tmp/u3-1")
