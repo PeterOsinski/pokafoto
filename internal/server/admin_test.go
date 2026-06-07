@@ -598,3 +598,46 @@ func TestAdmin_FileBreakdown_shouldReturnBreakdown(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestAdmin_CreateUser_tooShortPassword_should400(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	admin, _ := us.Create("admcrshortpw2_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	w := testRequest(t, srv, "POST", "/api/v1/admin/users", `{"username":"shortpw2","password":"123","role":"member"}`, map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + token,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for short password, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdmin_ListEvents_shouldReturnEvents(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	es := store.NewSystemEventsStore(db)
+	admin, _ := us.Create("admevts_"+uuid.NewString()[:8], "adminpass123", model.RoleAdmin, nil)
+	adminToken := generateTestToken(srv.cfg.Auth.JWTSecret, admin.ID, "admin")
+
+	es.Create(&model.SystemEvent{
+		EventType: "test_event",
+		Severity:  "info",
+		Message:   "test message",
+	})
+
+	w := testRequest(t, srv, "GET", "/api/v1/admin/events", "", map[string]string{"Authorization": "Bearer " + adminToken})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if events, ok := resp["events"]; !ok || events == nil {
+		t.Error("expected events array in response")
+	}
+}

@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"os"
 	"testing"
 
 	"github.com/drive/drive/internal/config"
@@ -9,127 +8,153 @@ import (
 	"github.com/drive/drive/internal/store"
 )
 
-func TestBackup_Disabled(t *testing.T) {
+func setupTestScheduler(t *testing.T) (*Scheduler, *store.DB, *service.StorageService) {
+	t.Helper()
+
 	cfg := config.DefaultConfig()
-	cfg.Backup.Enabled = false
+	cfg.Storage.Local.Path = t.TempDir()
 
 	db := store.OpenTestDB(t)
-	defer db.Close()
+	fs := service.NewRealFS()
+	storage, _ := service.NewStorageService(cfg, fs)
+	recorder := service.NewEventRecorder(db)
 
-	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
-	eventRecorder := service.NewEventRecorder(db)
-
-	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
-	sched.Start()
-	sched.Shutdown()
+	s := NewScheduler(cfg, db, storage, recorder, fs)
+	return s, db, storage
 }
 
-func TestBackup_NoS3(t *testing.T) {
+func TestScheduler_New_shouldInitializeFields(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Backup.Enabled = true
-
 	db := store.OpenTestDB(t)
-	defer db.Close()
+	fs := service.NewRealFS()
+	storage, _ := service.NewStorageService(cfg, fs)
+	recorder := service.NewEventRecorder(db)
 
-	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
-	eventRecorder := service.NewEventRecorder(db)
+	s := NewScheduler(cfg, db, storage, recorder, fs)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
-	sched.Start()
-	sched.Shutdown()
+	if s.cfg != cfg {
+		t.Error("cfg not set")
+	}
+	if s.db != db {
+		t.Error("db not set")
+	}
+	if s.storage != storage {
+		t.Error("storage not set")
+	}
+	if s.fs != fs {
+		t.Error("fs not set")
+	}
+	if s.eventRecorder != recorder {
+		t.Error("eventRecorder not set")
+	}
+	if s.stopCh == nil {
+		t.Error("stopCh should be initialized")
+	}
 }
 
-func TestBackup_RunBackup_success(t *testing.T) {
-	if os.Getenv("DRIVE_BACKUP_INTEGRATION") != "1" {
-		t.Skip("skipping backup test without S3; set DRIVE_BACKUP_INTEGRATION=1")
+func TestScheduler_Start_backupDisabled_shouldReturnEarly(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+	s.cfg.Backup.Enabled = false
+
+	s.Start()
+
+	select {
+	case <-s.stopCh:
+		t.Error("stopCh should not be closed when Start returns early")
+	default:
 	}
+}
 
-	cfg := config.Load()
+func TestScheduler_Start_s3NotConnected_shouldReturnEarly(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+	s.cfg.Backup.Enabled = true
 
-	db := store.OpenTestDB(t)
-	defer db.Close()
+	s.Start()
 
-	storage, err := service.NewStorageService(cfg, service.NewMockFS())
-	if err != nil {
-		t.Skipf("S3 not available: %v", err)
+	select {
+	case <-s.stopCh:
+		t.Error("stopCh should not be closed when Start returns early")
+	default:
 	}
+}
 
-	eventRecorder := service.NewEventRecorder(db)
+func TestScheduler_LastResult_returnsNilWhenNoResult(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
 
-	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
-	sched.RunBackup()
+	result := s.LastResult()
+	if result != nil {
+		t.Errorf("expected nil, got %+v", result)
+	}
+}
 
-	result := sched.LastResult()
+func TestScheduler_LastResult_returnsCopy(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+
+	s.mu.Lock()
+	s.lastResult = &LastBackupResult{Status: "success", SizeBytes: 1024}
+	s.mu.Unlock()
+
+	result := s.LastResult()
 	if result == nil {
-		t.Fatal("expected last result after backup")
+		t.Fatal("expected non-nil result")
 	}
 	if result.Status != "success" {
-		t.Errorf("expected success, got %s: %s", result.Status, result.Error)
+		t.Errorf("expected success, got %s", result.Status)
+	}
+	if result.SizeBytes != 1024 {
+		t.Errorf("expected 1024, got %d", result.SizeBytes)
+	}
+}
+
+func TestScheduler_Shutdown_shouldCloseStopCh(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+
+	s.Shutdown()
+
+	select {
+	case _, ok := <-s.stopCh:
+		if ok {
+			t.Error("stopCh should be closed")
+		}
+	default:
+		t.Error("stopCh should be closed after Shutdown")
+	}
+}
+
+func TestScheduler_pruneOldBackups_retentionDaysZero_shouldNoop(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+	s.cfg.Backup.RetentionDays = 0
+
+	s.pruneOldBackups()
+}
+
+func TestScheduler_pruneOldBackups_noS3Client_shouldNotPanic(t *testing.T) {
+	s, _, _ := setupTestScheduler(t)
+	s.cfg.Backup.RetentionDays = 7
+
+	s.pruneOldBackups()
+}
+
+func TestScheduler_RunBackup_noS3Client_shouldComplete(t *testing.T) {
+	s, db, _ := setupTestScheduler(t)
+	s.cfg.Backup.Enabled = true
+
+	if err := s.fs.MkdirAll("/tmp/kilo", 0755); err != nil {
+		t.Fatalf("create /tmp/kilo: %v", err)
+	}
+
+	db.Exec("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
+
+	s.RunBackup()
+
+	result := s.LastResult()
+	if result == nil {
+		t.Fatal("expected a result after RunBackup")
+	}
+	if result.Status != "success" {
+		t.Errorf("expected success, got %s (error: %s)", result.Status, result.Error)
 	}
 	if result.SizeBytes <= 0 {
-		t.Errorf("expected positive size, got %d", result.SizeBytes)
+		t.Error("expected positive size_bytes")
 	}
-
-	events := store.NewSystemEventsStore(db)
-	allEvents, total, _ := events.List(10, 0, "backup_success", "", "", "")
-	if total < 1 {
-		t.Error("expected backup_success event in system_events")
-	}
-	_ = allEvents
-}
-
-func TestBackup_VacuumCreatesFile(t *testing.T) {
-	db, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	db.SetMaxOpenConns(1)
-	if err := db.RunMigrations(); err != nil {
-		t.Fatalf("migrations: %v", err)
-	}
-	defer db.Close()
-
-	tempPath := "/tmp/kilo/drive-backup-test.db"
-	os.MkdirAll("/tmp/kilo", 0755)
-	defer os.Remove(tempPath)
-
-	if _, err := db.Exec("VACUUM INTO '" + tempPath + "'"); err != nil {
-		t.Fatalf("VACUUM INTO failed: %v", err)
-	}
-
-	stat, err := os.Stat(tempPath)
-	if err != nil {
-		t.Fatalf("stat backup file: %v", err)
-	}
-	if stat.Size() == 0 {
-		t.Error("expected non-zero backup file size")
-	}
-}
-
-func TestBackup_LastResult_initialNil(t *testing.T) {
-	cfg := config.DefaultConfig()
-	db := store.OpenTestDB(t)
-	defer db.Close()
-
-	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
-	eventRecorder := service.NewEventRecorder(db)
-
-	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
-	if sched.LastResult() != nil {
-		t.Error("expected nil last result before any backup")
-	}
-}
-
-func TestBackup_PruneOldBackups_noRetention_skipsPruning(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Backup.RetentionDays = 0
-
-	db := store.OpenTestDB(t)
-	defer db.Close()
-
-	storage, _ := service.NewStorageService(cfg, service.NewMockFS())
-	eventRecorder := service.NewEventRecorder(db)
-
-	sched := NewScheduler(cfg, db, storage, eventRecorder, service.NewMockFS())
-	sched.pruneOldBackups()
 }

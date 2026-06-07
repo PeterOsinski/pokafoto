@@ -1020,3 +1020,148 @@ func TestFolderPassword_shouldSetAndReturnHint(t *testing.T) {
 		t.Errorf("expected password_hint 'My birthday', got %v", resp["password_hint"])
 	}
 }
+
+func TestFolderShare_Update_shouldChangePermissions(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	shares := store.NewFolderShareStore(db)
+	u, _ := us.Create("shupdate_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Folder", nil)
+
+	share := &model.FolderShare{
+		FolderID:   f.ID,
+		Permissions: model.ShareRead,
+	}
+	shares.Create(share)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+f.ID+"/shares/"+share.ID, `{"permissions":"read_write"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	infoW := testRequest(t, srv, "GET", "/api/v1/share/"+share.Token, "", nil)
+	var info map[string]interface{}
+	json.Unmarshal(infoW.Body.Bytes(), &info)
+	if info["permissions"] != "read_write" {
+		t.Errorf("expected permissions read_write, got %v", info["permissions"])
+	}
+}
+
+func TestFolderShare_Update_shouldRejectNonOwner(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	shares := store.NewFolderShareStore(db)
+	u, _ := us.Create("shupnonown_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u2, _ := us.Create("shupother_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Folder", nil)
+
+	share := &model.FolderShare{
+		FolderID:   f.ID,
+		Permissions: model.ShareRead,
+	}
+	shares.Create(share)
+
+	token2 := generateTestToken(srv.cfg.Auth.JWTSecret, u2.ID, "member")
+	w := testRequest(t, srv, "PUT", "/api/v1/folders/"+f.ID+"/shares/"+share.ID, `{"permissions":"read_write"}`, map[string]string{
+		"Authorization": "Bearer " + token2,
+		"Content-Type":  "application/json",
+	})
+	if w.Code < 400 {
+		t.Errorf("expected 4xx for non-owner update, got %d", w.Code)
+	}
+}
+
+func TestFolderShare_Delete_shouldDeleteShare(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	shares := store.NewFolderShareStore(db)
+	u, _ := us.Create("shdel_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Shared Folder", nil)
+
+	share := &model.FolderShare{
+		FolderID:   f.ID,
+		Permissions: model.ShareRead,
+	}
+	shares.Create(share)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	w := testRequest(t, srv, "DELETE", "/api/v1/folders/"+f.ID+"/shares/"+share.ID, "", map[string]string{"Authorization": "Bearer " + token})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFolderShare_Create_withIncludeSubdirs(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("shsubdirs_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Parent Folder", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	w := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read","include_subdirs":true}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	shareToken := resp["token"].(string)
+
+	infoW := testRequest(t, srv, "GET", "/api/v1/share/"+shareToken, "", nil)
+	var info map[string]interface{}
+	json.Unmarshal(infoW.Body.Bytes(), &info)
+	if includeSubdirs, ok := info["include_subdirs"].(bool); !ok || !includeSubdirs {
+		t.Errorf("expected include_subdirs true, got %v", info["include_subdirs"])
+	}
+}
+
+func TestFolderShare_Info_shouldReturnFolderDetails(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	folders := store.NewFolderStore(db)
+	u, _ := us.Create("shinfo_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	f, _ := folders.Create(u.ID, "Test Folder", nil)
+
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u.ID, "member")
+	w := testRequest(t, srv, "POST", "/api/v1/folders/"+f.ID+"/shares", `{"permissions":"read_write"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	shareToken := resp["token"].(string)
+
+	infoW := testRequest(t, srv, "GET", "/api/v1/share/"+shareToken, "", nil)
+	if infoW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", infoW.Code, infoW.Body.String())
+	}
+	var info map[string]interface{}
+	json.Unmarshal(infoW.Body.Bytes(), &info)
+	if info["folder_name"] != "Test Folder" {
+		t.Errorf("expected folder_name 'Test Folder', got %v", info["folder_name"])
+	}
+	if info["needs_password"] != false {
+		t.Errorf("expected needs_password false, got %v", info["needs_password"])
+	}
+}

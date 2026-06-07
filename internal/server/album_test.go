@@ -298,3 +298,64 @@ func TestAlbum_RemoveShare_shouldRemoveShare(t *testing.T) {
 		t.Errorf("expected 204, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestAlbum_ShareAlbum_shouldRejectSelf(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	as := store.NewAlbumStore(db)
+	u1, _ := us.Create("albself_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u1.ID, "member")
+
+	album, _ := as.Create(u1.ID, "My Album", nil)
+
+	w := testRequest(t, srv, "POST", "/api/v1/albums/"+album.ID+"/shares", `{"username":"`+u1.Username+`","permission":"edit"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code >= 200 && w.Code < 300 {
+		t.Errorf("expected error when sharing to self, got %d", w.Code)
+	}
+}
+
+func TestAlbum_ShareAlbum_shouldRejectInvalidUser(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	as := store.NewAlbumStore(db)
+	u1, _ := us.Create("albinvusr_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	token := generateTestToken(srv.cfg.Auth.JWTSecret, u1.ID, "member")
+
+	album, _ := as.Create(u1.ID, "My Album", nil)
+
+	w := testRequest(t, srv, "POST", "/api/v1/albums/"+album.ID+"/shares", `{"username":"nonexistent_user_999","permission":"edit"}`, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+	if w.Code < 400 {
+		t.Errorf("expected 4xx for invalid user, got %d", w.Code)
+	}
+}
+
+func TestAlbum_RemoveShare_shouldRejectNonOwner(t *testing.T) {
+	srv, db, cleanup := newTestServer(t)
+	defer cleanup()
+
+	us := store.NewUserStore(db)
+	as := store.NewAlbumStore(db)
+	ass := store.NewAlbumShareStore(db)
+	u1, _ := us.Create("albnonown1_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u2, _ := us.Create("albnonown2_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+	u3, _ := us.Create("albnonown3_"+uuid.NewString()[:8], "password123", model.RoleMember, nil)
+
+	album, _ := as.Create(u1.ID, "Album", nil)
+	share, _ := ass.Add(album.ID, u2.ID, "edit")
+
+	token3 := generateTestToken(srv.cfg.Auth.JWTSecret, u3.ID, "member")
+	w := testRequest(t, srv, "DELETE", "/api/v1/albums/"+album.ID+"/shares/"+share.ID, "", map[string]string{"Authorization": "Bearer " + token3})
+	if w.Code < 400 {
+		t.Errorf("expected 4xx for non-owner, got %d", w.Code)
+	}
+}

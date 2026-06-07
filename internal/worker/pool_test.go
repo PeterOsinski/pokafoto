@@ -1605,3 +1605,353 @@ func TestPool_StartReconciler_stopsOnShutdown(t *testing.T) {
 }
 
 func intPtr(n int) *int { return &n }
+
+func TestPool_StandardJob_nameSizeDedup_sameUser(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+	cfg.Media.AutoOrganize = true
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("namededup_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	content := []byte("unique photo content for name dedup test")
+	existing := &model.File{
+		UserID:       u.ID,
+		Filename:     "2026/01/photo.jpg",
+		OriginalName: "photo.jpg",
+		Path:         "2026/01",
+		SizeBytes:    int64(len(content)),
+		MimeType:     "image/jpeg",
+		SHA256:       "different-hash-for-name-dedup",
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(existing); err != nil {
+		t.Fatalf("create existing file: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "photo.jpg")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	job := enqueueJob(t, ujs, "batch-name-dedup", u.ID, "photo.jpg", info.Size(), tmpPath, nil, false)
+
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, fs, es, ts, nil, ujs, nil, nil)
+	defer pool.Shutdown()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		fetched, _ := ujs.FindByID(job.ID)
+		if fetched != nil && fetched.Status != model.JobStatusQueued && fetched.Status != model.JobStatusProcessing {
+			if fetched.Status != model.JobStatusSkipped {
+				t.Errorf("expected skipped, got %s", fetched.Status)
+			}
+			if fetched.Reason == nil || *fetched.Reason != "duplicate_name_size" {
+				t.Errorf("expected duplicate_name_size, got %v", fetched.Reason)
+			}
+			return
+		}
+		select {
+		case <-deadline:
+			fetched, _ := ujs.FindByID(job.ID)
+			t.Fatalf("timed out, status=%s", fetched.Status)
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func TestPool_StandardJob_nameSizeDedup_differentUser(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+	cfg.Media.AutoOrganize = true
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u1, err := us.Create("userA_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create userA: %v", err)
+	}
+	u2, err := us.Create("userB_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create userB: %v", err)
+	}
+
+	content := []byte("different user dedup test data")
+	existing := &model.File{
+		UserID:       u1.ID,
+		Filename:     "2026/01/diffuser.jpg",
+		OriginalName: "diffuser.jpg",
+		Path:         "2026/01",
+		SizeBytes:    int64(len(content)),
+		MimeType:     "image/jpeg",
+		SHA256:       fmt.Sprintf("%x", sha256.Sum256(content)),
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(existing); err != nil {
+		t.Fatalf("create existing file: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "diffuser.jpg")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	enqueueJob(t, ujs, "batch-diffuser", u2.ID, "diffuser.jpg", info.Size(), tmpPath, nil, false)
+
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, fs, es, ts, nil, ujs, nil, nil)
+	defer pool.Shutdown()
+
+	var files []*model.File
+	deadline := time.After(5 * time.Second)
+	for len(files) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timed out — job should complete for different user")
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+		files, _, _, _ = fs.List(store.FileListOptions{UserID: u2.ID, Limit: 10})
+	}
+
+	if files[0].OriginalName != "diffuser.jpg" {
+		t.Errorf("expected diffuser.jpg, got %s", files[0].OriginalName)
+	}
+}
+
+func TestPool_Reconciliation_successPath_mediaFile(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	tmpDir := t.TempDir()
+	cfg.Storage.Local.Path = tmpDir
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("reconsuccess_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	var jpgBuf bytes.Buffer
+	if err := jpeg.Encode(&jpgBuf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("encode test JPEG: %v", err)
+	}
+	jpgContent := jpgBuf.Bytes()
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "2024/01/recon_success.jpg",
+		OriginalName: "recon_success.jpg",
+		Path:         "2024/01",
+		SizeBytes:    int64(len(jpgContent)),
+		MimeType:     "image/jpeg",
+		SHA256:       fmt.Sprintf("%x", sha256.Sum256(jpgContent)),
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(f); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	tmpDir2 := t.TempDir()
+	tmpPath := filepath.Join(tmpDir2, "recon_success.jpg")
+	if err := os.WriteFile(tmpPath, jpgContent, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	mockfs := service.NewRealFS()
+	pool := &Pool{
+		cfg:              cfg,
+		fs:               mockfs,
+		fileStore:        fs,
+		thumbnailStore:   ts,
+		uploadJobStore:   ujs,
+		thumbnailService: service.NewThumbnailService(cfg.ThumbnailsDir(), mockfs),
+	}
+
+	tf, err := os.Open(tmpPath)
+	if err != nil {
+		t.Fatalf("open temp file: %v", err)
+	}
+
+	job := &model.UploadJob{Filename: "recon_success.jpg", UserID: u.ID, FileID: &f.ID, Status: model.JobStatusProcessing, BatchID: "batch-recon-success", TempPath: tmpPath}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	pool.processReconcileJob(job, tf)
+
+	fetched, err := ujs.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if fetched == nil {
+		t.Fatal("job should exist")
+	}
+	if fetched.Status != model.JobStatusCompleted {
+		t.Errorf("expected completed, got %s (error=%v)", fetched.Status, fetched.Error)
+	}
+
+	thumbsFound := 0
+	for _, size := range []model.ThumbnailSize{model.ThumbSizeSmall, model.ThumbSizeLarge, model.ThumbSizeMedium, model.ThumbSizeXL} {
+		thumb, _ := ts.FindByFileIDAndSize(f.ID, size)
+		if thumb != nil {
+			thumbsFound++
+		}
+	}
+	if thumbsFound == 0 {
+		t.Error("expected at least one thumbnail to be generated")
+	}
+}
+
+func TestPool_Reconciliation_successPath_nonMediaFile(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u, err := us.Create("reconfile_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	f := &model.File{
+		UserID:       u.ID,
+		Filename:     "files/2024/01/recon_doc.pdf",
+		OriginalName: "recon_doc.pdf",
+		Path:         "files/2024/01",
+		SizeBytes:    100,
+		MimeType:     "application/pdf",
+		SHA256:       "recondoc-hash",
+		MediaType:    model.MediaTypeFile,
+	}
+	if err := fs.Create(f); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "recon_doc.pdf")
+	if err := os.WriteFile(tmpPath, []byte("pdf content"), 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	mockfs := service.NewRealFS()
+	pool := &Pool{
+		cfg:            cfg,
+		fs:             mockfs,
+		fileStore:      fs,
+		uploadJobStore: ujs,
+	}
+
+	tf, _ := os.Open(tmpPath)
+	job := &model.UploadJob{Filename: "recon_doc.pdf", UserID: u.ID, FileID: &f.ID, Status: model.JobStatusProcessing, BatchID: "batch-recon-nonmedia"}
+	if err := ujs.Create(job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	pool.processReconcileJob(job, tf)
+
+	fetched, _ := ujs.FindByID(job.ID)
+	if fetched == nil || fetched.Status != model.JobStatusCompleted {
+		t.Errorf("expected completed, got %v", fetched)
+	}
+}
+
+func TestPool_StandardJob_duplicateContent_differentUser_shouldUpload(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Auth.JWTSecret = "test-secret"
+	cfg.Upload.ConcurrentWorkers = 1
+	cfg.Media.AutoOrganize = false
+
+	db := store.OpenTestDB(t)
+	us := store.NewUserStore(db)
+	fs := store.NewFileStore(db)
+	es := store.NewExifStore(db)
+	ts := store.NewThumbnailStore(db)
+	ujs := store.NewUploadJobStore(db)
+
+	u1, err := us.Create("ctuserA_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create userA: %v", err)
+	}
+	u2, err := us.Create("ctuserB_"+strings.ReplaceAll(t.Name(), "/", "_"), "password123", model.RoleMember, nil)
+	if err != nil {
+		t.Fatalf("create userB: %v", err)
+	}
+
+	content := []byte("same-content-across-users-for-dedup-test")
+	sha256Hash := fmt.Sprintf("%x", sha256.Sum256(content))
+
+	existing := &model.File{
+		UserID:       u1.ID,
+		Filename:     "2026/01/shared-content.jpg",
+		OriginalName: "shared-content.jpg",
+		Path:         "2026/01",
+		SizeBytes:    int64(len(content)),
+		MimeType:     "image/jpeg",
+		SHA256:       sha256Hash,
+		MediaType:    model.MediaTypePhoto,
+	}
+	if err := fs.Create(existing); err != nil {
+		t.Fatalf("create existing file: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tmpPath := filepath.Join(tmpDir, "shared-content.jpg")
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	info, _ := os.Stat(tmpPath)
+
+	job := enqueueJob(t, ujs, "batch-ct-diffuser", u2.ID, "shared-content.jpg", info.Size(), tmpPath, nil, false)
+
+	mockfs := service.NewRealFS()
+	pool := NewPool(cfg, mockfs, fs, es, ts, nil, ujs, nil, nil)
+	defer pool.Shutdown()
+
+	var files []*model.File
+	deadline := time.After(5 * time.Second)
+	for len(files) == 0 {
+		select {
+		case <-deadline:
+			fetched, _ := ujs.FindByID(job.ID)
+			t.Fatalf("timed out, status=%s", fetched.Status)
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+		files, _, _, _ = fs.List(store.FileListOptions{UserID: u2.ID, Limit: 10})
+	}
+
+	if files[0].OriginalName != "shared-content.jpg" {
+		t.Errorf("expected shared-content.jpg, got %s", files[0].OriginalName)
+	}
+}
