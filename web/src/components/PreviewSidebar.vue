@@ -290,7 +290,7 @@ const exif = ref<ExifData | null>(null)
 const videoSrc = ref('')
 const proxySrc = ref('')
 const showRawJson = ref(false)
-const sidebarWidth = ref(settings.sidebarWidth.value)
+const sidebarWidth = ref(settings.rightSidebarWidth.value)
 
 const fileAlbums = ref<any[]>([])
 const fileAlbumsLoading = ref(false)
@@ -472,7 +472,7 @@ function stopResize() {
   document.removeEventListener('mouseup', stopResize)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-  settings.sidebarWidth.value = sidebarWidth.value
+  settings.rightSidebarWidth.value = sidebarWidth.value
 }
 
 function formatSize(bytes: number): string {

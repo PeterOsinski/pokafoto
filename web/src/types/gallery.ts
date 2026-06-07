@@ -38,6 +38,7 @@ export interface FolderTreeNode {
   folder: FolderEntry
   fileCount: number
   hasShares: boolean
+  hasPassword?: boolean
   children: FolderTreeNode[]
 }
 

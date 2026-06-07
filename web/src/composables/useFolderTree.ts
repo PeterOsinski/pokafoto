@@ -116,26 +116,13 @@ export function useFolderTree() {
   }
 
   async function loadPasswordStatuses() {
-    try {
-      const allIds: string[] = []
-      const collect = (nodes: FolderTreeNode[]) => {
-        for (const n of nodes) {
-          allIds.push(n.folder.id)
-          collect(n.children ?? [])
-        }
+    const walk = (nodes: FolderTreeNode[]) => {
+      for (const n of nodes) {
+        passwordStatuses.value[n.folder.id] = n.hasPassword || false
+        walk(n.children ?? [])
       }
-      collect(folders.value.children ?? [])
-
-      for (const id of allIds) {
-        try {
-          const res = await api.get(`/folders/${id}/password`)
-          passwordStatuses.value[id] = res.data.has_password || false
-          passwordHints.value[id] = res.data.password_hint || ''
-        } catch {
-          passwordStatuses.value[id] = false
-        }
-      }
-    } catch {}
+    }
+    walk(folders.value.children ?? [])
   }
 
   function openPasswordDialog(folderId: string): { show: true; folderId: string; mode: 'set' | 'unlock' | 'status'; passwordHint: string } {

@@ -98,6 +98,11 @@ func (s *FolderStore) ListTree(userID string) (*model.FolderTreeNode, error) {
 		return nil, err
 	}
 
+	hasPasswords, err := s.folderHasPasswords(userID)
+	if err != nil {
+		return nil, err
+	}
+
 	folderMap := make(map[string]*model.Folder)
 	for _, f := range allFolders {
 		folderMap[f.ID] = f
@@ -110,10 +115,11 @@ func (s *FolderStore) ListTree(userID string) (*model.FolderTreeNode, error) {
 
 	for _, f := range allFolders {
 		node := &model.FolderTreeNode{
-			Folder:    f,
-			FileCount: fileCounts[f.ID],
-			HasShares: hasShares[f.ID],
-			Children:  []*model.FolderTreeNode{},
+			Folder:      f,
+			FileCount:   fileCounts[f.ID],
+			HasShares:   hasShares[f.ID],
+			HasPassword: hasPasswords[f.ID],
+			Children:    []*model.FolderTreeNode{},
 		}
 		nodeMap[f.ID] = node
 	}
@@ -184,6 +190,29 @@ func (s *FolderStore) folderHasShares(userID string) (map[string]bool, error) {
 		hasShares[folderID] = true
 	}
 	return hasShares, rows.Err()
+}
+
+func (s *FolderStore) folderHasPasswords(userID string) (map[string]bool, error) {
+	rows, err := s.db.Query(
+		`SELECT fp.folder_id FROM folder_passwords fp
+		 JOIN folders f ON f.id = fp.folder_id
+		 WHERE f.user_id = ? AND fp.expires_at > ? GROUP BY fp.folder_id`,
+		userID, time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("folder has passwords: %w", err)
+	}
+	defer rows.Close()
+
+	hasPasswords := make(map[string]bool)
+	for rows.Next() {
+		var folderID string
+		if err := rows.Scan(&folderID); err != nil {
+			continue
+		}
+		hasPasswords[folderID] = true
+	}
+	return hasPasswords, rows.Err()
 }
 
 func (s *FolderStore) UpdateName(id, name string) error {

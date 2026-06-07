@@ -36,6 +36,7 @@ let _thumbLevel: Ref<number> | null = null
 let _highResDownload: Ref<boolean> | null = null
 let _previewMode: Ref<string> | null = null
 let _sidebarWidth: Ref<number> | null = null
+let _rightSidebarWidth: Ref<number> | null = null
 let _thumbSizePx: ComputedRef<number> | null = null
 
 export function useLocalSettings() {
@@ -46,6 +47,7 @@ export function useLocalSettings() {
     _highResDownload = ref(readString(`${LS_PREFIX}highResDownload`, 'false') === 'true')
     _previewMode = ref(readString(`${LS_PREFIX}previewMode`, 'lightbox'))
     _sidebarWidth = ref(readNumber(`${LS_PREFIX}sidebarWidth`, 400))
+    _rightSidebarWidth = ref(readNumber(`${LS_PREFIX}rightSidebarWidth`, 400))
 
     _thumbSizePx = computed(() => {
       const t = _thumbLevel!.value
@@ -60,6 +62,7 @@ export function useLocalSettings() {
     watch(_highResDownload!, (v) => writeString(`${LS_PREFIX}highResDownload`, v ? 'true' : 'false'), { flush: 'sync' })
     watch(_previewMode!, (v) => writeString(`${LS_PREFIX}previewMode`, v), { flush: 'sync' })
     watch(_sidebarWidth!, (v) => writeString(`${LS_PREFIX}sidebarWidth`, String(v)), { flush: 'sync' })
+    watch(_rightSidebarWidth!, (v) => writeString(`${LS_PREFIX}rightSidebarWidth`, String(v)), { flush: 'sync' })
   }
 
   return {
@@ -70,6 +73,7 @@ export function useLocalSettings() {
     highResDownload: _highResDownload as Ref<boolean>,
     previewMode: _previewMode as Ref<string>,
     sidebarWidth: _sidebarWidth as Ref<number>,
+    rightSidebarWidth: _rightSidebarWidth as Ref<number>,
   }
 }
 
@@ -80,5 +84,6 @@ export function _resetSingleton() {
   _highResDownload = null
   _previewMode = null
   _sidebarWidth = null
+  _rightSidebarWidth = null
   _thumbSizePx = null
 }

@@ -38,13 +38,13 @@
     </header>
 
     <div class="flex-1 flex overflow-hidden">
-      <!-- Sidebar (desktop) -->
-      <aside class="hidden lg:block w-56 shrink-0 border-r overflow-y-auto" style="border-color: var(--border-color); background: var(--bg-surface)">
+      <!-- Sidebar (desktop) - hidden on Folders view which has its own tree sidebar -->
+      <aside v-if="route.path !== '/folders'" class="hidden lg:block w-56 shrink-0 border-r overflow-y-auto" style="border-color: var(--border-color); background: var(--bg-surface)">
         <DirectoryTree />
       </aside>
 
       <!-- Main content -->
-      <main class="flex-1 overflow-y-auto p-4">
+      <main class="flex-1" :class="route.path === '/folders' ? 'overflow-hidden' : 'overflow-y-auto p-4'">
         <router-view />
       </main>
     </div>

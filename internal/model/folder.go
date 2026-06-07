@@ -12,8 +12,9 @@ type Folder struct {
 }
 
 type FolderTreeNode struct {
-	Folder    *Folder             `json:"folder"`
-	FileCount int64               `json:"fileCount"`
-	HasShares bool                `json:"hasShares"`
-	Children  []*FolderTreeNode   `json:"children,omitempty"`
+	Folder      *Folder             `json:"folder"`
+	FileCount   int64               `json:"fileCount"`
+	HasShares   bool                `json:"hasShares"`
+	HasPassword bool                `json:"hasPassword"`
+	Children    []*FolderTreeNode   `json:"children,omitempty"`
 }

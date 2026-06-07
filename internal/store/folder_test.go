@@ -2,6 +2,7 @@ package store
 
 import (
 	"testing"
+	"time"
 
 	"github.com/drive/drive/internal/model"
 )
@@ -383,4 +384,38 @@ func findNodeByID(nodes []*model.FolderTreeNode, id string) *model.FolderTreeNod
 		}
 	}
 	return nil
+}
+
+func TestFolderStore_ListTree_shouldIncludeHasPassword(t *testing.T) {
+	db := OpenTestDB(t)
+	us := NewUserStore(db)
+	fs := NewFolderStore(db)
+	fps := NewFolderPasswordStore(db)
+
+	user := createTestUser(t, us)
+	f1, _ := fs.Create(user.ID, "Protected", nil)
+	f2, _ := fs.Create(user.ID, "Open", nil)
+
+	fps.Create(f1.ID, "hash", "hint", time.Now().UTC().Add(time.Hour))
+
+	root, err := fs.ListTree(user.ID)
+	if err != nil {
+		t.Fatalf("list tree: %v", err)
+	}
+
+	protected := findNodeByID(root.Children, f1.ID)
+	if protected == nil {
+		t.Fatal("expected protected folder in tree")
+	}
+	if !protected.HasPassword {
+		t.Error("protected folder should have HasPassword=true")
+	}
+
+	open := findNodeByID(root.Children, f2.ID)
+	if open == nil {
+		t.Fatal("expected open folder in tree")
+	}
+	if open.HasPassword {
+		t.Error("open folder should have HasPassword=false")
+	}
 }

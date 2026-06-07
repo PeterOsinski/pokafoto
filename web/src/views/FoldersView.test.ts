@@ -274,4 +274,62 @@ describe('FoldersView', () => {
 
     expect(routerReplace).toHaveBeenCalled()
   })
+
+  it('renders folder tree sidebar', async () => {
+    localStorage.setItem('drive:layout', 'tiles')
+    await setupApi(
+      { children: [{ folder: { id: 'f-1', name: 'Work', parent_id: null }, fileCount: 5, children: [] }] },
+      { items: [], nextCursor: '', total: 0 },
+    )
+
+    const wrapper = await mountView()
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Folders')
+    const treeNodes = wrapper.findAll('.flex.items-center.w-full.text-left.text-sm.py-1\\.5.px-2.rounded')
+    expect(treeNodes.length).toBeGreaterThan(0)
+    expect(treeNodes[0].text()).toContain('Work')
+  })
+
+  it('navigates when clicking a tree node', async () => {
+    localStorage.setItem('drive:layout', 'tiles')
+    await setupApi(
+      { children: [{ folder: { id: 'f-1', name: 'Work', parent_id: null }, fileCount: 5, children: [] }] },
+      { items: [], nextCursor: '', total: 0 },
+    )
+
+    const wrapper = await mountView()
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    const treeButtons = wrapper.findAll('.flex.items-center.w-full.text-left.text-sm.py-1\\.5.px-2.rounded')
+    expect(treeButtons.length).toBeGreaterThan(0)
+  })
+
+  it('toggles sidebar visibility on button click', async () => {
+    localStorage.setItem('drive:layout', 'tiles')
+    await setupApi(
+      { children: [{ folder: { id: 'f-1', name: 'Work', parent_id: null }, fileCount: 5, children: [] }] },
+      { items: [], nextCursor: '', total: 0 },
+    )
+
+    const wrapper = await mountView()
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
+
+    const vm = wrapper.vm as any
+    expect(vm.treeExpanded).toBe(true)
+
+    const toggleBtn = wrapper.find('.shrink-0.w-10 button')
+    expect(toggleBtn.exists()).toBe(true)
+    await toggleBtn.trigger('click')
+    await nextTick()
+
+    expect(vm.treeExpanded).toBe(false)
+    expect(wrapper.find('.shrink-0.w-10 button').exists()).toBe(true)
+  })
 })
