@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	
+	"time"
 
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/store"
@@ -19,10 +19,10 @@ var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	if err := r.ParseMultipartForm(s.cfg.MaxFileSize()); err != nil {
+	if err := r.ParseMultipartForm(c.Cfg.MaxFileSize()); err != nil {
 		writeError(w, http.StatusBadRequest, "UPLOAD_ERROR", fmt.Sprintf("Failed to parse upload: %v", err))
 		return
 	}
@@ -37,8 +37,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	for _, fh := range files {
 		incomingTotal += fh.Size
 	}
-	used, _ := s.auth.UserStore.GetUsedSpace(userID)
-	user, _ := s.auth.UserStore.FindByID(userID)
+	used, _ := c.UserStore.GetUsedSpace(userID)
+	user, _ := c.UserStore.FindByID(userID)
 	if user != nil && user.SpaceQuota != nil && used+incomingTotal > *user.SpaceQuota {
 		writeError(w, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED",
 			fmt.Sprintf("Upload would exceed space quota (%d used + %d incoming > %d limit)", used, incomingTotal, *user.SpaceQuota))
@@ -47,7 +47,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	folderID := folderIDFromForm(r)
 	if folderID != nil {
-		if !s.checkFolderAccess(*folderID, userID, r) {
+		if !c.CheckFolderAccess(*folderID, userID, r) {
 			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock to upload")
 			return
 		}
@@ -68,8 +68,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		tempDir := s.cfg.StoragePath("tmp")
-		if err := s.fs.MkdirAll(tempDir, 0755); err != nil {
+		tempDir := c.Cfg.StoragePath("tmp")
+		if err := c.FS.MkdirAll(tempDir, 0755); err != nil {
 			file.Close()
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
@@ -79,7 +79,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			})
 			continue
 		}
-		tempFile, err := s.fs.CreateTemp(tempDir, "drive-upload-*")
+		tempFile, err := c.FS.CreateTemp(tempDir, "drive-upload-*")
 		if err != nil {
 			file.Close()
 			jobs = append(jobs, map[string]interface{}{
@@ -94,7 +94,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.Copy(tempFile, file); err != nil {
 			file.Close()
 			tempFile.Close()
-			s.fs.Remove(tempFile.Name())
+			c.FS.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -119,8 +119,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			Status:            model.JobStatusQueued,
 		}
 
-		if err := s.upload.UploadJobStore.Create(job); err != nil {
-			s.fs.Remove(tempFile.Name())
+		if err := c.UploadJobStore.Create(job); err != nil {
+			c.FS.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -131,14 +131,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		jobs = append(jobs, map[string]interface{}{
-			"job_id":    job.ID,
-			"filename":  fh.Filename,
-			"status":    "queued",
+			"job_id":   job.ID,
+			"filename": fh.Filename,
+			"status":   "queued",
 		})
 	}
 
 	if len(files) > 0 {
-		s.upload.WorkerPool.NotifyJobsAvailable()
+		c.WorkerPool.NotifyJobsAvailable()
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
@@ -155,10 +155,10 @@ func folderIDFromForm(r *http.Request) *string {
 	return &folderID
 }
 
-func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	batchID := r.PathValue("batchID")
 
-	allJobs, err := s.upload.UploadJobStore.ListByBatch(batchID)
+	allJobs, err := c.UploadJobStore.ListByBatch(batchID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get upload status")
 		return
@@ -200,10 +200,10 @@ func (s *Server) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleUploadActiveJobs(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUploadActiveJobs(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	jobs, err := s.upload.UploadJobStore.ListActiveByUser(userID)
+	jobs, err := c.UploadJobStore.ListActiveByUser(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list active jobs")
 		return
@@ -245,7 +245,7 @@ func (s *Server) handleUploadActiveJobs(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUploadCheck(w http.ResponseWriter, r *http.Request) {
 	var input []struct {
 		Filename string `json:"filename"`
 		Size     int64  `json:"size"`
@@ -270,7 +270,7 @@ func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	existing, err := s.file.FileStore.FindByNameAndSizeBatch(userID, records)
+	existing, err := c.FileStore.FindByNameAndSizeBatch(userID, records)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DEDUP_ERROR", "Failed to check duplicates")
 		return
@@ -290,7 +290,7 @@ func (s *Server) handleUploadCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUploadWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -304,12 +304,12 @@ func (s *Server) handleUploadWS(w http.ResponseWriter, r *http.Request) {
 	var ch chan *model.UploadJob
 
 	if batchID != "" {
-		ch = s.upload.WorkerPool.Subscribe(batchID, wsID)
-		defer s.upload.WorkerPool.Unsubscribe(batchID, wsID)
-		s.sendBatchSnapshot(conn, batchID, userID)
+		ch = c.WorkerPool.Subscribe(batchID, wsID)
+		defer c.WorkerPool.Unsubscribe(batchID, wsID)
+		c.sendBatchSnapshot(conn, batchID, userID)
 	} else {
-		ch = s.upload.WorkerPool.SubscribeUser(userID, wsID)
-		defer s.upload.WorkerPool.UnsubscribeUser(userID, wsID)
+		ch = c.WorkerPool.SubscribeUser(userID, wsID)
+		defer c.WorkerPool.UnsubscribeUser(userID, wsID)
 	}
 
 	done := make(chan struct{})
@@ -366,8 +366,8 @@ func workerJobToMsg(job *model.UploadJob) map[string]interface{} {
 	return msg
 }
 
-func (s *Server) sendBatchSnapshot(conn *websocket.Conn, batchID, userID string) {
-	jobs, err := s.upload.UploadJobStore.ListByBatch(batchID)
+func (c *UploadCtl) sendBatchSnapshot(conn *websocket.Conn, batchID, userID string) {
+	jobs, err := c.UploadJobStore.ListByBatch(batchID)
 	if err != nil {
 		return
 	}
@@ -380,26 +380,26 @@ func (s *Server) sendBatchSnapshot(conn *websocket.Conn, batchID, userID string)
 	}
 }
 
-func (s *Server) handleUploadWSWithToken(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleUploadWSWithToken(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token query parameter")
 		return
 	}
 
-	if !s.validateTokenAndSetContext(w, r, token) {
+	if !c.ValidateTokenAndSetContext(w, r, token) {
 		return
 	}
 
-	s.handleUploadWS(w, r)
+	c.HandleUploadWS(w, r)
 }
 
-func (s *Server) validateTokenAndSetContext(w http.ResponseWriter, r *http.Request, tokenString string) bool {
+func (c *UploadCtl) ValidateTokenAndSetContext(w http.ResponseWriter, r *http.Request, tokenString string) bool {
 	parsed, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return []byte(s.cfg.Auth.JWTSecret), nil
+		return []byte(c.Cfg.Auth.JWTSecret), nil
 	})
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
@@ -425,4 +425,63 @@ func (s *Server) validateTokenAndSetContext(w http.ResponseWriter, r *http.Reque
 	*r = *r.WithContext(ctx)
 
 	return true
+}
+
+func (c *UploadCtl) CheckFolderAccess(folderID, userID string, r *http.Request) bool {
+	fp, err := c.FolderPwStore.FindByFolderID(folderID)
+	if err != nil {
+		return true
+	}
+
+	now := time.Now().UTC()
+	if now.After(fp.ExpiresAt) {
+		c.FolderPwStore.DeleteByFolderID(folderID)
+		return true
+	}
+
+	if _, err := c.FolderStore.FindByID(folderID); err != nil {
+		return false
+	}
+
+	unlockToken := r.Header.Get("X-Folder-Unlock-Token")
+	if unlockToken == "" {
+		unlockToken = r.URL.Query().Get("folder_unlock_token")
+	}
+	if unlockToken != "" {
+		unlockedFolderID, ok := c.ParseFolderUnlockToken(unlockToken)
+		if ok && unlockedFolderID == folderID {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *UploadCtl) folderUnlockSecret() string {
+	return c.Cfg.Auth.JWTSecret + ":folder_unlock"
+}
+
+func (c *UploadCtl) ParseFolderUnlockToken(tokenStr string) (string, bool) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(c.folderUnlockSecret()), nil
+	})
+	if err != nil || !token.Valid {
+		return "", false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub != "folder_unlock" {
+		return "", false
+	}
+
+	folderID, _ := claims["folder_id"].(string)
+	return folderID, folderID != ""
 }

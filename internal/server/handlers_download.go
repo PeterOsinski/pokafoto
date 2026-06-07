@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchDownload(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var req struct {
@@ -38,7 +38,7 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 	defer zw.Close()
 
 	for _, fileID := range req.FileIDs {
-		file, err := s.file.FileStore.FindByID(fileID)
+		file, err := c.FileStore.FindByID(fileID)
 		if err != nil || file == nil || file.UserID != userID {
 			continue
 		}
@@ -50,7 +50,7 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 		}
 
 		if file.IsAppManaged {
-			doc, err := s.doc.DocumentStore.FindByFileID(fileID)
+			doc, err := c.DocumentStore.FindByFileID(fileID)
 			if err != nil {
 				continue
 			}
@@ -58,8 +58,8 @@ func (s *Server) handleBatchDownloadReal(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-		f, err := s.fs.Open(filePath)
+		filePath := filepath.Join(c.Cfg.OriginalsDir(), file.UserID, file.Filename)
+		f, err := c.FS.Open(filePath)
 		if err != nil {
 			continue
 		}

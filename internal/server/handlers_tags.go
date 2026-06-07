@@ -7,10 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleListTags(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 
-	tags, err := s.file.TagStore.Search(q)
+	tags, err := c.TagStore.Search(q)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list tags")
 		return
@@ -31,10 +31,10 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleTagStats(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleTagStats(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	tags, err := s.file.TagStore.ListWithCount(userID)
+	tags, err := c.TagStore.ListWithCount(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get tag stats")
 		return
@@ -56,17 +56,17 @@ func (s *Server) handleTagStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetFileTags(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleGetFileTags(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	tags, err := s.file.TagStore.FindByFileID(fileID)
+	tags, err := c.TagStore.FindByFileID(fileID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file tags")
 		return
@@ -87,11 +87,11 @@ func (s *Server) handleGetFileTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAddFileTags(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleAddFileTags(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -107,11 +107,11 @@ func (s *Server) handleAddFileTags(w http.ResponseWriter, r *http.Request) {
 
 	added := 0
 	for _, tagName := range req.Tags {
-		tag, err := s.file.TagStore.FindOrCreate(tagName)
+		tag, err := c.TagStore.FindOrCreate(tagName)
 		if err != nil {
 			continue
 		}
-		if err := s.file.TagStore.AddToFile(fileID, tag.ID, userID); err != nil {
+		if err := c.TagStore.AddToFile(fileID, tag.ID, userID); err != nil {
 			continue
 		}
 		added++
@@ -122,18 +122,18 @@ func (s *Server) handleAddFileTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRemoveFileTag(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleRemoveFileTag(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	tagID := chi.URLParam(r, "tagId")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if err := s.file.TagStore.RemoveFromFile(fileID, tagID); err != nil {
+	if err := c.TagStore.RemoveFromFile(fileID, tagID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove tag")
 		return
 	}
@@ -141,17 +141,17 @@ func (s *Server) handleRemoveFileTag(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
-func (s *Server) handleGetFileAlbums(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleGetFileAlbums(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	albumInfos, err := s.album.AlbumItemStore.ListAlbumsByFile(fileID, userID)
+	albumInfos, err := c.AlbumItemStore.ListAlbumsByFile(fileID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file albums")
 		return

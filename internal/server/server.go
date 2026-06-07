@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/drive/drive/internal/backup"
@@ -78,6 +79,7 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			UserStore:    userStore,
 			SessionStore: sessStore,
 			SettingStore: settingStore,
+			Cfg:          cfg,
 		},
 		file: &FileCtl{
 			FileStore:      fileStore,
@@ -90,6 +92,10 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			AlbumStore:     albumStore,
 			Storage:        storageService,
 			S3DeletionPool: s3DeletionPool,
+			Cfg:            cfg,
+			FS:             fs,
+			DocumentStore:  docStore,
+			AlbumItemStore: albumItemStore,
 		},
 		upload: &UploadCtl{
 			UploadJobStore: uploadJobStore,
@@ -97,6 +103,10 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			FileStore:      fileStore,
 			UserStore:      userStore,
 			WorkerPool:     workerPool,
+			Cfg:            cfg,
+			FS:             fs,
+			FolderPwStore:  folderPasswordStore,
+			FolderStore:    folderStore,
 		},
 		folder: &FolderCtl{
 			FolderStore:      folderStore,
@@ -112,18 +122,22 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			FileStore:       fileStore,
 		},
 		comment: &CommentCtl{
-			CommentStore:  commentStore,
-			ReactionStore: reactionStore,
-			UserStore:     userStore,
-			FileStore:     fileStore,
+			CommentStore:   commentStore,
+			ReactionStore:  reactionStore,
+			UserStore:      userStore,
+			FileStore:      fileStore,
+			AlbumItemStore: albumItemStore,
 		},
 		doc: &DocCtl{
 			DocumentStore: docStore,
 			FileStore:     fileStore,
 		},
 		download: &DownloadCtl{
-			FileStore: fileStore,
-			Storage:   storageService,
+			FileStore:     fileStore,
+			Storage:       storageService,
+			Cfg:           cfg,
+			FS:            fs,
+			DocumentStore: docStore,
 		},
 		share: &ShareCtl{
 			FolderShareStore: folderShareStore,
@@ -131,6 +145,13 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			FolderStore:      folderStore,
 			FileStore:        fileStore,
 			FolderPwStore:    folderPasswordStore,
+			Cfg:              cfg,
+			FS:               fs,
+			Storage:          storageService,
+			DocumentStore:    docStore,
+			S3DeletionPool:   s3DeletionPool,
+			UploadJobStore:   uploadJobStore,
+			WorkerPool:       workerPool,
 		},
 		admin: &AdminCtl{
 			UserStore:         userStore,
@@ -145,6 +166,9 @@ func New(cfg *config.Config, db *store.DB) *Server {
 			WorkerPool:        workerPool,
 			S3DeletionPool:    s3DeletionPool,
 			S3Enabled:         cfg.Storage.S3.Enabled,
+			Cfg:               cfg,
+			FS:                fs,
+			UploadJobStore:    uploadJobStore,
 		},
 	}
 
@@ -198,29 +222,29 @@ func (s *Server) setupRouter() {
 	}))
 
 	r.Get("/api/v1/health", s.admin.handleHealth)
-	r.Get("/api/v1/auth/config", s.handleAuthConfig)
+	r.Get("/api/v1/auth/config", s.auth.HandleAuthConfig)
 
-	r.Get("/api/v1/share/{token}", s.handleShareInfo)
-	r.Post("/api/v1/share/{token}/unlock", s.handleShareUnlock)
-	r.Get("/api/v1/share/{token}/files", s.handleShareListFiles)
-	r.Get("/api/v1/share/{token}/files/{id}", s.handleShareGetFile)
-	r.Get("/api/v1/share/{token}/download/{id}", s.handleShareDownload)
-	r.Get("/api/v1/share/{token}/thumb/{fileID}/{size}", s.handleShareThumbnail)
-	r.Post("/api/v1/share/{token}/upload", s.handleShareUpload)
-	r.Delete("/api/v1/share/{token}/files/{id}", s.handleShareDeleteFile)
-	r.Get("/api/v1/share/{token}/folders", s.handleShareListFolders)
-	r.Post("/api/v1/share/{token}/folders", s.handleShareCreateFolder)
-	r.Delete("/api/v1/share/{token}/folders/{id}", s.handleShareDeleteFolder)
+	r.Get("/api/v1/share/{token}", s.share.HandleShareInfo)
+	r.Post("/api/v1/share/{token}/unlock", s.share.HandleShareUnlock)
+	r.Get("/api/v1/share/{token}/files", s.share.HandleShareListFiles)
+	r.Get("/api/v1/share/{token}/files/{id}", s.share.HandleShareGetFile)
+	r.Get("/api/v1/share/{token}/download/{id}", s.share.HandleShareDownload)
+	r.Get("/api/v1/share/{token}/thumb/{fileID}/{size}", s.share.HandleShareThumbnail)
+	r.Post("/api/v1/share/{token}/upload", s.share.HandleShareUpload)
+	r.Delete("/api/v1/share/{token}/files/{id}", s.share.HandleShareDeleteFile)
+	r.Get("/api/v1/share/{token}/folders", s.share.HandleShareListFolders)
+	r.Post("/api/v1/share/{token}/folders", s.share.HandleShareCreateFolder)
+	r.Delete("/api/v1/share/{token}/folders/{id}", s.share.HandleShareDeleteFolder)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/auth/register", s.handleRegister)
-		r.Post("/auth/login", s.handleLogin)
-		r.Post("/auth/refresh", s.handleRefresh)
-		r.Post("/auth/logout", s.handleLogout)
+		r.Post("/auth/register", s.auth.HandleRegister)
+		r.Post("/auth/login", s.auth.HandleLogin)
+		r.Post("/auth/refresh", s.auth.HandleRefresh)
+		r.Post("/auth/logout", s.auth.HandleLogout)
 
-		r.Get("/upload/ws", s.handleUploadWSWithToken)
+		r.Get("/upload/ws", s.upload.HandleUploadWSWithToken)
 
-		r.Get("/thumb/{fileID}/{size}", s.handleServeThumbnail)
+		r.Get("/thumb/{fileID}/{size}", s.file.HandleServeThumbnail)
 
 		r.Get("/video/{id}", s.handleVideoStreamWithToken)
 		r.Get("/download/{id}", s.handleDownloadWithToken)
@@ -228,113 +252,113 @@ func (s *Server) setupRouter() {
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 
-			r.Get("/auth/me", s.handleMe)
+			r.Get("/auth/me", s.auth.HandleMe)
 
-			r.Post("/upload", s.handleUpload)
-			r.Post("/upload/chunk", s.handleChunkUpload)
-			r.Head("/upload/chunk/{resumeToken}", s.handleChunkUploadResume)
-			r.Get("/upload/chunk/{resumeToken}", s.handleChunkUploadResume)
-			r.Post("/upload/chunk/{resumeToken}/complete", s.handleChunkUploadComplete)
-			r.Post("/upload/check", s.handleUploadCheck)
-			r.Get("/upload/{batchID}/status", s.handleUploadStatus)
-			r.Get("/upload/active", s.handleUploadActiveJobs)
+			r.Post("/upload", s.upload.HandleUpload)
+			r.Post("/upload/chunk", s.upload.HandleChunkUpload)
+			r.Head("/upload/chunk/{resumeToken}", s.upload.HandleChunkUploadResume)
+			r.Get("/upload/chunk/{resumeToken}", s.upload.HandleChunkUploadResume)
+			r.Post("/upload/chunk/{resumeToken}/complete", s.upload.HandleChunkUploadComplete)
+			r.Post("/upload/check", s.upload.HandleUploadCheck)
+			r.Get("/upload/{batchID}/status", s.upload.HandleUploadStatus)
+			r.Get("/upload/active", s.upload.HandleUploadActiveJobs)
 
-		r.Get("/files", s.handleListFiles)
-		r.Get("/files/{id}", s.handleGetFile)
-		r.Delete("/files/{id}", s.handleSoftDeleteFile)
-		r.Delete("/files/{id}/permanent", s.handlePermanentDeleteFile)
-		r.Put("/files/{id}/rename", s.handleRenameFile)
-		r.Post("/files/batch-delete", s.handleBatchSoftDelete)
-			r.Post("/files/batch-move", s.handleBatchMove)
-			r.Post("/files/batch-copy", s.handleBatchCopy)
+			r.Get("/files", s.file.HandleListFiles)
+			r.Get("/files/{id}", s.file.HandleGetFile)
+			r.Delete("/files/{id}", s.file.HandleSoftDeleteFile)
+			r.Delete("/files/{id}/permanent", s.file.HandlePermanentDeleteFile)
+			r.Put("/files/{id}/rename", s.file.HandleRenameFile)
+			r.Post("/files/batch-delete", s.file.HandleBatchSoftDelete)
+			r.Post("/files/batch-move", s.file.HandleBatchMove)
+			r.Post("/files/batch-copy", s.file.HandleBatchCopy)
 
-			r.Get("/dirs", s.handleListDirs)
+			r.Get("/dirs", s.file.HandleListDirs)
 
-		r.Get("/folders", s.handleListFolders)
-		r.Post("/folders", s.handleCreateFolder)
-		r.Put("/folders/{id}", s.handleUpdateFolder)
-		r.Delete("/folders/{id}", s.handleDeleteFolder)
-			r.Post("/folders/{id}/password", s.handleSetFolderPassword)
-			r.Delete("/folders/{id}/password", s.handleRemoveFolderPassword)
-			r.Post("/folders/{id}/unlock", s.handleUnlockFolder)
-			r.Get("/folders/{id}/password", s.handleGetFolderPasswordStatus)
-			r.Post("/folders/{id}/shares", s.handleCreateShare)
-			r.Get("/folders/{id}/shares", s.handleListShares)
-			r.Put("/folders/{id}/shares/{shareId}", s.handleUpdateShare)
-			r.Delete("/folders/{id}/shares/{shareId}", s.handleDeleteShare)
+			r.Get("/folders", s.file.HandleListFolders)
+			r.Post("/folders", s.file.HandleCreateFolder)
+			r.Put("/folders/{id}", s.file.HandleUpdateFolder)
+			r.Delete("/folders/{id}", s.file.HandleDeleteFolder)
+			r.Post("/folders/{id}/password", s.file.HandleSetFolderPassword)
+			r.Delete("/folders/{id}/password", s.file.HandleRemoveFolderPassword)
+			r.Post("/folders/{id}/unlock", s.file.HandleUnlockFolder)
+			r.Get("/folders/{id}/password", s.file.HandleGetFolderPasswordStatus)
+			r.Post("/folders/{id}/shares", s.share.HandleCreateShare)
+			r.Get("/folders/{id}/shares", s.share.HandleListShares)
+			r.Put("/folders/{id}/shares/{shareId}", s.share.HandleUpdateShare)
+			r.Delete("/folders/{id}/shares/{shareId}", s.share.HandleDeleteShare)
 
-			r.Get("/search", s.handleSearch)
+			r.Get("/search", s.file.HandleSearch)
 
-			r.Get("/timeline", s.handleTimeline)
+			r.Get("/timeline", s.file.HandleTimeline)
 
-			r.Get("/geo/points", s.handleGeoPoints)
-			r.Get("/geo/clusters", s.handleGeoClusters)
+			r.Get("/geo/points", s.file.HandleGeoPoints)
+			r.Get("/geo/clusters", s.file.HandleGeoClusters)
 
-			r.Get("/stats", s.handleStats)
+			r.Get("/stats", s.file.HandleStats)
 
-			r.Post("/download/batch", s.handleBatchDownload)
+			r.Post("/download/batch", s.file.HandleBatchDownload)
 
-			r.Get("/trash", s.handleListTrash)
-			r.Get("/trash/stats", s.handleTrashStats)
-			r.Post("/trash/{id}/restore", s.handleRestoreTrash)
-			r.Post("/trash/batch-restore", s.handleBatchRestoreTrash)
-			r.Delete("/trash/{id}", s.handlePermanentDeleteTrash)
-			r.Post("/trash/batch-permanent-delete", s.handleBatchPermanentDeleteTrash)
-			r.Post("/trash/empty", s.handleEmptyTrash)
+			r.Get("/trash", s.file.HandleListTrash)
+			r.Get("/trash/stats", s.file.HandleTrashStats)
+			r.Post("/trash/{id}/restore", s.file.HandleRestoreTrash)
+			r.Post("/trash/batch-restore", s.file.HandleBatchRestoreTrash)
+			r.Delete("/trash/{id}", s.file.HandlePermanentDeleteTrash)
+			r.Post("/trash/batch-permanent-delete", s.file.HandleBatchPermanentDeleteTrash)
+			r.Post("/trash/empty", s.file.HandleEmptyTrash)
 
-			r.Get("/tags", s.handleListTags)
-			r.Get("/tags/stats", s.handleTagStats)
-			r.Get("/albums", s.handleListAlbums)
-			r.Post("/albums", s.handleCreateAlbum)
-			r.Get("/albums/{id}", s.handleGetAlbum)
-			r.Put("/albums/{id}", s.handleUpdateAlbum)
-			r.Delete("/albums/{id}", s.handleDeleteAlbum)
-			r.Get("/albums/{id}/items", s.handleListAlbumItems)
-			r.Post("/albums/{id}/items", s.handleAddAlbumItems)
-			r.Delete("/albums/{id}/items/{itemId}", s.handleRemoveAlbumItem)
-			r.Post("/albums/{id}/shares", s.handleShareAlbum)
-			r.Delete("/albums/{id}/shares/{shareId}", s.handleRemoveShare)
+			r.Get("/tags", s.file.HandleListTags)
+			r.Get("/tags/stats", s.file.HandleTagStats)
+			r.Get("/albums", s.album.HandleListAlbums)
+			r.Post("/albums", s.album.HandleCreateAlbum)
+			r.Get("/albums/{id}", s.album.HandleGetAlbum)
+			r.Put("/albums/{id}", s.album.HandleUpdateAlbum)
+			r.Delete("/albums/{id}", s.album.HandleDeleteAlbum)
+			r.Get("/albums/{id}/items", s.album.HandleListAlbumItems)
+			r.Post("/albums/{id}/items", s.album.HandleAddAlbumItems)
+			r.Delete("/albums/{id}/items/{itemId}", s.album.HandleRemoveAlbumItem)
+			r.Post("/albums/{id}/shares", s.album.HandleShareAlbum)
+			r.Delete("/albums/{id}/shares/{shareId}", s.album.HandleRemoveShare)
 
-			r.Get("/files/{id}/comments", s.handleListComments)
-			r.Post("/files/{id}/comments", s.handleAddComment)
-			r.Put("/files/{id}/comments/{commentId}", s.handleUpdateComment)
-			r.Delete("/files/{id}/comments/{commentId}", s.handleDeleteComment)
+			r.Get("/files/{id}/comments", s.comment.HandleListComments)
+			r.Post("/files/{id}/comments", s.comment.HandleAddComment)
+			r.Put("/files/{id}/comments/{commentId}", s.comment.HandleUpdateComment)
+			r.Delete("/files/{id}/comments/{commentId}", s.comment.HandleDeleteComment)
 
-			r.Get("/files/{id}/comments/{commentId}/reactions", s.handleGetReactions)
-			r.Post("/files/{id}/comments/{commentId}/reactions", s.handleToggleReaction)
-			r.Delete("/files/{id}/comments/{commentId}/reactions/{emoji}", s.handleRemoveReaction)
+			r.Get("/files/{id}/comments/{commentId}/reactions", s.comment.HandleGetReactions)
+			r.Post("/files/{id}/comments/{commentId}/reactions", s.comment.HandleToggleReaction)
+			r.Delete("/files/{id}/comments/{commentId}/reactions/{emoji}", s.comment.HandleRemoveReaction)
 
-			r.Get("/files/{id}/tags", s.handleGetFileTags)
-			r.Post("/files/{id}/tags", s.handleAddFileTags)
-			r.Delete("/files/{id}/tags/{tagId}", s.handleRemoveFileTag)
-			r.Get("/files/{id}/albums", s.handleGetFileAlbums)
+			r.Get("/files/{id}/tags", s.file.HandleGetFileTags)
+			r.Post("/files/{id}/tags", s.file.HandleAddFileTags)
+			r.Delete("/files/{id}/tags/{tagId}", s.file.HandleRemoveFileTag)
+			r.Get("/files/{id}/albums", s.file.HandleGetFileAlbums)
 
-			r.Post("/documents", s.handleCreateDocument)
-			r.Get("/documents/{file_id}", s.handleGetDocument)
-			r.Put("/documents/{file_id}", s.handleUpdateDocument)
-			r.Delete("/documents/{file_id}", s.handleDeleteDocument)
+			r.Post("/documents", s.doc.HandleCreateDocument)
+			r.Get("/documents/{file_id}", s.doc.HandleGetDocument)
+			r.Put("/documents/{file_id}", s.doc.HandleUpdateDocument)
+			r.Delete("/documents/{file_id}", s.doc.HandleDeleteDocument)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.adminMiddleware)
-				r.Get("/users", s.handleAdminListUsers)
-				r.Post("/users", s.handleAdminCreateUser)
-				r.Delete("/users/{id}", s.handleAdminDeleteUser)
-				r.Put("/users/{id}/role", s.handleAdminUpdateRole)
-				r.Put("/users/{id}/quota", s.handleAdminUpdateQuota)
-				r.Get("/registration", s.handleAdminGetRegistration)
-				r.Put("/registration", s.handleAdminToggleRegistration)
-			r.Get("/stats", s.handleAdminStats)
-			r.Get("/files/breakdown", s.handleAdminFileBreakdown)
-			r.Get("/thumbnails/stats", s.handleAdminThumbnailStats)
-			r.Get("/workers", s.handleAdminWorkers)
-			r.Get("/jobs", s.handleAdminListJobs)
-			r.Post("/jobs/{id}/retry", s.handleAdminRetryJob)
-		r.Post("/jobs/reconcile", s.handleAdminReconcileJobs)
-		r.Get("/s3-deletion-queue", s.handleAdminS3DeletionQueue)
-		r.Get("/events", s.handleAdminListEvents)
-		r.Get("/events/counts", s.handleAdminEventCounts)
-		r.Get("/backup/status", s.handleAdminBackupStatus)
-		r.Post("/backup", s.handleAdminTriggerBackup)
+				r.Get("/users", s.admin.HandleAdminListUsers)
+				r.Post("/users", s.admin.HandleAdminCreateUser)
+				r.Delete("/users/{id}", s.admin.HandleAdminDeleteUser)
+				r.Put("/users/{id}/role", s.admin.HandleAdminUpdateRole)
+				r.Put("/users/{id}/quota", s.admin.HandleAdminUpdateQuota)
+				r.Get("/registration", s.admin.HandleAdminGetRegistration)
+				r.Put("/registration", s.admin.HandleAdminToggleRegistration)
+				r.Get("/stats", s.admin.HandleAdminStats)
+				r.Get("/files/breakdown", s.admin.HandleAdminFileBreakdown)
+				r.Get("/thumbnails/stats", s.admin.HandleAdminThumbnailStats)
+				r.Get("/workers", s.admin.HandleAdminWorkers)
+				r.Get("/jobs", s.admin.HandleAdminListJobs)
+				r.Post("/jobs/{id}/retry", s.admin.HandleAdminRetryJob)
+				r.Post("/jobs/reconcile", s.admin.HandleAdminReconcileJobs)
+				r.Get("/s3-deletion-queue", s.admin.HandleAdminS3DeletionQueue)
+				r.Get("/events", s.admin.HandleAdminListEvents)
+				r.Get("/events/counts", s.admin.HandleAdminEventCounts)
+				r.Get("/backup/status", s.admin.HandleAdminBackupStatus)
+				r.Post("/backup", s.admin.HandleAdminTriggerBackup)
 			})
 		})
 	})
@@ -349,6 +373,46 @@ func (s *Server) setupRouter() {
 
 func (s *Server) Start(addr string) error {
 	return http.ListenAndServe(addr, s.router)
+}
+
+func (s *Server) handleVideoStreamWithToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		if !s.upload.ValidateTokenAndSetContext(w, r, tokenStr) {
+			return
+		}
+	} else {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
+			return
+		}
+		if !s.upload.ValidateTokenAndSetContext(w, r, token) {
+			return
+		}
+	}
+	s.file.HandleVideoStream(w, r)
+}
+
+func (s *Server) handleDownloadWithToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		if !s.upload.ValidateTokenAndSetContext(w, r, tokenStr) {
+			return
+		}
+	} else {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
+			return
+		}
+		if !s.upload.ValidateTokenAndSetContext(w, r, token) {
+			return
+		}
+	}
+	s.file.HandleDownload(w, r)
 }
 
 func (c *AdminCtl) handleHealth(w http.ResponseWriter, r *http.Request) {

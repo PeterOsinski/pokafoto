@@ -16,10 +16,11 @@ import (
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/minio/minio-go/v7"
 )
 
-func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleListFiles(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -43,7 +44,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if opts.FolderID != nil {
-		if !s.checkFolderAccess(*opts.FolderID, userID, r) {
+		if !c.CheckFolderAccess(*opts.FolderID, userID, r) {
 			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
 			return
 		}
@@ -56,7 +57,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		opts.Order = "desc"
 	}
 
-	files, nextCursor, total, err := s.file.FileStore.List(opts)
+	files, nextCursor, total, err := c.FileStore.List(opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list files")
 		return
@@ -91,29 +92,29 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleGetFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
+	if file.UserID != userID && !c.CheckFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID != nil {
-		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+		if !c.CheckFolderAccess(*file.FolderID, userID, r) {
 			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
 			return
 		}
 	}
 
-	exif, _ := s.file.ExifStore.FindByFileID(fileID)
+	exif, _ := c.ExifStore.FindByFileID(fileID)
 
 	item := fileResponse{
 		ID:           file.ID,
@@ -145,17 +146,17 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (s *Server) handleSoftDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleSoftDeleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if err := s.file.FileStore.SoftDelete(fileID); err != nil {
+	if err := c.FileStore.SoftDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete file")
 		return
 	}
@@ -163,7 +164,7 @@ func (s *Server) handleSoftDeleteFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBatchSoftDelete(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchSoftDelete(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	var req struct {
 		IDs []string `json:"ids"`
@@ -173,7 +174,7 @@ func (s *Server) handleBatchSoftDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.file.FileStore.BatchSoftDelete(userID, req.IDs); err != nil {
+	if err := c.FileStore.BatchSoftDelete(userID, req.IDs); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete files")
 		return
 	}
@@ -181,7 +182,7 @@ func (s *Server) handleBatchSoftDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBatchMove(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchMove(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	var req struct {
 		IDs      []string `json:"ids"`
@@ -192,7 +193,7 @@ func (s *Server) handleBatchMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.file.FileStore.BatchMove(userID, req.IDs, req.FolderID); err != nil {
+	if err := c.FileStore.BatchMove(userID, req.IDs, req.FolderID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move files")
 		return
 	}
@@ -200,7 +201,7 @@ func (s *Server) handleBatchMove(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBatchCopy(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchCopy(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	var req struct {
 		IDs      []string `json:"ids"`
@@ -211,15 +212,15 @@ func (s *Server) handleBatchCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	copies, err := s.file.FileStore.BatchCopy(userID, req.IDs, req.FolderID)
+	copies, err := c.FileStore.BatchCopy(userID, req.IDs, req.FolderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to copy files")
 		return
 	}
 
 	copyIDs := make([]string, len(copies))
-	for i, c := range copies {
-		copyIDs[i] = c.ID
+	for i, cp := range copies {
+		copyIDs[i] = cp.ID
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -228,20 +229,20 @@ func (s *Server) handleBatchCopy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handlePermanentDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandlePermanentDeleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	filePath := filepath.Join(s.cfg.OriginalsDir(), userID, file.Filename)
-	s.fs.Remove(filePath)
+	filePath := filepath.Join(c.Cfg.OriginalsDir(), userID, file.Filename)
+	c.FS.Remove(filePath)
 
-	if err := s.file.FileStore.PermanentDelete(fileID); err != nil {
+	if err := c.FileStore.PermanentDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete file")
 		return
 	}
@@ -249,27 +250,27 @@ func (s *Server) handlePermanentDeleteFile(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileID")
 	size := r.PathValue("size")
 
-	if err := s.checkThumbnailAccess(w, r, fileID); err != nil {
+	if err := c.checkThumbnailAccess(w, r, fileID); err != nil {
 		return
 	}
 
-	thumbPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, size)
+	thumbPath := filepath.Join(c.Cfg.ThumbnailsDir(), fileID, size)
 
-	if _, err := s.fs.Stat(thumbPath); err == nil {
+	if _, err := c.FS.Stat(thumbPath); err == nil {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		http.ServeFile(w, r, thumbPath)
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
+	if c.Cfg.Storage.S3.Enabled && c.Storage != nil {
 		s3Key := fmt.Sprintf("thumbnails/%s/%s", fileID, size)
-		if err := s.file.Storage.GetObject(s3Key, thumbPath); err != nil {
+		if err := c.Storage.GetObject(s3Key, thumbPath); err != nil {
 			slog.Warn("s3 thumbnail fallback failed", "key", s3Key, "error", err)
-			s.fallbackThumbnail(w, r, fileID, size)
+			c.fallbackThumbnail(w, r, fileID, size)
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -277,11 +278,11 @@ func (s *Server) handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.fallbackThumbnail(w, r, fileID, size)
+	c.fallbackThumbnail(w, r, fileID, size)
 }
 
-func (s *Server) checkThumbnailAccess(w http.ResponseWriter, r *http.Request, fileID string) error {
-	file, err := s.file.FileStore.FindByID(fileID)
+func (c *FileCtl) checkThumbnailAccess(w http.ResponseWriter, r *http.Request, fileID string) error {
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		return nil
 	}
@@ -290,20 +291,20 @@ func (s *Server) checkThumbnailAccess(w http.ResponseWriter, r *http.Request, fi
 		return nil
 	}
 
-	fp, err := s.file.FolderPwStore.FindByFolderID(*file.FolderID)
+	fp, err := c.FolderPwStore.FindByFolderID(*file.FolderID)
 	if err != nil {
 		return nil
 	}
 
 	now := time.Now().UTC()
 	if now.After(fp.ExpiresAt) {
-		s.file.FolderPwStore.DeleteByFolderID(*file.FolderID)
+		c.FolderPwStore.DeleteByFolderID(*file.FolderID)
 		return nil
 	}
 
 	unlockToken := r.Header.Get("X-Folder-Unlock-Token")
 	if unlockToken != "" {
-		unlockedFolderID, ok := s.parseFolderUnlockToken(unlockToken)
+		unlockedFolderID, ok := c.ParseFolderUnlockToken(unlockToken)
 		if ok && unlockedFolderID == *file.FolderID {
 			return nil
 		}
@@ -313,15 +314,15 @@ func (s *Server) checkThumbnailAccess(w http.ResponseWriter, r *http.Request, fi
 	return fmt.Errorf("folder password required")
 }
 
-func (s *Server) fallbackThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
+func (c *FileCtl) fallbackThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
 	fallbackMap := map[string]string{
-		"preview.webp":  "md.jpg",
-		"lg.jpg":        "md.jpg",
-		"md.jpg":        "sm.jpg",
+		"preview.webp": "md.jpg",
+		"lg.jpg":       "md.jpg",
+		"md.jpg":       "sm.jpg",
 	}
 	if fallback, ok := fallbackMap[size]; ok {
-		fallbackPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, fallback)
-		if _, err := s.fs.Stat(fallbackPath); err == nil {
+		fallbackPath := filepath.Join(c.Cfg.ThumbnailsDir(), fileID, fallback)
+		if _, err := c.FS.Stat(fallbackPath); err == nil {
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 			http.ServeFile(w, r, fallbackPath)
 			return
@@ -330,11 +331,11 @@ func (s *Server) fallbackThumbnail(w http.ResponseWriter, r *http.Request, fileI
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "Thumbnail not found")
 }
 
-func (s *Server) handleListDirs(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleListDirs(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	allFolders := r.URL.Query().Get("all_folders") == "true"
 
-	root, err := s.file.FileStore.ListDirs(userID, allFolders)
+	root, err := c.FileStore.ListDirs(userID, allFolders)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list directories")
 		return
@@ -343,7 +344,7 @@ func (s *Server) handleListDirs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, root)
 }
 
-func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
@@ -381,7 +382,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		opts.Tags = strings.Split(tags, ",")
 	}
 
-	result, folderPaths, err := s.file.FileStore.SearchEnhanced(opts)
+	result, folderPaths, err := c.FileStore.SearchEnhanced(opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Search failed")
 		return
@@ -439,11 +440,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	granularity := r.URL.Query().Get("granularity")
 
-	groups, err := s.file.FileStore.Timeline(userID, granularity)
+	groups, err := c.FileStore.Timeline(userID, granularity)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get timeline")
 		return
@@ -457,7 +458,7 @@ func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGeoPoints(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleGeoPoints(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	latMin, _ := strconv.ParseFloat(r.URL.Query().Get("lat_min"), 64)
@@ -465,7 +466,7 @@ func (s *Server) handleGeoPoints(w http.ResponseWriter, r *http.Request) {
 	lonMin, _ := strconv.ParseFloat(r.URL.Query().Get("lon_min"), 64)
 	lonMax, _ := strconv.ParseFloat(r.URL.Query().Get("lon_max"), 64)
 
-	points, err := s.file.GeoStore.GetPoints(userID, store.GeoBounds{
+	points, err := c.GeoStore.GetPoints(userID, store.GeoBounds{
 		LatMin: latMin,
 		LatMax: latMax,
 		LonMin: lonMin,
@@ -486,7 +487,7 @@ func (s *Server) handleGeoPoints(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGeoClusters(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleGeoClusters(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	latMin, _ := strconv.ParseFloat(r.URL.Query().Get("lat_min"), 64)
@@ -495,7 +496,7 @@ func (s *Server) handleGeoClusters(w http.ResponseWriter, r *http.Request) {
 	lonMax, _ := strconv.ParseFloat(r.URL.Query().Get("lon_max"), 64)
 	zoom, _ := strconv.Atoi(r.URL.Query().Get("zoom"))
 
-	points, err := s.file.GeoStore.GetPoints(userID, store.GeoBounds{
+	points, err := c.GeoStore.GetPoints(userID, store.GeoBounds{
 		LatMin: latMin,
 		LatMax: latMax,
 		LonMin: lonMin,
@@ -523,10 +524,10 @@ func (s *Server) handleGeoClusters(w http.ResponseWriter, r *http.Request) {
 			latBlock: int(p.Latitude / gridSize),
 			lonBlock: int(p.Longitude / gridSize),
 		}
-		if c, ok := clusters[k]; ok {
-			c.latSum += p.Latitude
-			c.lonSum += p.Longitude
-			c.count++
+		if cl, ok := clusters[k]; ok {
+			cl.latSum += p.Latitude
+			cl.lonSum += p.Longitude
+			cl.count++
 		} else {
 			clusters[k] = &struct {
 				latSum  float64
@@ -538,12 +539,12 @@ func (s *Server) handleGeoClusters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := make([]interface{}, 0, len(clusters))
-	for _, c := range clusters {
+	for _, cl := range clusters {
 		result = append(result, map[string]interface{}{
-			"latitude":     c.latSum / float64(c.count),
-			"longitude":    c.lonSum / float64(c.count),
-			"count":        c.count,
-			"thumbnailUrl": fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", c.fileID),
+			"latitude":     cl.latSum / float64(cl.count),
+			"longitude":    cl.lonSum / float64(cl.count),
+			"count":        cl.count,
+			"thumbnailUrl": fmt.Sprintf("/api/v1/thumb/%s/sm.jpg", cl.fileID),
 		})
 	}
 
@@ -567,10 +568,10 @@ func gridSizeForZoom(zoom int) float64 {
 	}
 }
 
-func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleStats(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	stats, err := s.file.FileStore.Stats(userID)
+	stats, err := c.FileStore.Stats(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get stats")
 		return
@@ -589,30 +590,30 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
+	if file.UserID != userID && !c.CheckFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID != nil {
-		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+		if !c.CheckFolderAccess(*file.FolderID, userID, r) {
 			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
 			return
 		}
 	}
 
 	if file.IsAppManaged {
-		doc, err := s.doc.DocumentStore.FindByFileID(fileID)
+		doc, err := c.DocumentStore.FindByFileID(fileID)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Document content not found")
 			return
@@ -624,8 +625,8 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	if _, err := s.fs.Stat(filePath); err == nil {
+	filePath := filepath.Join(c.Cfg.OriginalsDir(), file.UserID, file.Filename)
+	if _, err := c.FS.Stat(filePath); err == nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
 		w.Header().Set("Accept-Ranges", "bytes")
 		if file.MimeType != "" {
@@ -641,7 +642,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
+	if c.Cfg.Storage.S3.Enabled && c.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
 		w.Header().Set("Accept-Ranges", "bytes")
@@ -651,70 +652,30 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		if file.SHA256 != "" {
 			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, file.SHA256))
 		}
-		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
+		serveFileWithRange(w, r, "", &s3Key, c.Cfg, c.Storage, c.FS, file.MimeType, file.SizeBytes)
 		return
 	}
 
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk")
 }
 
-func (s *Server) handleVideoStreamWithToken(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		if !s.validateTokenAndSetContext(w, r, tokenStr) {
-			return
-		}
-	} else {
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
-			return
-		}
-		if !s.validateTokenAndSetContext(w, r, token) {
-			return
-		}
-	}
-	s.handleVideoStream(w, r)
-}
-
-func (s *Server) handleDownloadWithToken(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		if !s.validateTokenAndSetContext(w, r, tokenStr) {
-			return
-		}
-	} else {
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
-			return
-		}
-		if !s.validateTokenAndSetContext(w, r, token) {
-			return
-		}
-	}
-	s.handleDownload(w, r)
-}
-
-func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleVideoStream(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if file.UserID != userID && !s.checkFileAccess(fileID, userID) {
+	if file.UserID != userID && !c.CheckFileAccess(fileID, userID) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID != nil {
-		if !s.checkFolderAccess(*file.FolderID, userID, r) {
+		if !c.CheckFolderAccess(*file.FolderID, userID, r) {
 			writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock")
 			return
 		}
@@ -728,22 +689,22 @@ func (s *Server) handleVideoStream(w http.ResponseWriter, r *http.Request) {
 	quality := r.URL.Query().Get("quality")
 
 	if quality == "proxy" {
-		thumb, err := s.file.ThumbnailStore.FindByFileIDAndSize(fileID, model.ThumbSizeVideoProxy)
+		thumb, err := c.ThumbnailStore.FindByFileIDAndSize(fileID, model.ThumbSizeVideoProxy)
 		if err == nil && thumb != nil {
-			serveFileWithRange(w, r, thumb.LocalPath, thumb.S3Key, s.cfg, s.file.Storage, s.fs, "video/mp4", thumb.SizeBytes)
+			serveFileWithRange(w, r, thumb.LocalPath, thumb.S3Key, c.Cfg, c.Storage, c.FS, "video/mp4", thumb.SizeBytes)
 			return
 		}
 	}
 
-	filePath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	if _, err := s.fs.Stat(filePath); err == nil {
-		serveFileWithRange(w, r, filePath, nil, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
+	filePath := filepath.Join(c.Cfg.OriginalsDir(), file.UserID, file.Filename)
+	if _, err := c.FS.Stat(filePath); err == nil {
+		serveFileWithRange(w, r, filePath, nil, c.Cfg, c.Storage, c.FS, file.MimeType, file.SizeBytes)
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
+	if c.Cfg.Storage.S3.Enabled && c.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
-		serveFileWithRange(w, r, "", &s3Key, s.cfg, s.file.Storage, s.fs, file.MimeType, file.SizeBytes)
+		serveFileWithRange(w, r, "", &s3Key, c.Cfg, c.Storage, c.FS, file.MimeType, file.SizeBytes)
 		return
 	}
 
@@ -876,11 +837,7 @@ func serveFileWithRange(w http.ResponseWriter, r *http.Request, localPath string
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 }
 
-func (s *Server) handleBatchDownload(w http.ResponseWriter, r *http.Request) {
-	s.handleBatchDownloadReal(w, r)
-}
-
-func (s *Server) handleListTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleListTrash(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -899,7 +856,7 @@ func (s *Server) handleListTrash(w http.ResponseWriter, r *http.Request) {
 		Order:  order,
 	}
 
-	files, nextCursor, total, err := s.file.FileStore.ListTrash(opts)
+	files, nextCursor, total, err := c.FileStore.ListTrash(opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list trash")
 		return
@@ -935,9 +892,9 @@ func (s *Server) handleListTrash(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleTrashStats(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleTrashStats(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
-	stats, err := s.file.FileStore.TrashStats(userID)
+	stats, err := c.FileStore.TrashStats(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get trash stats")
 		return
@@ -948,17 +905,17 @@ func (s *Server) handleTrashStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleRestoreTrash(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID || !file.IsDeleted {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found in trash")
 		return
 	}
 
-	if err := s.file.FileStore.Restore(fileID); err != nil {
+	if err := c.FileStore.Restore(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to restore file")
 		return
 	}
@@ -966,7 +923,7 @@ func (s *Server) handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBatchRestoreTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchRestoreTrash(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	var req struct {
 		IDs []string `json:"ids"`
@@ -976,7 +933,7 @@ func (s *Server) handleBatchRestoreTrash(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := s.file.FileStore.BatchRestore(userID, req.IDs); err != nil {
+	if err := c.FileStore.BatchRestore(userID, req.IDs); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to restore files")
 		return
 	}
@@ -984,24 +941,24 @@ func (s *Server) handleBatchRestoreTrash(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handlePermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandlePermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID || !file.IsDeleted {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found in trash")
 		return
 	}
 
-	originalPath := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	s.fs.Remove(originalPath)
-	thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), file.ID)
-	s.fs.RemoveAll(thumbDir)
+	originalPath := filepath.Join(c.Cfg.OriginalsDir(), file.UserID, file.Filename)
+	c.FS.Remove(originalPath)
+	thumbDir := filepath.Join(c.Cfg.ThumbnailsDir(), file.ID)
+	c.FS.RemoveAll(thumbDir)
 
-	s.file.enqueueS3Deletion(file.ID, file.UserID, file.Filename)
+	c.enqueueS3Deletion(file.ID, file.UserID, file.Filename)
 
-	if err := s.file.FileStore.PermanentDelete(fileID); err != nil {
+	if err := c.FileStore.PermanentDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete file")
 		return
 	}
@@ -1009,7 +966,7 @@ func (s *Server) handlePermanentDeleteTrash(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	var req struct {
 		IDs []string `json:"ids"`
@@ -1019,7 +976,7 @@ func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.
 		return
 	}
 
-	files, err := s.file.FileStore.ListTrashFiles(userID, req.IDs)
+	files, err := c.FileStore.ListTrashFiles(userID, req.IDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to query files")
 		return
@@ -1027,16 +984,16 @@ func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.
 
 	var deleteIDs []string
 	for _, f := range files {
-		originalPath := filepath.Join(s.cfg.OriginalsDir(), f.UserID, f.Filename)
-		s.fs.Remove(originalPath)
-		thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), f.ID)
-		s.fs.RemoveAll(thumbDir)
-		s.file.enqueueS3Deletion(f.ID, f.UserID, f.Filename)
+		originalPath := filepath.Join(c.Cfg.OriginalsDir(), f.UserID, f.Filename)
+		c.FS.Remove(originalPath)
+		thumbDir := filepath.Join(c.Cfg.ThumbnailsDir(), f.ID)
+		c.FS.RemoveAll(thumbDir)
+		c.enqueueS3Deletion(f.ID, f.UserID, f.Filename)
 		deleteIDs = append(deleteIDs, f.ID)
 	}
 
 	if len(deleteIDs) > 0 {
-		if err := s.file.FileStore.BatchPermanentDelete(userID, deleteIDs); err != nil {
+		if err := c.FileStore.BatchPermanentDelete(userID, deleteIDs); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to permanently delete files")
 			return
 		}
@@ -1045,10 +1002,10 @@ func (s *Server) handleBatchPermanentDeleteTrash(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
+func (c *FileCtl) HandleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	files, err := s.file.FileStore.ListAllTrashFiles(userID)
+	files, err := c.FileStore.ListAllTrashFiles(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to query trash")
 		return
@@ -1061,16 +1018,16 @@ func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 	}
 	var records []emptyRecord
 	for _, f := range files {
-		originalPath := filepath.Join(s.cfg.OriginalsDir(), f.UserID, f.Filename)
-		s.fs.Remove(originalPath)
-		thumbDir := filepath.Join(s.cfg.ThumbnailsDir(), f.ID)
-		s.fs.RemoveAll(thumbDir)
+		originalPath := filepath.Join(c.Cfg.OriginalsDir(), f.UserID, f.Filename)
+		c.FS.Remove(originalPath)
+		thumbDir := filepath.Join(c.Cfg.ThumbnailsDir(), f.ID)
+		c.FS.RemoveAll(thumbDir)
 		records = append(records, emptyRecord{f.ID, f.UserID, f.Filename})
 	}
 
 	var allIDs []string
 	for _, r := range records {
-		s.file.enqueueS3Deletion(r.id, r.uid, r.fn)
+		c.enqueueS3Deletion(r.id, r.uid, r.fn)
 		allIDs = append(allIDs, r.id)
 	}
 
@@ -1079,7 +1036,7 @@ func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 		if end > len(allIDs) {
 			end = len(allIDs)
 		}
-		if err := s.file.FileStore.BatchPermanentDelete(userID, allIDs[i:end]); err != nil {
+		if err := c.FileStore.BatchPermanentDelete(userID, allIDs[i:end]); err != nil {
 			slog.Warn("empty trash chunk failed", "error", err)
 		}
 	}
@@ -1087,3 +1044,263 @@ func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (c *FileCtl) CheckFileAccess(fileID, userID string) bool {
+	file, err := c.FileStore.FindByID(fileID)
+	if err != nil || file == nil || file.IsDeleted {
+		return false
+	}
+
+	if file.UserID == userID {
+		return true
+	}
+
+	hasAccess, err := c.AlbumItemStore.HasSharedAccess(fileID, userID)
+	if err != nil {
+		return false
+	}
+	return hasAccess
+}
+
+func (c *FileCtl) CheckCommentWriteAccess(fileID, userID string) bool {
+	file, err := c.FileStore.FindByID(fileID)
+	if err != nil || file == nil || file.IsDeleted {
+		return false
+	}
+
+	if file.UserID == userID {
+		return true
+	}
+
+	perm, err := c.AlbumItemStore.GetSharedPermission(fileID, userID)
+	if err != nil {
+		return false
+	}
+
+	return perm == "comment" || perm == "edit"
+}
+
+func (c *FileCtl) FolderPasswordExpiryDuration() time.Duration {
+	minutes := 30
+	if c.Cfg.Auth.FolderPasswordExpiryMinutes > 0 {
+		minutes = c.Cfg.Auth.FolderPasswordExpiryMinutes
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+func (c *FileCtl) folderUnlockSecret() string {
+	return c.Cfg.Auth.JWTSecret + ":folder_unlock"
+}
+
+func (c *FileCtl) ParseFolderUnlockToken(tokenStr string) (string, bool) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(c.folderUnlockSecret()), nil
+	})
+	if err != nil || !token.Valid {
+		return "", false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub != "folder_unlock" {
+		return "", false
+	}
+
+	folderID, _ := claims["folder_id"].(string)
+	return folderID, folderID != ""
+}
+
+func (c *FileCtl) GenerateFolderUnlockToken(folderID string, expiryTime time.Time) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":       "folder_unlock",
+		"folder_id": folderID,
+		"iat":       time.Now().Unix(),
+		"exp":       expiryTime.Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(c.folderUnlockSecret()))
+}
+
+func (c *FileCtl) CheckFolderAccess(folderID, userID string, r *http.Request) bool {
+	fp, err := c.FolderPwStore.FindByFolderID(folderID)
+	if err != nil {
+		return true
+	}
+
+	now := time.Now().UTC()
+	if now.After(fp.ExpiresAt) {
+		c.FolderPwStore.DeleteByFolderID(folderID)
+		return true
+	}
+
+	if _, err := c.FolderStore.FindByID(folderID); err != nil {
+		return false
+	}
+
+	unlockToken := r.Header.Get("X-Folder-Unlock-Token")
+	if unlockToken == "" {
+		unlockToken = r.URL.Query().Get("folder_unlock_token")
+	}
+	if unlockToken != "" {
+		unlockedFolderID, ok := c.ParseFolderUnlockToken(unlockToken)
+		if ok && unlockedFolderID == folderID {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *FileCtl) HandleCreateFolder(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var req struct {
+		Name     string  `json:"name"`
+		ParentID *string `json:"parent_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty name")
+		return
+	}
+
+	folder, err := c.FolderStore.Create(userID, req.Name, req.ParentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create folder")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, folder)
+}
+
+func (c *FileCtl) HandleListFolders(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	root, err := c.FolderStore.ListTree(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list folders")
+		return
+	}
+
+	if root == nil {
+		root = &model.FolderTreeNode{Children: []*model.FolderTreeNode{}}
+	}
+
+	writeJSON(w, http.StatusOK, root)
+}
+
+func (c *FileCtl) HandleUpdateFolder(w http.ResponseWriter, r *http.Request) {
+	folderID := r.PathValue("id")
+	userID := getUserID(r)
+
+	var req struct {
+		Name     *string `json:"name"`
+		ParentID *string `json:"parent_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.Name == nil && req.ParentID == nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide name or parent_id")
+		return
+	}
+
+	folder, err := c.FolderStore.FindByID(folderID)
+	if err != nil || folder == nil || folder.UserID != userID {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
+		return
+	}
+
+	if req.Name != nil {
+		if *req.Name == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Name cannot be empty")
+			return
+		}
+		if err := c.FolderStore.UpdateName(folderID, *req.Name); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to rename folder")
+			return
+		}
+	}
+
+	if req.ParentID != nil {
+		if *req.ParentID != "" {
+			if *req.ParentID == folderID {
+				writeError(w, http.StatusBadRequest, "CIRCULAR_MOVE", "Cannot move folder into itself")
+				return
+			}
+			isDesc, err := c.FolderStore.IsDescendant(*req.ParentID, folderID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to validate move")
+				return
+			}
+			if isDesc {
+				writeError(w, http.StatusBadRequest, "CIRCULAR_MOVE", "Cannot move folder into its own descendant")
+				return
+			}
+			parent, err := c.FolderStore.FindByID(*req.ParentID)
+			if err != nil || parent == nil || parent.UserID != userID {
+				writeError(w, http.StatusBadRequest, "INVALID_PARENT", "Target folder not found")
+				return
+			}
+			if err := c.FolderStore.UpdateParent(folderID, req.ParentID); err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move folder")
+				return
+			}
+		} else {
+			if err := c.FolderStore.UpdateParent(folderID, nil); err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to move folder")
+				return
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *FileCtl) HandleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	folderID := r.PathValue("id")
+	userID := getUserID(r)
+
+	folder, err := c.FolderStore.FindByID(folderID)
+	if err != nil || folder == nil || folder.UserID != userID {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
+		return
+	}
+
+	result, err := c.FolderStore.DeleteRecursive(folderID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete folder")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"deleted_files":   result.DeletedFiles,
+		"deleted_folders": result.DeletedFolders,
+	})
+}
+
+func (c *FileCtl) HandleRenameFile(w http.ResponseWriter, r *http.Request) {
+	fileID := r.PathValue("id")
+	userID := getUserID(r)
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a non-empty name")
+		return
+	}
+
+	if err := c.FileStore.Rename(fileID, userID, req.Name); err != nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found or access denied")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

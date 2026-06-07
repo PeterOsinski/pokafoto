@@ -12,13 +12,13 @@ import (
 	"github.com/drive/drive/internal/store"
 )
 
-func (s *Server) handleAdminS3DeletionQueue(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminS3DeletionQueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"pending": s.admin.S3DeletionPool.PendingCount(),
+		"pending": c.S3DeletionPool.PendingCount(),
 	})
 }
 
-func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string  `json:"username"`
 		Password    string  `json:"password"`
@@ -49,13 +49,13 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		role = model.RoleAdmin
 	}
 
-	existing, _ := s.auth.UserStore.FindByUsername(req.Username)
+	existing, _ := c.UserStore.FindByUsername(req.Username)
 	if existing != nil {
 		writeError(w, http.StatusConflict, "USERNAME_EXISTS", "Username is already taken")
 		return
 	}
 
-	user, err := s.auth.UserStore.Create(req.Username, req.Password, role, req.DisplayName)
+	user, err := c.UserStore.Create(req.Username, req.Password, role, req.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user")
 		return
@@ -70,13 +70,13 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAdminGetRegistration(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminGetRegistration(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"allow_registration": s.isRegistrationAllowed(),
+		"allow_registration": c.isRegistrationAllowed(),
 	})
 }
 
-func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminToggleRegistration(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -89,7 +89,7 @@ func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Re
 	if req.Enabled {
 		val = "true"
 	}
-	if err := s.auth.SettingStore.Set("allow_registration", val); err != nil {
+	if err := c.SettingStore.Set("allow_registration", val); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update setting")
 		return
 	}
@@ -99,8 +99,8 @@ func (s *Server) handleAdminToggleRegistration(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.auth.UserStore.List()
+func (c *AdminCtl) HandleAdminListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := c.UserStore.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list users")
 		return
@@ -108,15 +108,15 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 	userResponses := make([]map[string]interface{}, 0, len(users))
 	for _, u := range users {
-		fileCount, _ := s.file.FileStore.Stats(u.ID)
-		thumbSize, _ := s.auth.UserStore.GetThumbnailSize(u.ID)
+		fileCount, _ := c.FileStore.Stats(u.ID)
+		thumbSize, _ := c.UserStore.GetThumbnailSize(u.ID)
 
 		resp := map[string]interface{}{
-			"id":          u.ID,
-			"username":    u.Username,
+			"id":           u.ID,
+			"username":     u.Username,
 			"display_name": u.DisplayName,
-			"role":        string(u.Role),
-			"created_at":  u.CreatedAt.Format(timeRFC3339),
+			"role":         string(u.Role),
+			"created_at":   u.CreatedAt.Format(timeRFC3339),
 		}
 		if u.SpaceQuota != nil {
 			resp["space_quota"] = *u.SpaceQuota
@@ -140,16 +140,16 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
-	if err := s.auth.UserStore.Delete(userID); err != nil {
+	if err := c.UserStore.Delete(userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete user")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	var req struct {
 		Role string `json:"role"`
@@ -164,7 +164,7 @@ func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.auth.UserStore.UpdateRole(userID, model.UserRole(req.Role)); err != nil {
+	if err := c.UserStore.UpdateRole(userID, model.UserRole(req.Role)); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update role")
 		return
 	}
@@ -172,7 +172,7 @@ func (s *Server) handleAdminUpdateRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }
 
-func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	var req struct {
 		SpaceQuota *int64 `json:"space_quota"`
@@ -188,7 +188,7 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if req.SpaceQuota != nil {
-		used, err := s.auth.UserStore.GetUsedSpace(userID)
+		used, err := c.UserStore.GetUsedSpace(userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check usage")
 			return
@@ -199,12 +199,12 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := s.auth.UserStore.UpdateSpaceQuota(userID, req.SpaceQuota); err != nil {
+	if err := c.UserStore.UpdateSpaceQuota(userID, req.SpaceQuota); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update quota")
 		return
 	}
 
-	user, _ := s.auth.UserStore.FindByID(userID)
+	user, _ := c.UserStore.FindByID(userID)
 	if user == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 		return
@@ -223,14 +223,14 @@ func (s *Server) handleAdminUpdateQuota(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminFileBreakdown(w http.ResponseWriter, r *http.Request) {
 	userID := r.URL.Query().Get("user_id")
 	var breakdown *store.AdminFileBreakdown
 	var err error
 	if userID != "" {
-		breakdown, err = s.file.FileStore.AdminFileBreakdownByUser(userID)
+		breakdown, err = c.FileStore.AdminFileBreakdownByUser(userID)
 	} else {
-		breakdown, err = s.file.FileStore.AdminFileBreakdown()
+		breakdown, err = c.FileStore.AdminFileBreakdown()
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get file breakdown")
@@ -240,7 +240,7 @@ func (s *Server) handleAdminFileBreakdown(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, breakdown)
 }
 
-func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminListJobs(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -248,13 +248,13 @@ func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	statusFilter := r.URL.Query().Get("status")
 
-	jobs, total, err := s.upload.UploadJobStore.ListAll(limit, offset, statusFilter)
+	jobs, total, err := c.UploadJobStore.ListAll(limit, offset, statusFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list jobs")
 		return
 	}
 
-	summary, _ := s.upload.UploadJobStore.CountByStatus()
+	summary, _ := c.UploadJobStore.CountByStatus()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"jobs":    jobs,
@@ -263,33 +263,33 @@ func (s *Server) handleAdminListJobs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAdminRetryJob(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminRetryJob(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
-	if err := s.upload.UploadJobStore.Requeue(jobID); err != nil {
+	if err := c.UploadJobStore.Requeue(jobID); err != nil {
 		writeError(w, http.StatusConflict, "RETRY_FAILED", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }
 
-func (s *Server) handleAdminReconcileJobs(w http.ResponseWriter, r *http.Request) {
-	result := s.admin.WorkerPool.RunReconciliation()
+func (c *AdminCtl) HandleAdminReconcileJobs(w http.ResponseWriter, r *http.Request) {
+	result := c.WorkerPool.RunReconciliation()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleAdminWorkers(w http.ResponseWriter, r *http.Request) {
-	stats := s.admin.WorkerPool.Stats()
+func (c *AdminCtl) HandleAdminWorkers(w http.ResponseWriter, r *http.Request) {
+	stats := c.WorkerPool.Stats()
 	writeJSON(w, http.StatusOK, stats)
 }
 
-func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminThumbnailStats(w http.ResponseWriter, r *http.Request) {
 	userID := r.URL.Query().Get("user_id")
 	var breakdown []store.ThumbnailBreakdown
 	var err error
 	if userID != "" {
-		breakdown, err = s.file.ThumbnailStore.BreakdownByUser(userID)
+		breakdown, err = c.ThumbnailStore.BreakdownByUser(userID)
 	} else {
-		breakdown, err = s.file.ThumbnailStore.Breakdown()
+		breakdown, err = c.ThumbnailStore.Breakdown()
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get thumbnail stats")
@@ -313,8 +313,8 @@ func (s *Server) handleAdminThumbnailStats(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
-	users, err := s.auth.UserStore.List()
+func (c *AdminCtl) HandleAdminStats(w http.ResponseWriter, r *http.Request) {
+	users, err := c.UserStore.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list users")
 		return
@@ -325,19 +325,19 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	userStats := make([]map[string]interface{}, 0, len(users))
 
 	for _, u := range users {
-		stats, err := s.file.FileStore.Stats(u.ID)
+		stats, err := c.FileStore.Stats(u.ID)
 		if err != nil {
 			continue
 		}
-		thumbSize, _ := s.auth.UserStore.GetThumbnailSize(u.ID)
+		thumbSize, _ := c.UserStore.GetThumbnailSize(u.ID)
 		totalFiles += stats.TotalFiles
 		totalSize += stats.TotalSize
 		ustat := map[string]interface{}{
-			"id":                  u.ID,
-			"username":            u.Username,
-			"role":                string(u.Role),
-			"file_count":          stats.TotalFiles,
-			"total_size_bytes":    stats.TotalSize,
+			"id":                   u.ID,
+			"username":             u.Username,
+			"role":                 string(u.Role),
+			"file_count":           stats.TotalFiles,
+			"total_size_bytes":     stats.TotalSize,
 			"thumbnail_size_bytes": thumbSize,
 		}
 		if u.SpaceQuota != nil {
@@ -348,15 +348,15 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		userStats = append(userStats, ustat)
 	}
 
-	cacheSize, _ := s.file.ThumbnailStore.TotalSize()
-	diskTotal, diskFree, diskUsed := diskUsage(s.fs, s.cfg.Storage.Local.Path)
+	cacheSize, _ := c.ThumbnailStore.TotalSize()
+	diskTotal, diskFree, diskUsed := diskUsage(c.FS, c.Cfg.Storage.Local.Path)
 	diskPct := float64(0)
 	if diskTotal > 0 {
 		diskPct = float64(diskUsed) / float64(diskTotal) * 100
 	}
 
 	var originalsSize int64
-	s.fs.Walk(s.cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
+	c.FS.Walk(c.Cfg.OriginalsDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -367,16 +367,16 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"total_files":          totalFiles,
-		"total_size_bytes":     totalSize,
-		"cache_size_bytes":     cacheSize,
-		"disk_total_bytes":     diskTotal,
-		"disk_free_bytes":      diskFree,
-		"disk_used_bytes":      diskUsed,
-		"disk_utilization_pct": diskPct,
-		"max_disk_usage_pct":   s.cfg.MaxDiskUsagePercent(),
-		"originals_size_bytes": originalsSize,
-		"users":                userStats,
+		"total_files":           totalFiles,
+		"total_size_bytes":      totalSize,
+		"cache_size_bytes":      cacheSize,
+		"disk_total_bytes":      diskTotal,
+		"disk_free_bytes":       diskFree,
+		"disk_used_bytes":       diskUsed,
+		"disk_utilization_pct":  diskPct,
+		"max_disk_usage_pct":    c.Cfg.MaxDiskUsagePercent(),
+		"originals_size_bytes":  originalsSize,
+		"users":                 userStats,
 	})
 }
 
@@ -388,14 +388,14 @@ func diskUsage(fs service.FileSystem, path string) (total, free, used uint64) {
 	return
 }
 
-func (s *Server) handleAdminListEvents(w http.ResponseWriter, r *http.Request) {
+func (c *AdminCtl) HandleAdminListEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	events, total, err := s.admin.SystemEventsStore.List(
+	events, total, err := c.SystemEventsStore.List(
 		limit, offset,
 		r.URL.Query().Get("event_type"),
 		r.URL.Query().Get("severity"),
@@ -413,8 +413,8 @@ func (s *Server) handleAdminListEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAdminEventCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := s.admin.SystemEventsStore.EventCounts()
+func (c *AdminCtl) HandleAdminEventCounts(w http.ResponseWriter, r *http.Request) {
+	counts, err := c.SystemEventsStore.EventCounts()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get event counts")
 		return
@@ -424,23 +424,32 @@ func (s *Server) handleAdminEventCounts(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleAdminBackupStatus(w http.ResponseWriter, r *http.Request) {
-	result := s.admin.Scheduler.LastResult()
+func (c *AdminCtl) HandleAdminBackupStatus(w http.ResponseWriter, r *http.Request) {
+	result := c.Scheduler.LastResult()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"enabled":        s.cfg.Backup.Enabled,
-		"interval_h":     s.cfg.Backup.IntervalH,
-		"retention_days": s.cfg.Backup.RetentionDays,
+		"enabled":        c.Cfg.Backup.Enabled,
+		"interval_h":     c.Cfg.Backup.IntervalH,
+		"retention_days": c.Cfg.Backup.RetentionDays,
 		"last_result":    result,
 	})
 }
 
-func (s *Server) handleAdminTriggerBackup(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.Backup.Enabled || !s.admin.Storage.IsConnected() {
+func (c *AdminCtl) HandleAdminTriggerBackup(w http.ResponseWriter, r *http.Request) {
+	if !c.Cfg.Backup.Enabled || !c.Storage.IsConnected() {
 		writeError(w, http.StatusConflict, "BACKUP_UNAVAILABLE", "Backup is not enabled or S3 is not connected")
 		return
 	}
-	go s.admin.Scheduler.RunBackup()
+	go c.Scheduler.RunBackup()
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"status": "backup_started",
 	})
+}
+
+func (c *AdminCtl) isRegistrationAllowed() bool {
+	if c.SettingStore != nil {
+		if val, err := c.SettingStore.Get("allow_registration"); err == nil && val != "" {
+			return val == "true"
+		}
+	}
+	return c.Cfg.Auth.AllowRegistration
 }

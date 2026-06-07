@@ -6,19 +6,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/drive/drive/internal/model"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareInfo(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -29,26 +29,26 @@ func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folder, err := s.file.FolderStore.FindByID(share.FolderID)
+	folder, err := c.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Shared folder not found")
 		return
 	}
 
-	files, _, _, _ := s.file.FileStore.ListFilesByFolderID(share.FolderID, "", 0)
+	files, _, _, _ := c.FileStore.ListFilesByFolderID(share.FolderID, "", 0)
 	fileCount := 0
 	if files != nil {
 		fileCount = len(files)
 	}
 
-	uploadedBytes, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
+	uploadedBytes, _ := c.ShareUploadStore.SumByShareID(share.ID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"needs_password":    share.HasPassword,
-		"permissions":       string(share.Permissions),
-		"include_subdirs":   share.IncludeSubdirs,
+		"needs_password":     share.HasPassword,
+		"permissions":        string(share.Permissions),
+		"include_subdirs":    share.IncludeSubdirs,
 		"upload_limit_bytes": share.UploadLimitBytes,
-		"uploaded_bytes":    uploadedBytes,
+		"uploaded_bytes":     uploadedBytes,
 		"expires_at": func() interface{} {
 			if share.ExpiresAt == nil {
 				return nil
@@ -60,12 +60,12 @@ func (s *Server) handleShareInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) isFolderInShareTree(folderID, shareFolderID string) bool {
+func (c *ShareCtl) IsFolderInShareTree(folderID, shareFolderID string) bool {
 	if folderID == shareFolderID {
 		return true
 	}
 	for i := 0; i < 50; i++ {
-		f, err := s.file.FolderStore.FindByID(folderID)
+		f, err := c.FolderStore.FindByID(folderID)
 		if err != nil || f == nil || f.ParentID == nil || *f.ParentID == "" {
 			return false
 		}
@@ -77,9 +77,9 @@ func (s *Server) isFolderInShareTree(folderID, shareFolderID string) bool {
 	return false
 }
 
-func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareUnlock(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -95,7 +95,7 @@ func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 		if share.ExpiresAt != nil && share.ExpiresAt.Before(expiryTime) {
 			expiryTime = *share.ExpiresAt
 		}
-		sessionToken, err := s.generateShareSessionToken(share.ID, share.FolderID, share.Permissions, expiryTime)
+		sessionToken, err := c.GenerateShareSessionToken(share.ID, share.FolderID, share.Permissions, expiryTime)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate session token")
 			return
@@ -124,7 +124,7 @@ func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 	if share.ExpiresAt != nil && share.ExpiresAt.Before(expiryTime) {
 		expiryTime = *share.ExpiresAt
 	}
-	sessionToken, err := s.generateShareSessionToken(share.ID, share.FolderID, share.Permissions, expiryTime)
+	sessionToken, err := c.GenerateShareSessionToken(share.ID, share.FolderID, share.Permissions, expiryTime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate session token")
 		return
@@ -136,9 +136,9 @@ func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareListFiles(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -149,7 +149,7 @@ func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareRead)
+	_, ok := c.CheckShareAccess(r, model.ShareRead)
 	if !ok {
 		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required — unlock the share first")
 		return
@@ -162,14 +162,14 @@ func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 
 	targetFolderID := share.FolderID
 	if subID := r.URL.Query().Get("folder_id"); subID != "" {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(subID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(subID, share.FolderID) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
 			return
 		}
 		targetFolderID = subID
 	}
 
-	files, _, _, err := s.file.FileStore.ListFilesByFolderID(targetFolderID, r.URL.Query().Get("cursor"), limit)
+	files, _, _, err := c.FileStore.ListFilesByFolderID(targetFolderID, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list files")
 		return
@@ -195,11 +195,11 @@ func (s *Server) handleShareListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleShareGetFile(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareGetFile(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -210,48 +210,48 @@ func (s *Server) handleShareGetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareRead)
+	_, ok := c.CheckShareAccess(r, model.ShareRead)
 	if !ok {
 		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required")
 		return
 	}
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(*file.FolderID, share.FolderID) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 			return
 		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":              file.ID,
-		"original_name":   file.OriginalName,
-		"filename":        file.Filename,
-		"size_bytes":      file.SizeBytes,
-		"mime_type":       file.MimeType,
-		"media_type":      string(file.MediaType),
-		"width":           file.Width,
-		"height":          file.Height,
-		"duration_sec":    file.DurationSec,
-		"sha256":          file.SHA256,
-		"taken_at":        file.TakenAt,
-		"created_at":      file.CreatedAt.Format(time.RFC3339),
-		"updated_at":      file.UpdatedAt.Format(time.RFC3339),
-		"thumbnails":      buildThumbnailSet(file.ID, file.MediaType),
+		"id":            file.ID,
+		"original_name": file.OriginalName,
+		"filename":      file.Filename,
+		"size_bytes":    file.SizeBytes,
+		"mime_type":     file.MimeType,
+		"media_type":    string(file.MediaType),
+		"width":         file.Width,
+		"height":        file.Height,
+		"duration_sec":  file.DurationSec,
+		"sha256":        file.SHA256,
+		"taken_at":      file.TakenAt,
+		"created_at":    file.CreatedAt.Format(time.RFC3339),
+		"updated_at":    file.UpdatedAt.Format(time.RFC3339),
+		"thumbnails":    buildThumbnailSet(file.ID, file.MediaType),
 	})
 }
 
-func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareDownload(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -262,27 +262,27 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareRead)
+	_, ok := c.CheckShareAccess(r, model.ShareRead)
 	if !ok {
 		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required")
 		return
 	}
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(*file.FolderID, share.FolderID) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 			return
 		}
 	}
 
 	if file.IsAppManaged {
-		doc, err := s.doc.DocumentStore.FindByFileID(fileID)
+		doc, err := c.DocumentStore.FindByFileID(fileID)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Document content not found")
 			return
@@ -294,8 +294,8 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePathStr := filepath.Join(s.cfg.OriginalsDir(), file.UserID, file.Filename)
-	if _, err := s.fs.Stat(filePathStr); err == nil {
+	filePathStr := filepath.Join(c.Cfg.OriginalsDir(), file.UserID, file.Filename)
+	if _, err := c.FS.Stat(filePathStr); err == nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.OriginalName))
 		w.Header().Set("Accept-Ranges", "bytes")
 		if file.MimeType != "" {
@@ -308,9 +308,9 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg.Storage.S3.Enabled && s.file.Storage != nil {
+	if c.Cfg.Storage.S3.Enabled && c.Storage != nil {
 		s3Key := fmt.Sprintf("originals/%s/%s", file.UserID, file.Filename)
-		stream, err := s.file.Storage.GetObjectStream(s3Key)
+		stream, err := c.Storage.GetObjectStream(s3Key)
 		if err != nil {
 			slog.Warn("share download s3 stream failed", "file_id", fileID, "error", err)
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk or in S3")
@@ -331,12 +331,12 @@ func (s *Server) handleShareDownload(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found on disk")
 }
 
-func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("fileID")
 	size := r.PathValue("size")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -347,39 +347,56 @@ func (s *Server) handleShareThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareRead)
+	_, ok := c.CheckShareAccess(r, model.ShareRead)
 	if !ok {
 		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required")
 		return
 	}
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(*file.FolderID, share.FolderID) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 			return
 		}
 	}
 
-	thumbPath := filepath.Join(s.cfg.ThumbnailsDir(), fileID, size)
-	if _, err := s.fs.Stat(thumbPath); err == nil {
+	thumbPath := filepath.Join(c.Cfg.ThumbnailsDir(), fileID, size)
+	if _, err := c.FS.Stat(thumbPath); err == nil {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		http.ServeFile(w, r, thumbPath)
 		return
 	}
 
-	s.fallbackThumbnail(w, r, fileID, size)
+	c.shareThumbnailFallback(w, r, fileID, size)
 }
 
-func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) shareThumbnailFallback(w http.ResponseWriter, r *http.Request, fileID, size string) {
+	fallbackMap := map[string]string{
+		"preview.webp": "md.jpg",
+		"lg.jpg":       "md.jpg",
+		"md.jpg":       "sm.jpg",
+	}
+	if fallback, ok := fallbackMap[size]; ok {
+		fallbackPath := filepath.Join(c.Cfg.ThumbnailsDir(), fileID, fallback)
+		if _, err := c.FS.Stat(fallbackPath); err == nil {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			http.ServeFile(w, r, fallbackPath)
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+}
+
+func (c *ShareCtl) HandleShareUpload(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -390,13 +407,13 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareReadUpload)
+	_, ok := c.CheckShareAccess(r, model.ShareReadUpload)
 	if !ok {
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit uploads")
 		return
 	}
 
-	if err := r.ParseMultipartForm(s.cfg.MaxFileSize()); err != nil {
+	if err := r.ParseMultipartForm(c.Cfg.MaxFileSize()); err != nil {
 		writeError(w, http.StatusBadRequest, "UPLOAD_ERROR", fmt.Sprintf("Failed to parse upload: %v", err))
 		return
 	}
@@ -413,7 +430,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if share.UploadLimitBytes != nil {
-		used, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
+		used, _ := c.ShareUploadStore.SumByShareID(share.ID)
 		if used+incomingTotal > *share.UploadLimitBytes {
 			writeError(w, http.StatusRequestEntityTooLarge, "SHARE_QUOTA_EXCEEDED",
 				fmt.Sprintf("Upload would exceed share quota (%d used + %d incoming > %d limit)", used, incomingTotal, *share.UploadLimitBytes))
@@ -421,7 +438,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	folder, err := s.file.FolderStore.FindByID(share.FolderID)
+	folder, err := c.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Shared folder not found")
 		return
@@ -429,7 +446,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 
 	targetFolderID := share.FolderID
 	if targetID := r.FormValue("folder_id"); targetID != "" {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(targetID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(targetID, share.FolderID) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
 			return
 		}
@@ -451,12 +468,12 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		tempDir := s.cfg.StoragePath("tmp")
-		if err := s.fs.MkdirAll(tempDir, 0755); err != nil {
+		tempDir := c.Cfg.StoragePath("tmp")
+		if err := c.FS.MkdirAll(tempDir, 0755); err != nil {
 			file.Close()
 			continue
 		}
-		tempFile, err := s.fs.CreateTemp(tempDir, "drive-share-upload-*")
+		tempFile, err := c.FS.CreateTemp(tempDir, "drive-share-upload-*")
 		if err != nil {
 			file.Close()
 			continue
@@ -465,27 +482,27 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.Copy(tempFile, file); err != nil {
 			file.Close()
 			tempFile.Close()
-			s.fs.Remove(tempFile.Name())
+			c.FS.Remove(tempFile.Name())
 			continue
 		}
 		file.Close()
 		tempFile.Close()
 
 		job := &model.UploadJob{
-			BatchID:          batchID,
-			UserID:           folder.UserID,
-			Filename:         fh.Filename,
-			SizeBytes:        fh.Size,
-			TempPath:         tempFile.Name(),
-			FolderID:         &targetFolderID,
+			BatchID:           batchID,
+			UserID:            folder.UserID,
+			Filename:          fh.Filename,
+			SizeBytes:         fh.Size,
+			TempPath:          tempFile.Name(),
+			FolderID:          &targetFolderID,
 			SkipNameSizeDedup: true,
-			Status:           model.JobStatusQueued,
-			Progress:         0,
-			UploadMode:       model.UploadModeFull,
+			Status:            model.JobStatusQueued,
+			Progress:          0,
+			UploadMode:        model.UploadModeFull,
 		}
 
-		if err := s.upload.UploadJobStore.Create(job); err != nil {
-			s.fs.Remove(tempFile.Name())
+		if err := c.UploadJobStore.Create(job); err != nil {
+			c.FS.Remove(tempFile.Name())
 			jobs = append(jobs, map[string]interface{}{
 				"job_id":   uuid.New().String(),
 				"filename": fh.Filename,
@@ -496,7 +513,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if share.UploadLimitBytes != nil {
-			s.share.ShareUploadStore.Create(share.ID, uuid.New().String(), fh.Size)
+			c.ShareUploadStore.Create(share.ID, uuid.New().String(), fh.Size)
 		}
 
 		jobs = append(jobs, map[string]interface{}{
@@ -506,7 +523,7 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	s.upload.WorkerPool.NotifyJobsAvailable()
+	c.WorkerPool.NotifyJobsAvailable()
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"batch_id": batchID,
@@ -514,11 +531,11 @@ func (s *Server) handleShareUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	fileID := r.PathValue("id")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -529,26 +546,26 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareReadWrite)
+	_, ok := c.CheckShareAccess(r, model.ShareReadWrite)
 	if !ok {
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit deleting files")
 		return
 	}
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
 	if file.FolderID == nil || *file.FolderID != share.FolderID {
-		if !share.IncludeSubdirs || !s.isFolderInShareTree(*file.FolderID, share.FolderID) {
+		if !share.IncludeSubdirs || !c.IsFolderInShareTree(*file.FolderID, share.FolderID) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 			return
 		}
 	}
 
-	if err := s.file.FileStore.SoftDelete(fileID); err != nil {
+	if err := c.FileStore.SoftDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete file")
 		return
 	}
@@ -556,9 +573,9 @@ func (s *Server) handleShareDeleteFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareListFolders(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -574,7 +591,7 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareRead)
+	_, ok := c.CheckShareAccess(r, model.ShareRead)
 	if !ok {
 		writeError(w, http.StatusForbidden, "SHARE_TOKEN_REQUIRED", "Share session token required")
 		return
@@ -583,12 +600,12 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 	parentID := r.URL.Query().Get("parent_id")
 	if parentID == "" {
 		parentID = share.FolderID
-	} else if !s.isFolderInShareTree(parentID, share.FolderID) {
+	} else if !c.IsFolderInShareTree(parentID, share.FolderID) {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
 		return
 	}
 
-	folders, err := s.file.FolderStore.FindByParentID(parentID)
+	folders, err := c.FolderStore.FindByParentID(parentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list folders")
 		return
@@ -596,7 +613,7 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 
 	items := make([]map[string]interface{}, 0, len(folders))
 	for _, f := range folders {
-		files, _, _, _ := s.file.FileStore.ListFilesByFolderID(f.ID, "", 0)
+		files, _, _, _ := c.FileStore.ListFilesByFolderID(f.ID, "", 0)
 		fileCount := 0
 		if files != nil {
 			fileCount = len(files)
@@ -615,9 +632,9 @@ func (s *Server) handleShareListFolders(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareCreateFolder(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -633,7 +650,7 @@ func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareReadWrite)
+	_, ok := c.CheckShareAccess(r, model.ShareReadWrite)
 	if !ok {
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit write operations")
 		return
@@ -654,20 +671,20 @@ func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request)
 
 	parentID := share.FolderID
 	if req.ParentID != "" {
-		if !s.isFolderInShareTree(req.ParentID, share.FolderID) {
+		if !c.IsFolderInShareTree(req.ParentID, share.FolderID) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
 			return
 		}
 		parentID = req.ParentID
 	}
 
-	folder, err := s.file.FolderStore.FindByID(share.FolderID)
+	folder, err := c.FolderStore.FindByID(share.FolderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Shared folder not found")
 		return
 	}
 
-	newFolder, err := s.file.FolderStore.Create(folder.UserID, req.Name, &parentID)
+	newFolder, err := c.FolderStore.Create(folder.UserID, req.Name, &parentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create folder")
 		return
@@ -680,11 +697,11 @@ func (s *Server) handleShareCreateFolder(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleShareDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	folderID := r.PathValue("id")
 
-	share, err := s.share.FolderShareStore.FindByToken(token)
+	share, err := c.FolderShareStore.FindByToken(token)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "SHARE_NOT_FOUND", "Share link not found")
 		return
@@ -700,13 +717,13 @@ func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, ok := s.checkShareAccess(r, model.ShareReadWrite)
+	_, ok := c.CheckShareAccess(r, model.ShareReadWrite)
 	if !ok {
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "This share does not permit write operations")
 		return
 	}
 
-	if !s.isFolderInShareTree(folderID, share.FolderID) {
+	if !c.IsFolderInShareTree(folderID, share.FolderID) {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", "Folder is not part of this share tree")
 		return
 	}
@@ -716,10 +733,89 @@ func (s *Server) handleShareDeleteFolder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := s.file.FolderStore.Delete(folderID); err != nil {
+	if err := c.FolderStore.Delete(folderID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete folder")
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ShareCtl) CheckShareAccess(r *http.Request, permission model.SharePermission) (*model.FolderShare, bool) {
+	token := r.Header.Get("X-Share-Session-Token")
+	if token == "" {
+		token = r.URL.Query().Get("share_session_token")
+	}
+	if token == "" {
+		return nil, false
+	}
+
+	shareID, perms, ok := c.ParseShareSessionToken(token)
+	if !ok {
+		return nil, false
+	}
+
+	share, err := c.FolderShareStore.FindByID(shareID)
+	if err != nil {
+		return nil, false
+	}
+
+	if share.ExpiresAt != nil && time.Now().UTC().After(*share.ExpiresAt) {
+		return nil, false
+	}
+
+	switch permission {
+	case model.ShareRead:
+		return share, true
+	case model.ShareReadUpload:
+		if perms == model.ShareReadUpload || perms == model.ShareReadWrite {
+			return share, true
+		}
+	case model.ShareReadWrite:
+		if perms == model.ShareReadWrite {
+			return share, true
+		}
+	}
+
+	return nil, false
+}
+
+func (c *ShareCtl) ParseShareSessionToken(tokenStr string) (string, model.SharePermission, bool) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(c.Cfg.Auth.JWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return "", "", false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", "", false
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub != "share_session" {
+		return "", "", false
+	}
+
+	shareID, _ := claims["share_id"].(string)
+	permissions, _ := claims["permissions"].(string)
+
+	return shareID, model.SharePermission(permissions), shareID != ""
+}
+
+func (c *ShareCtl) GenerateShareSessionToken(shareID, folderID string, permissions model.SharePermission, expiryTime time.Time) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":         "share_session",
+		"share_id":    shareID,
+		"folder_id":   folderID,
+		"permissions": string(permissions),
+		"iat":         time.Now().Unix(),
+		"exp":         expiryTime.Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(c.Cfg.Auth.JWTSecret))
 }

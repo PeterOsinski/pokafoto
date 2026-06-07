@@ -9,7 +9,7 @@ import (
 	"github.com/drive/drive/internal/model"
 )
 
-func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
+func (c *DocCtl) HandleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var req struct {
@@ -34,12 +34,12 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		IsAppManaged: true,
 	}
 
-	if err := s.file.FileStore.Create(f); err != nil {
+	if err := c.FileStore.Create(f); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create document")
 		return
 	}
 
-	if err := s.doc.DocumentStore.Create(f.ID, ""); err != nil {
+	if err := c.DocumentStore.Create(f.ID, ""); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create document content")
 		return
 	}
@@ -51,17 +51,17 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
+func (c *DocCtl) HandleGetDocument(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("file_id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Document not found")
 		return
 	}
 
-	doc, err := s.doc.DocumentStore.FindByFileID(fileID)
+	doc, err := c.DocumentStore.FindByFileID(fileID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Document content not found")
 		return
@@ -74,11 +74,11 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
+func (c *DocCtl) HandleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("file_id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Document not found")
 		return
@@ -97,13 +97,13 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.doc.DocumentStore.UpdateContent(fileID, req.Content); err != nil {
+	if err := c.DocumentStore.UpdateContent(fileID, req.Content); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update document")
 		return
 	}
 
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(req.Content)))
-	if err := s.file.FileStore.UpdateSizeAndHash(fileID, int64(len(req.Content)), hash); err != nil {
+	if err := c.FileStore.UpdateSizeAndHash(fileID, int64(len(req.Content)), hash); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update file metadata")
 		return
 	}
@@ -111,17 +111,17 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
+func (c *DocCtl) HandleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("file_id")
 	userID := getUserID(r)
 
-	file, err := s.file.FileStore.FindByID(fileID)
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.UserID != userID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Document not found")
 		return
 	}
 
-	if err := s.file.FileStore.SoftDelete(fileID); err != nil {
+	if err := c.FileStore.SoftDelete(fileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete document")
 		return
 	}

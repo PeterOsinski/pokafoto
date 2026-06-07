@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	
 	"path/filepath"
 	"strconv"
 
@@ -16,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleChunkUpload(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	resumeToken := r.Header.Get("X-Resume-Token")
@@ -25,7 +24,7 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 
 	if resumeToken != "" {
 		var err error
-		job, err = s.upload.UploadJobStore.FindByResumeToken(resumeToken)
+		job, err = c.UploadJobStore.FindByResumeToken(resumeToken)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to look up upload")
 			return
@@ -46,7 +45,7 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 		skipDedup := r.Header.Get("X-Skip-Name-Size-Dedup") == "true"
 
 		if folderID != "" {
-			if !s.checkFolderAccess(folderID, getUserID(r), r) {
+			if !c.CheckFolderAccess(folderID, getUserID(r), r) {
 				writeError(w, http.StatusForbidden, "FOLDER_PASSWORD_REQUIRED", "Folder requires password unlock to upload")
 				return
 			}
@@ -74,14 +73,14 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 			folderIDPtr = &folderID
 		}
 
-		chunkSizeMB := s.cfg.Upload.ChunkSizeMB
+		chunkSizeMB := c.Cfg.Upload.ChunkSizeMB
 		if chunkSizeMB <= 0 {
 			chunkSizeMB = 5
 		}
 		chunkSize := int64(chunkSizeMB) * 1024 * 1024
 
 		token := uuid.New().String()
-		chunkDir := store.ChunkTempDir(s.cfg.OriginalsDir())
+		chunkDir := store.ChunkTempDir(c.Cfg.OriginalsDir())
 
 		job = &model.UploadJob{
 			BatchID:           "chunked-" + token,
@@ -99,7 +98,7 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 		cs := chunkSize
 		job.ChunkSize = &cs
 
-		if err := s.upload.UploadJobStore.Create(job); err != nil {
+		if err := c.UploadJobStore.Create(job); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create upload session")
 			return
 		}
@@ -122,15 +121,15 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chunkDir := store.ChunkTempDir(s.cfg.OriginalsDir())
-	if err := s.fs.MkdirAll(chunkDir, 0755); err != nil {
+	chunkDir := store.ChunkTempDir(c.Cfg.OriginalsDir())
+	if err := c.FS.MkdirAll(chunkDir, 0755); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create chunk directory")
 		return
 	}
 
 	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%s-%d", job.ID, chunkIndex))
 
-	chunkFile, err := s.fs.Create(chunkPath)
+	chunkFile, err := c.FS.Create(chunkPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create chunk file")
 		return
@@ -142,35 +141,35 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 	written, err := io.Copy(chunkFile, teeReader)
 	if err != nil {
 		chunkFile.Close()
-		s.fs.Remove(chunkPath)
+		c.FS.Remove(chunkPath)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to write chunk")
 		return
 	}
 	chunkFile.Close()
 
 	if written != chunkSize {
-		s.fs.Remove(chunkPath)
+		c.FS.Remove(chunkPath)
 		writeError(w, http.StatusBadRequest, "SIZE_MISMATCH", fmt.Sprintf("Chunk size mismatch: expected %d, got %d", chunkSize, written))
 		return
 	}
 
 	actualSHA256 := fmt.Sprintf("%x", hasher.Sum(nil))
 	if chunkSHA256Header != "" && actualSHA256 != chunkSHA256Header {
-		s.fs.Remove(chunkPath)
+		c.FS.Remove(chunkPath)
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]interface{}{
 			"error": map[string]interface{}{
-				"code":           "CHUNK_HASH_MISMATCH",
-				"message":        "Chunk SHA-256 mismatch",
-				"expected":       chunkSHA256Header,
-				"actual":         actualSHA256,
+				"code":     "CHUNK_HASH_MISMATCH",
+				"message":  "Chunk SHA-256 mismatch",
+				"expected": chunkSHA256Header,
+				"actual":   actualSHA256,
 			},
 		})
 		return
 	}
 
 	offset := int64(chunkIndex) * *job.ChunkSize
-	if err := s.upload.ChunkStore.CreateChunkRecord(job.ID, chunkIndex, written, offset, actualSHA256, chunkPath); err != nil {
-		s.fs.Remove(chunkPath)
+	if err := c.ChunkStore.CreateChunkRecord(job.ID, chunkIndex, written, offset, actualSHA256, chunkPath); err != nil {
+		c.FS.Remove(chunkPath)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store chunk record")
 		return
 	}
@@ -179,12 +178,12 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 		totalChunks, _ := strconv.Atoi(r.Header.Get("X-Total-Chunks"))
 		if totalChunks > 0 {
 			job.TotalChunks = &totalChunks
-			s.upload.UploadJobStore.CompleteChunked(job.ID, totalChunks)
+			c.UploadJobStore.CompleteChunked(job.ID, totalChunks)
 		}
 	}
 
-	stored, _ := s.upload.ChunkStore.GetStoredChunks(job.ID)
-	missing, _ := s.upload.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
+	stored, _ := c.ChunkStore.GetStoredChunks(job.ID)
+	missing, _ := c.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
 
 	nextChunk := chunkIndex + 1
 	if len(missing) > 0 {
@@ -201,7 +200,7 @@ func (s *Server) handleChunkUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleChunkUploadResume(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleChunkUploadResume(w http.ResponseWriter, r *http.Request) {
 	resumeToken := r.PathValue("resumeToken")
 	if resumeToken == "" {
 		resumeToken = r.Header.Get("X-Resume-Token")
@@ -213,14 +212,14 @@ func (s *Server) handleChunkUploadResume(w http.ResponseWriter, r *http.Request)
 
 	userID := getUserID(r)
 
-	job, err := s.upload.UploadJobStore.FindByResumeToken(resumeToken)
+	job, err := c.UploadJobStore.FindByResumeToken(resumeToken)
 	if err != nil || job == nil || job.UserID != userID {
 		writeError(w, http.StatusNotFound, "UPLOAD_NOT_FOUND", "Upload session not found")
 		return
 	}
 
-	stored, _ := s.upload.ChunkStore.GetStoredChunks(job.ID)
-	missing, _ := s.upload.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
+	stored, _ := c.ChunkStore.GetStoredChunks(job.ID)
+	missing, _ := c.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
 
 	nextChunk := 0
 	if len(missing) > 0 {
@@ -240,7 +239,7 @@ func (s *Server) handleChunkUploadResume(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleChunkUploadComplete(w http.ResponseWriter, r *http.Request) {
+func (c *UploadCtl) HandleChunkUploadComplete(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var req struct {
@@ -256,7 +255,7 @@ func (s *Server) handleChunkUploadComplete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	job, err := s.upload.UploadJobStore.FindByID(req.UploadID)
+	job, err := c.UploadJobStore.FindByID(req.UploadID)
 	if err != nil || job == nil || job.UserID != userID {
 		writeError(w, http.StatusNotFound, "UPLOAD_NOT_FOUND", "Upload session not found")
 		return
@@ -267,8 +266,8 @@ func (s *Server) handleChunkUploadComplete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	storedCount, _ := s.upload.ChunkStore.GetStoredChunkCount(job.ID)
-	missing, _ := s.upload.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
+	storedCount, _ := c.ChunkStore.GetStoredChunkCount(job.ID)
+	missing, _ := c.ChunkStore.FindMissingChunks(job.ID, *job.TotalChunks)
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"upload_id":      job.ID,
@@ -281,7 +280,7 @@ func (s *Server) handleChunkUploadComplete(w http.ResponseWriter, r *http.Reques
 	})
 
 	if len(missing) == 0 {
-		s.upload.WorkerPool.NotifyJobsAvailable()
+		c.WorkerPool.NotifyJobsAvailable()
 		slog.Info("chunked upload ready for assembly", "upload_id", job.ID, "filename", job.Filename, "total_chunks", *job.TotalChunks)
 	}
 }

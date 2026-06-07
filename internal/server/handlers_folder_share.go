@@ -17,11 +17,11 @@ type createShareRequest struct {
 	Password         string `json:"password"`
 }
 
-func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleCreateShare(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.file.FolderStore.FindByID(folderID)
+	folder, err := c.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -78,30 +78,30 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		share.PasswordHash = &hashStr
 	}
 
-	if err := s.share.FolderShareStore.Create(share); err != nil {
+	if err := c.FolderShareStore.Create(share); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create share")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":               share.ID,
-		"token":            share.Token,
-		"share_url":        "/share/" + share.Token,
-		"folder_id":        share.FolderID,
-		"permissions":      string(share.Permissions),
-		"include_subdirs":  share.IncludeSubdirs,
+		"id":                share.ID,
+		"token":             share.Token,
+		"share_url":         "/share/" + share.Token,
+		"folder_id":         share.FolderID,
+		"permissions":       string(share.Permissions),
+		"include_subdirs":   share.IncludeSubdirs,
 		"upload_limit_bytes": share.UploadLimitBytes,
-		"expires_at":       req.ExpiresAt,
-		"has_password":     share.HasPassword,
-		"created_at":       share.CreatedAt.Format(time.RFC3339),
+		"expires_at":        req.ExpiresAt,
+		"has_password":      share.HasPassword,
+		"created_at":        share.CreatedAt.Format(time.RFC3339),
 	})
 }
 
-func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleListShares(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	userID := getUserID(r)
 
-	folder, err := s.file.FolderStore.FindByID(folderID)
+	folder, err := c.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -111,7 +111,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shares, err := s.share.FolderShareStore.ListByFolder(folderID)
+	shares, err := c.FolderShareStore.ListByFolder(folderID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list shares")
 		return
@@ -120,19 +120,19 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]interface{}, 0, len(shares))
 	for _, share := range shares {
 		item := map[string]interface{}{
-			"id":               share.ID,
-			"token":            share.Token,
-			"permissions":      string(share.Permissions),
-			"include_subdirs":  share.IncludeSubdirs,
+			"id":                share.ID,
+			"token":             share.Token,
+			"permissions":       string(share.Permissions),
+			"include_subdirs":   share.IncludeSubdirs,
 			"upload_limit_bytes": share.UploadLimitBytes,
-			"has_password":     share.HasPassword,
-			"created_at":       share.CreatedAt.Format(time.RFC3339),
-			"updated_at":       share.UpdatedAt.Format(time.RFC3339),
+			"has_password":      share.HasPassword,
+			"created_at":        share.CreatedAt.Format(time.RFC3339),
+			"updated_at":        share.UpdatedAt.Format(time.RFC3339),
 		}
 		if share.ExpiresAt != nil {
 			item["expires_at"] = share.ExpiresAt.Format(time.RFC3339)
 		}
-		uploaded, _ := s.share.ShareUploadStore.SumByShareID(share.ID)
+		uploaded, _ := c.ShareUploadStore.SumByShareID(share.ID)
 		item["uploaded_bytes"] = uploaded
 		items = append(items, item)
 	}
@@ -142,12 +142,12 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	shareID := r.PathValue("shareId")
 	userID := getUserID(r)
 
-	folder, err := s.file.FolderStore.FindByID(folderID)
+	folder, err := c.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -157,7 +157,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.share.FolderShareStore.FindByID(shareID)
+	share, err := c.FolderShareStore.FindByID(shareID)
 	if err != nil || share.FolderID != folderID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Share not found")
 		return
@@ -213,7 +213,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		hasPassword = true
 	}
 
-	if err := s.share.FolderShareStore.Update(shareID, permissions, includeSubdirs, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
+	if err := c.FolderShareStore.Update(shareID, permissions, includeSubdirs, uploadLimitBytes, expiresAt, hasPassword, passwordHash); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update share")
 		return
 	}
@@ -223,12 +223,12 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
+func (c *ShareCtl) HandleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	folderID := r.PathValue("id")
 	shareID := r.PathValue("shareId")
 	userID := getUserID(r)
 
-	folder, err := s.file.FolderStore.FindByID(folderID)
+	folder, err := c.FolderStore.FindByID(folderID)
 	if err != nil || folder == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Folder not found")
 		return
@@ -238,13 +238,13 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.share.FolderShareStore.FindByID(shareID)
+	share, err := c.FolderShareStore.FindByID(shareID)
 	if err != nil || share.FolderID != folderID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Share not found")
 		return
 	}
 
-	if err := s.share.FolderShareStore.Delete(shareID); err != nil {
+	if err := c.FolderShareStore.Delete(shareID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete share")
 		return
 	}

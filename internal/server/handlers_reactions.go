@@ -8,18 +8,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (s *Server) handleToggleReaction(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleToggleReaction(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	comment, err := s.comment.CommentStore.FindByID(commentID)
+	comment, err := c.CommentStore.FindByID(commentID)
 	if err != nil || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
@@ -38,7 +38,7 @@ func (s *Server) handleToggleReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	added, err := s.comment.ReactionStore.Toggle(commentID, userID, req.Emoji)
+	added, err := c.ReactionStore.Toggle(commentID, userID, req.Emoji)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to toggle reaction")
 		return
@@ -50,19 +50,19 @@ func (s *Server) handleToggleReaction(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleRemoveReaction(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	commentID := chi.URLParam(r, "commentId")
 	emoji := chi.URLParam(r, "emoji")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	if err := s.comment.ReactionStore.Remove(commentID, userID, emoji); err != nil {
+	if err := c.ReactionStore.Remove(commentID, userID, emoji); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to remove reaction")
 		return
 	}
@@ -70,18 +70,18 @@ func (s *Server) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
-func (s *Server) handleGetReactions(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleGetReactions(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	reactions, err := s.comment.ReactionStore.FindByCommentID(commentID, userID)
+	reactions, err := c.ReactionStore.FindByCommentID(commentID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get reactions")
 		return

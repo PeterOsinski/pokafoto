@@ -8,53 +8,53 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleListComments(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	hasAccess := s.checkFileAccess(fileID, userID)
+	hasAccess := c.CheckFileAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}
 
-	comments, err := s.comment.CommentStore.FindByFileID(fileID)
+	comments, err := c.CommentStore.FindByFileID(fileID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list comments")
 		return
 	}
 
 	type commentResponse struct {
-		ID        string              `json:"id"`
-		FileID    string              `json:"file_id"`
-		UserID    string              `json:"user_id"`
-		Username  string              `json:"username"`
-		Content   string              `json:"content"`
-		CreatedAt string              `json:"created_at"`
-		UpdatedAt string              `json:"updated_at"`
+		ID        string               `json:"id"`
+		FileID    string               `json:"file_id"`
+		UserID    string               `json:"user_id"`
+		Username  string               `json:"username"`
+		Content   string               `json:"content"`
+		CreatedAt string               `json:"created_at"`
+		UpdatedAt string               `json:"updated_at"`
 		Reactions []model.ReactionGroup `json:"reactions,omitempty"`
 	}
 
 	items := make([]commentResponse, 0, len(comments))
-	for _, c := range comments {
+	for _, com := range comments {
 		username := ""
-		if u, _ := s.auth.UserStore.FindByID(c.UserID); u != nil {
+		if u, _ := c.UserStore.FindByID(com.UserID); u != nil {
 			username = u.Username
 		}
 
-		reactions, _ := s.comment.ReactionStore.FindByCommentID(c.ID, userID)
+		reactions, _ := c.ReactionStore.FindByCommentID(com.ID, userID)
 		if reactions == nil {
 			reactions = []model.ReactionGroup{}
 		}
 
 		items = append(items, commentResponse{
-			ID:        c.ID,
-			FileID:    c.FileID,
-			UserID:    c.UserID,
+			ID:        com.ID,
+			FileID:    com.FileID,
+			UserID:    com.UserID,
 			Username:  username,
-			Content:   c.Content,
-			CreatedAt: c.CreatedAt.Format(timeRFC3339),
-			UpdatedAt: c.UpdatedAt.Format(timeRFC3339),
+			Content:   com.Content,
+			CreatedAt: com.CreatedAt.Format(timeRFC3339),
+			UpdatedAt: com.UpdatedAt.Format(timeRFC3339),
 			Reactions: reactions,
 		})
 	}
@@ -68,11 +68,11 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleAddComment(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	userID := getUserID(r)
 
-	hasAccess := s.checkCommentWriteAccess(fileID, userID)
+	hasAccess := c.CheckCommentWriteAccess(fileID, userID)
 	if !hasAccess {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found or you don't have permission to comment")
 		return
@@ -91,7 +91,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comment, err := s.comment.CommentStore.Create(fileID, userID, req.Content)
+	comment, err := c.CommentStore.Create(fileID, userID, req.Content)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create comment")
 		return
@@ -106,12 +106,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleUpdateComment(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	comment, err := s.comment.CommentStore.FindByID(commentID)
+	comment, err := c.CommentStore.FindByID(commentID)
 	if err != nil || comment.UserID != userID || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
@@ -130,7 +130,7 @@ func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.comment.CommentStore.Update(commentID, userID, req.Content); err != nil {
+	if err := c.CommentStore.Update(commentID, userID, req.Content); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update comment")
 		return
 	}
@@ -138,18 +138,18 @@ func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }
 
-func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
+func (c *CommentCtl) HandleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "id")
 	commentID := chi.URLParam(r, "commentId")
 	userID := getUserID(r)
 
-	comment, err := s.comment.CommentStore.FindByID(commentID)
+	comment, err := c.CommentStore.FindByID(commentID)
 	if err != nil || comment.UserID != userID || comment.FileID != fileID {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Comment not found")
 		return
 	}
 
-	if err := s.comment.CommentStore.Delete(commentID, userID); err != nil {
+	if err := c.CommentStore.Delete(commentID, userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete comment")
 		return
 	}
@@ -157,8 +157,8 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
-func (s *Server) checkFileAccess(fileID, userID string) bool {
-	file, err := s.file.FileStore.FindByID(fileID)
+func (c *CommentCtl) CheckFileAccess(fileID, userID string) bool {
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.IsDeleted {
 		return false
 	}
@@ -167,15 +167,15 @@ func (s *Server) checkFileAccess(fileID, userID string) bool {
 		return true
 	}
 
-	hasAccess, err := s.album.AlbumItemStore.HasSharedAccess(fileID, userID)
+	hasAccess, err := c.AlbumItemStore.HasSharedAccess(fileID, userID)
 	if err != nil {
 		return false
 	}
 	return hasAccess
 }
 
-func (s *Server) checkCommentWriteAccess(fileID, userID string) bool {
-	file, err := s.file.FileStore.FindByID(fileID)
+func (c *CommentCtl) CheckCommentWriteAccess(fileID, userID string) bool {
+	file, err := c.FileStore.FindByID(fileID)
 	if err != nil || file == nil || file.IsDeleted {
 		return false
 	}
@@ -184,7 +184,7 @@ func (s *Server) checkCommentWriteAccess(fileID, userID string) bool {
 		return true
 	}
 
-	perm, err := s.album.AlbumItemStore.GetSharedPermission(fileID, userID)
+	perm, err := c.AlbumItemStore.GetSharedPermission(fileID, userID)
 	if err != nil {
 		return false
 	}

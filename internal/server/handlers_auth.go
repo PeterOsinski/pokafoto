@@ -32,23 +32,23 @@ type userResponse struct {
 	CreatedAt   string  `json:"created_at,omitempty"`
 }
 
-func (s *Server) isRegistrationAllowed() bool {
-	if s.auth.SettingStore != nil {
-		if val, err := s.auth.SettingStore.Get("allow_registration"); err == nil && val != "" {
+func (c *AuthCtl) IsRegistrationAllowed() bool {
+	if c.SettingStore != nil {
+		if val, err := c.SettingStore.Get("allow_registration"); err == nil && val != "" {
 			return val == "true"
 		}
 	}
-	return s.cfg.Auth.AllowRegistration
+	return c.Cfg.Auth.AllowRegistration
 }
 
-func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+func (c *AuthCtl) HandleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"allow_registration": s.isRegistrationAllowed(),
+		"allow_registration": c.IsRegistrationAllowed(),
 	})
 }
 
-func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.isRegistrationAllowed() {
+func (c *AuthCtl) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	if !c.IsRegistrationAllowed() {
 		writeError(w, http.StatusForbidden, "REGISTRATION_DISABLED", "Registration is disabled")
 		return
 	}
@@ -69,13 +69,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, _ := s.auth.UserStore.FindByUsername(req.Username)
+	existing, _ := c.UserStore.FindByUsername(req.Username)
 	if existing != nil {
 		writeError(w, http.StatusConflict, "USERNAME_EXISTS", "Username is already taken")
 		return
 	}
 
-	user, err := s.auth.UserStore.Create(req.Username, req.Password, model.RoleMember, req.DisplayName)
+	user, err := c.UserStore.Create(req.Username, req.Password, model.RoleMember, req.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user")
 		return
@@ -92,14 +92,14 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (c *AuthCtl) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var req authRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
 		return
 	}
 
-	user, err := s.auth.UserStore.FindByUsername(req.Username)
+	user, err := c.UserStore.FindByUsername(req.Username)
 	if err != nil || user == nil {
 		writeError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
 		return
@@ -110,14 +110,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := s.generateAccessToken(user)
+	accessToken, err := c.generateAccessToken(user)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate token")
 		return
 	}
 
-	duration := time.Duration(s.cfg.Auth.SessionDurationH) * time.Hour
-	session, err := s.auth.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
+	duration := time.Duration(c.Cfg.Auth.SessionDurationH) * time.Hour
+	session, err := c.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
@@ -126,7 +126,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authResponse{
 		AccessToken:  accessToken,
 		RefreshToken: session.RefreshToken,
-		ExpiresIn:    s.cfg.Auth.SessionDurationH * 3600,
+		ExpiresIn:    c.Cfg.Auth.SessionDurationH * 3600,
 		User: userResponse{
 			ID:          user.ID,
 			Username:    user.Username,
@@ -136,7 +136,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+func (c *AuthCtl) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -145,34 +145,34 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.auth.SessionStore.FindByRefreshToken(req.RefreshToken)
+	session, err := c.SessionStore.FindByRefreshToken(req.RefreshToken)
 	if err != nil || session == nil {
 		writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid refresh token")
 		return
 	}
 
 	if time.Now().UTC().After(session.ExpiresAt) {
-		s.auth.SessionStore.Delete(session.ID)
+		c.SessionStore.Delete(session.ID)
 		writeError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "Refresh token has expired")
 		return
 	}
 
-	s.auth.SessionStore.Delete(session.ID)
+	c.SessionStore.Delete(session.ID)
 
-	user, err := s.auth.UserStore.FindByID(session.UserID)
+	user, err := c.UserStore.FindByID(session.UserID)
 	if err != nil || user == nil {
 		writeError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
 		return
 	}
 
-	accessToken, err := s.generateAccessToken(user)
+	accessToken, err := c.generateAccessToken(user)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate token")
 		return
 	}
 
-	duration := time.Duration(s.cfg.Auth.SessionDurationH) * time.Hour
-	newSession, err := s.auth.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
+	duration := time.Duration(c.Cfg.Auth.SessionDurationH) * time.Hour
+	newSession, err := c.SessionStore.Create(user.ID, time.Now().UTC().Add(duration))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
@@ -181,7 +181,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newSession.RefreshToken,
-		ExpiresIn:    s.cfg.Auth.SessionDurationH * 3600,
+		ExpiresIn:    c.Cfg.Auth.SessionDurationH * 3600,
 		User: userResponse{
 			ID:          user.ID,
 			Username:    user.Username,
@@ -191,7 +191,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (c *AuthCtl) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -200,13 +200,13 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auth.SessionStore.DeleteByRefreshToken(req.RefreshToken)
+	c.SessionStore.DeleteByRefreshToken(req.RefreshToken)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+func (c *AuthCtl) HandleMe(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
-	user, err := s.auth.UserStore.FindByID(userID)
+	user, err := c.UserStore.FindByID(userID)
 	if err != nil || user == nil {
 		writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return
@@ -226,14 +226,14 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) generateAccessToken(user *model.User) (string, error) {
+func (c *AuthCtl) generateAccessToken(user *model.User) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"role":    string(user.Role),
-		"exp":     time.Now().UTC().Add(time.Duration(s.cfg.Auth.SessionDurationH) * time.Hour).Unix(),
+		"exp":     time.Now().UTC().Add(time.Duration(c.Cfg.Auth.SessionDurationH) * time.Hour).Unix(),
 		"iat":     time.Now().UTC().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.cfg.Auth.JWTSecret))
+	return token.SignedString([]byte(c.Cfg.Auth.JWTSecret))
 }

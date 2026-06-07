@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/drive/drive/internal/backup"
+	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
 	"github.com/drive/drive/internal/worker"
@@ -11,6 +12,7 @@ type AuthCtl struct {
 	UserStore    *store.UserStore
 	SessionStore *store.SessionStore
 	SettingStore *store.SettingStore
+	Cfg          *config.Config
 }
 
 type FileCtl struct {
@@ -24,6 +26,10 @@ type FileCtl struct {
 	AlbumStore       *store.AlbumStore
 	Storage          *service.StorageService
 	S3DeletionPool   *service.S3DeletionPool
+	Cfg              *config.Config
+	FS               service.FileSystem
+	DocumentStore    *store.DocumentStore
+	AlbumItemStore   *store.AlbumItemStore
 }
 
 type UploadCtl struct {
@@ -32,11 +38,15 @@ type UploadCtl struct {
 	FileStore      *store.FileStore
 	UserStore      *store.UserStore
 	WorkerPool     *worker.Pool
+	Cfg            *config.Config
+	FS             service.FileSystem
+	FolderPwStore  *store.FolderPasswordStore
+	FolderStore    *store.FolderStore
 }
 
 type FolderCtl struct {
-	FolderStore     *store.FolderStore
-	FolderPwStore   *store.FolderPasswordStore
+	FolderStore      *store.FolderStore
+	FolderPwStore    *store.FolderPasswordStore
 	FolderShareStore *store.FolderShareStore
 	ShareUploadStore *store.ShareUploadStore
 }
@@ -50,10 +60,11 @@ type AlbumCtl struct {
 }
 
 type CommentCtl struct {
-	CommentStore  *store.CommentStore
-	ReactionStore *store.ReactionStore
-	UserStore     *store.UserStore
-	FileStore     *store.FileStore
+	CommentStore   *store.CommentStore
+	ReactionStore  *store.ReactionStore
+	UserStore      *store.UserStore
+	FileStore      *store.FileStore
+	AlbumItemStore *store.AlbumItemStore
 }
 
 type DocCtl struct {
@@ -62,8 +73,11 @@ type DocCtl struct {
 }
 
 type DownloadCtl struct {
-	FileStore *store.FileStore
-	Storage   *service.StorageService
+	FileStore     *store.FileStore
+	Storage       *service.StorageService
+	Cfg           *config.Config
+	FS            service.FileSystem
+	DocumentStore *store.DocumentStore
 }
 
 type ShareCtl struct {
@@ -72,6 +86,13 @@ type ShareCtl struct {
 	FolderStore      *store.FolderStore
 	FileStore        *store.FileStore
 	FolderPwStore    *store.FolderPasswordStore
+	Cfg              *config.Config
+	FS               service.FileSystem
+	Storage          *service.StorageService
+	DocumentStore    *store.DocumentStore
+	S3DeletionPool   *service.S3DeletionPool
+	UploadJobStore   *store.UploadJobStore
+	WorkerPool       *worker.Pool
 }
 
 type AdminCtl struct {
@@ -88,4 +109,7 @@ type AdminCtl struct {
 	S3DeletionPool    *service.S3DeletionPool
 	Scheduler         *backup.Scheduler
 	S3Enabled         bool
+	Cfg               *config.Config
+	FS                service.FileSystem
+	UploadJobStore    *store.UploadJobStore
 }
