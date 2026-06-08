@@ -23,7 +23,13 @@ CREATE TABLE upload_jobs_new (
     updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT INTO upload_jobs_new SELECT * FROM upload_jobs;
+INSERT INTO upload_jobs_new SELECT
+    id, batch_id, user_id, filename, size_bytes, temp_path, folder_id,
+    skip_name_size_dedup, status, stage, progress, error, reason, file_id,
+    upload_mode, chunk_size, total_chunks, resume_token,
+    COALESCE(created_at, datetime('now')),
+    COALESCE(updated_at, datetime('now'))
+FROM upload_jobs;
 
 DROP TABLE upload_jobs;
 
