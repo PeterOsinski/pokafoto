@@ -31,7 +31,7 @@ func (c *FileCtl) HandleSetFolderPassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), c.Cfg.Auth.AuthBcryptCost)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to hash password")
 		return

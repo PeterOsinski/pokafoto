@@ -6,7 +6,12 @@ import (
 	"testing"
 
 	"github.com/drive/drive/internal/model"
+	"golang.org/x/crypto/bcrypt"
 )
+
+func init() {
+	BcryptCost = bcrypt.MinCost
+}
 
 func createTestFile(t *testing.T, s *FileStore, userID, name string) *model.File {
 	t.Helper()

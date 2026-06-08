@@ -18,6 +18,7 @@ import (
 	"github.com/drive/drive/internal/model"
 	"github.com/drive/drive/internal/service"
 	"github.com/drive/drive/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var testPollInterval = 10 * time.Millisecond
@@ -40,6 +41,7 @@ func setupTestPool(t *testing.T) (*Pool, *store.FileStore, *store.UploadJobStore
 	cfg.Upload.ConcurrentWorkers = 2
 
 	pollInterval = testPollInterval
+	store.BcryptCost = bcrypt.MinCost
 
 	db := store.OpenTestDB(t)
 	us := store.NewUserStore(db)
@@ -835,6 +837,7 @@ func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore
 	cfg.Storage.Local.Path = t.TempDir()
 
 	pollInterval = testPollInterval
+	store.BcryptCost = bcrypt.MinCost
 
 	db := store.OpenTestDB(t)
 	us := store.NewUserStore(db)

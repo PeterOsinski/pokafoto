@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type S3Config struct {
@@ -31,10 +33,11 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	AllowRegistration         bool   `yaml:"allow_registration"`
-	JWTSecret                 string `yaml:"jwt_secret"`
-	SessionDurationH          int    `yaml:"session_duration_hours"`
-	FolderPasswordExpiryMinutes int  `yaml:"folder_password_expiry_minutes"`
+	AllowRegistration            bool   `yaml:"allow_registration"`
+	JWTSecret                    string `yaml:"jwt_secret"`
+	SessionDurationH             int    `yaml:"session_duration_hours"`
+	FolderPasswordExpiryMinutes  int    `yaml:"folder_password_expiry_minutes"`
+	AuthBcryptCost               int    `yaml:"bcrypt_cost"`
 }
 
 type ThumbnailSizeConfig struct {
@@ -117,6 +120,7 @@ func DefaultConfig() *Config {
 			JWTSecret:                   "",
 			SessionDurationH:            72,
 			FolderPasswordExpiryMinutes: 30,
+			AuthBcryptCost:              bcrypt.DefaultCost,
 		},
 		Media: MediaConfig{
 			AutoOrganize:        true,

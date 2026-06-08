@@ -7,6 +7,7 @@ import (
 
 	"github.com/drive/drive/internal/config"
 	"github.com/drive/drive/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newTestServer(t *testing.T) (*Server, *store.DB, func()) {
@@ -15,6 +16,8 @@ func newTestServer(t *testing.T) (*Server, *store.DB, func()) {
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret-key-12345"
 	cfg.Auth.AllowRegistration = true
+	cfg.Auth.AuthBcryptCost = bcrypt.MinCost
+	store.BcryptCost = bcrypt.MinCost
 
 	db := store.OpenTestDB(t)
 

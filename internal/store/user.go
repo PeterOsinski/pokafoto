@@ -18,8 +18,10 @@ func NewUserStore(db *DB) *UserStore {
 	return &UserStore{db: db}
 }
 
+var BcryptCost = bcrypt.DefaultCost
+
 func (s *UserStore) Create(username, password string, role model.UserRole, displayName *string) (*model.User, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}

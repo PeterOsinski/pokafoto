@@ -69,7 +69,7 @@ func (c *ShareCtl) HandleCreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Password != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), c.Cfg.Auth.AuthBcryptCost)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to hash password")
 			return
@@ -203,7 +203,7 @@ func (c *ShareCtl) HandleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	hasPassword := share.HasPassword
 	var passwordHash *string = share.PasswordHash
 	if req.Password != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), c.Cfg.Auth.AuthBcryptCost)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to hash password")
 			return
