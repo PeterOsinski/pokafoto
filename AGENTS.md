@@ -48,20 +48,117 @@ All feature requests and significant changes MUST go through the `prd/` folder f
 
 ## Test-Driven Development
 
-Every change starts with a failing test. No feature or fix is accepted without a corresponding test diff. Tests must run as a single command and complete in under 10 seconds.
+Every change starts with a failing test. No feature or fix is accepted without a corresponding test diff. Tests must run as a single command. The full suite completes in ~50s (down from ~200s after performance work).
 
 ## Test Layering
 
 ### Backend (Go)
-1. **Store tests** — Real `:memory:` SQLite via `testutil.OpenTestDB()`. Migrations run, every CRUD method exercised. No mocking.
-2. **Handler tests** — `httptest.NewServer` with real chi router and `:memory:` DB. Assert status codes and JSON response shapes.
-3. **Worker tests** — Unit-test the worker pool with `:memory:` store. Inject jobs, verify state transitions. Use `-race` flag.
+1. **Store tests** — File-based SQLite in `t.TempDir()` via `store.OpenTestDB(t)`. Schema applied via cached DDL snapshot (not per-migration execution). Every CRUD method exercised. No mocking.
+2. **Handler tests** — `httptest.NewServer` with real chi router and isolated file-based SQLite DB. Assert status codes and JSON response shapes.
+3. **Worker tests** — Unit-test the worker pool with isolated DB and temp filesystem. Inject jobs, verify state transitions. Use `-race` flag.
 4. **Integration tests** — Full roundtrip: create user -> login -> upload -> list -> download.
 
 ### Frontend (TypeScript/Vue)
 1. **Store tests** — Pinia stores with mock API client. Assert state transitions.
 2. **Component tests** — `@vue/test-utils` to mount, trigger events, assert DOM. Mock API calls.
 3. **Router tests** — Navigation guards with auth state permutations.
+
+## Test Performance & Isolation
+
+All 603 tests run concurrently within each package. Every test must be fully isolated to avoid cross-test contamination. The following rules prevent performance regressions and flaky tests.
+
+### All new tests MUST call `t.Parallel()`
+
+```go
+func TestFoo_shouldBar(t *testing.T) {
+    t.Parallel()  // ← always first line
+    // ...
+}
+```
+
+For table-driven tests with `t.Run()`, add `t.Parallel()` inside sub-test closures:
+
+```go
+func TestFoo(t *testing.T) {
+    t.Parallel()
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            t.Parallel()  // ← inside sub-test
+            // ...
+        })
+    }
+}
+```
+
+### Database: always use `store.OpenTestDB(t)`
+
+Every test gets its own file-based SQLite DB in `t.TempDir()`. The schema snapshot is generated once via `sqlite_master` introspection and applied per-test — faster than running 20 migrations each time.
+
+```go
+db := store.OpenTestDB(t)    // temp dir, schema snapshot, auto-closed via t.Cleanup
+us := store.NewUserStore(db) // all stores share this isolated DB
+```
+
+Never open a shared or global DB. Never use `:memory:` directly (per-connection semantics cause deadlocks with connection pooling).
+
+### Bcrypt: always reduce cost for tests
+
+Production uses `bcrypt.DefaultCost` (10) which takes ~300ms per hash. Tests override to `bcrypt.MinCost` (4, ~2ms). This is already handled by:
+
+- `internal/store/file_test.go` — `init()` sets `store.BcryptCost = bcrypt.MinCost`
+- `internal/server/testutil_test.go` — `newTestServer()` sets `cfg.Auth.AuthBcryptCost = bcrypt.MinCost`
+- `internal/worker/pool_test.go` — `setupTestPool()` / `setupChunkedTestPool()` set both
+
+New test files in `store/`, `server/`, or `worker/` must carry over `BcryptCost` assignment.
+
+### Worker pool: override poll interval
+
+Production `pollInterval = 1s`. Tests override to `10ms` in `setupTestPool` / `setupChunkedTestPool`. When writing tests that poll for async job completion, use `testPollInterval` instead of hardcoded sleeps:
+
+```go
+// good: uses test-configurable interval
+time.Sleep(testPollInterval)
+
+// bad: hardcoded sleep that bypasses the override
+time.Sleep(200 * time.Millisecond)
+```
+
+### Global filesystem state: use `t.TempDir()`
+
+Any test that writes to disk (OriginalsDir, ThumbnailsDir, chunk temp) must override the config to use an isolated temp dir:
+
+```go
+cfg.Storage.Local.Path = t.TempDir()  // prevents shared-dir contamination
+```
+
+Tests that rely on shared files under `/tmp/test_video_*` are read-only and safe across parallel runs.
+
+### Slow external tools: add `-short` guard
+
+Tests using ffmpeg, external binaries, or large dataset processing must skip in short mode:
+
+```go
+func TestThing_shouldProcessVideo(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping video encoding test in short mode")
+    }
+    t.Parallel()
+    // ...
+}
+```
+
+Run `go test -short ./...` for fast iteration (~40s, skipping video encoding tests).
+
+### Test runtime budgets
+
+| Change | Budget |
+|--------|--------|
+| New store test (CRUD, isolated DB) | < 0.3s |
+| New handler test (HTTP + DB) | < 0.5s |
+| New worker test (async + pool) | < 2s |
+| New service test (no ffmpeg) | < 1s |
+
+If a single test exceeds these budgets, check for accidental bcrypt with DefaultCost or hardcoded long sleeps.
 
 ## Test Naming
 
@@ -105,7 +202,7 @@ go build ./...     # Backend Go compilation
 cd web && npm run build  # Frontend TypeScript + Vite build
 ```
 
-Backend tests run against `:memory:` SQLite with real migrations. Frontend tests run in jsdom with mocked API calls. The full suite completes in under 15 seconds.
+Backend tests run against file-based SQLite with real migrations. Frontend tests run in jsdom with mocked API calls. The full suite completes in ~50s.
 
 ## Code Style
 
