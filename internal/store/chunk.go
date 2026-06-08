@@ -264,7 +264,7 @@ func (s *ChunkStore) CleanupOldUploads(maxAgeHours int) ([]string, error) {
 	rows, err := s.db.Query(
 		`SELECT id, temp_path FROM upload_jobs
 		 WHERE upload_mode = 'chunked'
-		   AND status IN ('queued','processing')
+		   AND status IN ('queued','ready','processing')
 		   AND updated_at < ?`,
 		cutoff,
 	)

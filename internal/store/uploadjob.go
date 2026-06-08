@@ -70,7 +70,10 @@ func (s *UploadJobStore) claimOnce() (*model.UploadJob, error) {
 
 	var id string
 	err = tx.QueryRow(
-		`SELECT id FROM upload_jobs WHERE status = 'queued' ORDER BY updated_at ASC LIMIT 1`,
+		`SELECT id FROM upload_jobs WHERE
+		 (status = 'queued' AND (upload_mode IS NULL OR upload_mode != 'chunked'))
+		 OR status = 'ready'
+		 ORDER BY updated_at ASC LIMIT 1`,
 	).Scan(&id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -80,7 +83,7 @@ func (s *UploadJobStore) claimOnce() (*model.UploadJob, error) {
 	}
 
 	result, err := tx.Exec(
-		`UPDATE upload_jobs SET status = 'processing', updated_at = ? WHERE id = ? AND status = 'queued'`,
+		`UPDATE upload_jobs SET status = 'processing', updated_at = ? WHERE id = ? AND status IN ('queued','ready')`,
 		time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {

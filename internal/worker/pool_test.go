@@ -896,6 +896,10 @@ func createChunkedJob(t *testing.T, cfg *config.Config, ujs *store.UploadJobStor
 		}
 	}
 
+	if err := ujs.SetStatus(job.ID, model.JobStatusReady); err != nil {
+		t.Fatalf("set status to ready: %v", err)
+	}
+
 	return job, job.ID
 }
 
@@ -1050,35 +1054,25 @@ func TestPool_ChunkedJob_oldIncomplete_shouldExpire(t *testing.T) {
 
 	cs.CreateChunkRecord(job.ID, 0, int64(chunkSize), 0, "", "/tmp/expired_c0")
 
-	db.Exec(`UPDATE upload_jobs SET created_at = ? WHERE id = ?`, oldTimeStr, job.ID)
+	db.Exec(`UPDATE upload_jobs SET created_at = ?, updated_at = ? WHERE id = ?`, oldTimeStr, oldTimeStr, job.ID)
 
-	var finalStatus model.JobStatus
-	var finalError string
-	deadline := time.After(10 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for expiry, status=%s error=%s", finalStatus, finalError)
-		default:
-		}
-		j, err := ujs.FindByID(job.ID)
-		if err != nil {
-			t.Fatalf("find job: %v", err)
-		}
-		if j == nil {
-			t.Fatal("job not found")
-		}
-		finalStatus = j.Status
-		if j.Error != nil {
-			finalError = *j.Error
-		}
-		if finalStatus == model.JobStatusFailed {
-			if finalError != "upload_expired" {
-				t.Errorf("expected upload_expired, got %s", finalError)
-			}
-			return
-		}
-		time.Sleep(testPollInterval)
+	ids, err := cs.CleanupOldUploads(1)
+	if err != nil {
+		t.Fatalf("CleanupOldUploads error: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != job.ID {
+		t.Fatalf("expected 1 expired job, got %v", ids)
+	}
+
+	j, err := ujs.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("find job: %v", err)
+	}
+	if j.Status != model.JobStatusFailed {
+		t.Errorf("expected failed status, got %s", j.Status)
+	}
+	if j.Error == nil || *j.Error != "upload_expired" {
+		t.Errorf("expected upload_expired error, got %v", j.Error)
 	}
 }
 
@@ -1134,6 +1128,8 @@ func TestPool_ChunkedJob_shouldPreserveContentIntegrity(t *testing.T) {
 			t.Fatalf("create chunk record %d: %v", i, err)
 		}
 	}
+
+	ujs.SetStatus(job.ID, model.JobStatusReady)
 
 	var files []*model.File
 	deadline := time.After(15 * time.Second)
@@ -1235,6 +1231,8 @@ func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
 		}
 	}
 
+	ujs.SetStatus(job.ID, model.JobStatusReady)
+
 	var files []*model.File
 	deadline := time.After(15 * time.Second)
 	for len(files) == 0 {
@@ -1334,6 +1332,8 @@ func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
 	if err := cs.CreateChunkRecord(job.ID, 0, int64(len(content)), 0, fmt.Sprintf("%x", sha256.Sum256(content)), chunkPath); err != nil {
 		t.Fatalf("create chunk record: %v", err)
 	}
+
+	ujs.SetStatus(job.ID, model.JobStatusReady)
 
 	var files []*model.File
 	deadline := time.After(15 * time.Second)

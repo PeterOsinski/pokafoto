@@ -280,6 +280,7 @@ func (c *UploadCtl) HandleChunkUploadComplete(w http.ResponseWriter, r *http.Req
 	})
 
 	if len(missing) == 0 {
+		c.UploadJobStore.SetStatus(job.ID, model.JobStatusReady)
 		c.WorkerPool.NotifyJobsAvailable()
 		slog.Info("chunked upload ready for assembly", "upload_id", job.ID, "filename", job.Filename, "total_chunks", *job.TotalChunks)
 	}

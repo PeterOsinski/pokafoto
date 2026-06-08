@@ -421,6 +421,17 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
               }
               break
             } catch {
+              const e: any = arguments[0]
+              const is409 = e?.response?.status === 409
+              if (is409) {
+                const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
+                if (pi >= 0) {
+                  jobs.value[pi].status = 'failed'
+                  jobs.value[pi].error = e?.response?.data?.error?.message || 'Upload session expired'
+                }
+                persistActiveTokens()
+                return
+              }
               retries++
               if (retries > MAX_CHUNK_RETRIES) {
                 const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
