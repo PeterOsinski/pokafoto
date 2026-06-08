@@ -11,6 +11,7 @@ import (
 )
 
 func TestAdmin_CreateUser_shouldReturnCreated(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -38,6 +39,7 @@ func TestAdmin_CreateUser_shouldReturnCreated(t *testing.T) {
 }
 
 func TestAdmin_CreateUser_shouldCreateAdmin(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -62,6 +64,7 @@ func TestAdmin_CreateUser_shouldCreateAdmin(t *testing.T) {
 }
 
 func TestAdmin_CreateUser_shouldRejectNonAdmin(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -80,6 +83,7 @@ func TestAdmin_CreateUser_shouldRejectNonAdmin(t *testing.T) {
 }
 
 func TestAdmin_CreateUser_shouldRejectDuplicateUsername(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -100,6 +104,7 @@ func TestAdmin_CreateUser_shouldRejectDuplicateUsername(t *testing.T) {
 }
 
 func TestAdmin_CreateUser_shouldRejectShortPassword(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -118,6 +123,7 @@ func TestAdmin_CreateUser_shouldRejectShortPassword(t *testing.T) {
 }
 
 func TestAdmin_GetRegistration_shouldReturnStatus(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -139,6 +145,7 @@ func TestAdmin_GetRegistration_shouldReturnStatus(t *testing.T) {
 }
 
 func TestAdmin_ToggleRegistration_shouldSetAndGet(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -185,6 +192,7 @@ func TestAdmin_ToggleRegistration_shouldSetAndGet(t *testing.T) {
 }
 
 func TestAuth_Register_shouldBeBlockedWhenDisabled(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -205,6 +213,7 @@ func TestAuth_Register_shouldBeBlockedWhenDisabled(t *testing.T) {
 }
 
 func TestAuth_Config_shouldReturnRegistrationStatus(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -221,6 +230,7 @@ func TestAuth_Config_shouldReturnRegistrationStatus(t *testing.T) {
 }
 
 func TestAdmin_UpdateQuota_shouldSetQuota(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -253,6 +263,7 @@ func TestAdmin_UpdateQuota_shouldSetQuota(t *testing.T) {
 }
 
 func TestAdmin_UpdateQuota_shouldAllowUnlimited(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -291,6 +302,7 @@ func TestAdmin_UpdateQuota_shouldAllowUnlimited(t *testing.T) {
 }
 
 func TestAdmin_UpdateQuota_shouldRejectBelowUsage(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -323,6 +335,7 @@ func TestAdmin_UpdateQuota_shouldRejectBelowUsage(t *testing.T) {
 }
 
 func TestAdmin_UpdateQuota_shouldRejectNonAdmin(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -340,6 +353,7 @@ func TestAdmin_UpdateQuota_shouldRejectNonAdmin(t *testing.T) {
 }
 
 func TestAdmin_ListUsers_shouldIncludeQuotaFields(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -377,6 +391,7 @@ func TestAdmin_ListUsers_shouldIncludeQuotaFields(t *testing.T) {
 }
 
 func TestAdmin_Stats_shouldIncludePerUserThumbnails(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -409,6 +424,7 @@ func TestAdmin_Stats_shouldIncludePerUserThumbnails(t *testing.T) {
 }
 
 func TestAdmin_S3DeletionQueue_shouldReturnPendingCount(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -431,6 +447,7 @@ func TestAdmin_S3DeletionQueue_shouldReturnPendingCount(t *testing.T) {
 }
 
 func TestAdmin_Workers_shouldReturnStats(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -456,6 +473,7 @@ func TestAdmin_Workers_shouldReturnStats(t *testing.T) {
 }
 
 func TestAdmin_BackupStatus_shouldReturnResult(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -478,6 +496,7 @@ func TestAdmin_BackupStatus_shouldReturnResult(t *testing.T) {
 }
 
 func TestAdmin_Events_shouldReturnEvents(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -503,6 +522,7 @@ func TestAdmin_Events_shouldReturnEvents(t *testing.T) {
 }
 
 func TestAdmin_EventCounts_shouldReturnCounts(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -524,6 +544,7 @@ func TestAdmin_EventCounts_shouldReturnCounts(t *testing.T) {
 }
 
 func TestAdmin_Jobs_shouldReturnJobs(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -546,6 +567,7 @@ func TestAdmin_Jobs_shouldReturnJobs(t *testing.T) {
 }
 
 func TestAdmin_Reconcile_shouldReturnCreated(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -568,6 +590,7 @@ func TestAdmin_Reconcile_shouldReturnCreated(t *testing.T) {
 }
 
 func TestAdmin_ThumbnailStats_shouldReturnBreakdown(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -584,6 +607,7 @@ func TestAdmin_ThumbnailStats_shouldReturnBreakdown(t *testing.T) {
 }
 
 func TestAdmin_FileBreakdown_shouldReturnBreakdown(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -600,6 +624,7 @@ func TestAdmin_FileBreakdown_shouldReturnBreakdown(t *testing.T) {
 }
 
 func TestAdmin_CreateUser_tooShortPassword_should400(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -617,6 +642,7 @@ func TestAdmin_CreateUser_tooShortPassword_should400(t *testing.T) {
 }
 
 func TestAdmin_ListEvents_shouldReturnEvents(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

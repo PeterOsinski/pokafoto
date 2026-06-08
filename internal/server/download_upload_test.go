@@ -34,6 +34,7 @@ func multipartUploadBody(t *testing.T, files map[string][]byte) (string, string)
 }
 
 func TestDownload_shouldReturn404WhenFileNotOnDisk(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -61,6 +62,7 @@ func TestDownload_shouldReturn404WhenFileNotOnDisk(t *testing.T) {
 }
 
 func TestDownload_shouldRejectUnauthenticated(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -71,6 +73,7 @@ func TestDownload_shouldRejectUnauthenticated(t *testing.T) {
 }
 
 func TestBatchDownload_shouldReturnBadRequestWhenEmpty(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -86,6 +89,7 @@ func TestBatchDownload_shouldReturnBadRequestWhenEmpty(t *testing.T) {
 }
 
 func TestBatchDownload_shouldRejectTooManyFiles(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -107,6 +111,7 @@ func TestBatchDownload_shouldRejectTooManyFiles(t *testing.T) {
 }
 
 func TestBatchDownload_shouldReturnBadRequestForEmptyFileIDs(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -122,6 +127,7 @@ func TestBatchDownload_shouldReturnBadRequestForEmptyFileIDs(t *testing.T) {
 }
 
 func TestBatchDownload_shouldReturnBadRequestForInvalidJSON(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -137,6 +143,7 @@ func TestBatchDownload_shouldReturnBadRequestForInvalidJSON(t *testing.T) {
 }
 
 func TestAdmin_ListUsers_shouldReturnUsers(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -160,6 +167,7 @@ func TestAdmin_ListUsers_shouldReturnUsers(t *testing.T) {
 }
 
 func TestAdmin_DeleteUser_shouldReturn204(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -180,6 +188,7 @@ func TestAdmin_DeleteUser_shouldReturn204(t *testing.T) {
 }
 
 func TestAdmin_UpdateRole_shouldChangeRole(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -203,6 +212,7 @@ func TestAdmin_UpdateRole_shouldChangeRole(t *testing.T) {
 }
 
 func TestAdmin_UpdateRole_shouldRejectInvalidRole(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -221,6 +231,7 @@ func TestAdmin_UpdateRole_shouldRejectInvalidRole(t *testing.T) {
 }
 
 func TestAdmin_Endpoints_shouldRejectNonAdmin(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -233,6 +244,7 @@ func TestAdmin_Endpoints_shouldRejectNonAdmin(t *testing.T) {
 }
 
 func TestUpload_shouldRejectUnauthenticated(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -243,6 +255,7 @@ func TestUpload_shouldRejectUnauthenticated(t *testing.T) {
 }
 
 func TestUploadCheck_shouldReturnDuplicates(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -288,6 +301,7 @@ func TestUploadCheck_shouldReturnDuplicates(t *testing.T) {
 }
 
 func TestUploadCheck_shouldReturnEmptyWhenNoDuplicates(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -312,6 +326,7 @@ func TestUploadCheck_shouldReturnEmptyWhenNoDuplicates(t *testing.T) {
 }
 
 func TestUploadCheck_shouldRejectUnauthenticated(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -322,6 +337,7 @@ func TestUploadCheck_shouldRejectUnauthenticated(t *testing.T) {
 }
 
 func TestUploadActiveJobs_shouldReturnActiveJobs(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -371,6 +387,7 @@ func TestUploadActiveJobs_shouldReturnActiveJobs(t *testing.T) {
 }
 
 func TestUploadActiveJobs_shouldRejectUnauthenticated(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -381,6 +398,7 @@ func TestUploadActiveJobs_shouldRejectUnauthenticated(t *testing.T) {
 }
 
 func TestUpload_shouldRejectQuotaExceeded(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -406,6 +424,7 @@ func TestUpload_shouldRejectQuotaExceeded(t *testing.T) {
 }
 
 func TestUpload_shouldAllowWhenUnderQuota(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -431,6 +450,7 @@ func TestUpload_shouldAllowWhenUnderQuota(t *testing.T) {
 }
 
 func TestUpload_shouldAllowWhenUnlimited(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -454,6 +474,7 @@ func TestUpload_shouldAllowWhenUnlimited(t *testing.T) {
 }
 
 func TestVideoStream_shouldServeWithRangeSupport(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -509,6 +530,7 @@ func TestVideoStream_shouldServeWithRangeSupport(t *testing.T) {
 }
 
 func TestVideoStream_shouldRejectNonVideoFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -537,6 +559,7 @@ func TestVideoStream_shouldRejectNonVideoFile(t *testing.T) {
 }
 
 func TestUploadStatus_shouldReturnBatchStatus(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -587,6 +610,7 @@ func TestUploadStatus_shouldReturnBatchStatus(t *testing.T) {
 }
 
 func TestServeThumbnail_shouldReturnThumbnail(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -675,6 +699,7 @@ func TestServeThumbnail_shouldReturnThumbnail(t *testing.T) {
 }
 
 func TestServeThumbnail_shouldFallbackToMedium(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -719,6 +744,7 @@ func TestServeThumbnail_shouldFallbackToMedium(t *testing.T) {
 }
 
 func TestServeThumbnail_shouldReturn404WhenNoThumbnail(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -746,6 +772,7 @@ func TestServeThumbnail_shouldReturn404WhenNoThumbnail(t *testing.T) {
 }
 
 func TestUploadStatus_emptyBatch_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -760,6 +787,7 @@ func TestUploadStatus_emptyBatch_shouldReturnEmpty(t *testing.T) {
 }
 
 func TestBatchDownload_withFiles_shouldReturnZip(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -806,6 +834,7 @@ func TestBatchDownload_withFiles_shouldReturnZip(t *testing.T) {
 }
 
 func TestSoftDelete_shouldMoveToTrash(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -842,6 +871,7 @@ func TestSoftDelete_shouldMoveToTrash(t *testing.T) {
 }
 
 func TestRestoreTrash_shouldRestoreFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

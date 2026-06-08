@@ -9,11 +9,13 @@ import (
 )
 
 func TestEventRecorder_Record_nilReceiver(t *testing.T) {
+	t.Parallel()
 	var r *EventRecorder
 	r.Record("test", model.SeverityInfo, "message", nil)
 }
 
 func TestEventRecorder_Record_validEvent(t *testing.T) {
+	t.Parallel()
 	db := store.OpenTestDB(t)
 	r := NewEventRecorder(db)
 
@@ -47,6 +49,7 @@ func TestEventRecorder_Record_validEvent(t *testing.T) {
 }
 
 func TestEventRecorder_Record_noMetadata(t *testing.T) {
+	t.Parallel()
 	db := store.OpenTestDB(t)
 	r := NewEventRecorder(db)
 
@@ -63,6 +66,7 @@ func TestEventRecorder_Record_noMetadata(t *testing.T) {
 }
 
 func TestEventRecorder_Info(t *testing.T) {
+	t.Parallel()
 	db := store.OpenTestDB(t)
 	r := NewEventRecorder(db)
 
@@ -79,6 +83,7 @@ func TestEventRecorder_Info(t *testing.T) {
 }
 
 func TestEventRecorder_Warn(t *testing.T) {
+	t.Parallel()
 	db := store.OpenTestDB(t)
 	r := NewEventRecorder(db)
 
@@ -95,6 +100,7 @@ func TestEventRecorder_Warn(t *testing.T) {
 }
 
 func TestEventRecorder_Error(t *testing.T) {
+	t.Parallel()
 	db := store.OpenTestDB(t)
 	r := NewEventRecorder(db)
 
@@ -111,6 +117,7 @@ func TestEventRecorder_Error(t *testing.T) {
 }
 
 func TestEventRecorder_Record_nilStore(t *testing.T) {
+	t.Parallel()
 	r := &EventRecorder{store: nil}
 	r.Record("test", model.SeverityInfo, "msg", nil)
 }

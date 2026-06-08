@@ -7,6 +7,7 @@ import (
 )
 
 func TestCommentStore_Create_shouldCreateComment(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -28,6 +29,7 @@ func TestCommentStore_Create_shouldCreateComment(t *testing.T) {
 }
 
 func TestCommentStore_FindByFileID_shouldReturnComments(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -49,6 +51,7 @@ func TestCommentStore_FindByFileID_shouldReturnComments(t *testing.T) {
 }
 
 func TestCommentStore_Delete_shouldDeleteOwnComment(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -70,6 +73,7 @@ func TestCommentStore_Delete_shouldDeleteOwnComment(t *testing.T) {
 }
 
 func TestCommentStore_Update_shouldModifyContent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -91,6 +95,7 @@ func TestCommentStore_Update_shouldModifyContent(t *testing.T) {
 }
 
 func TestCommentStore_Update_shouldNotUpdateOtherUsersComment(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -111,6 +116,7 @@ func TestCommentStore_Update_shouldNotUpdateOtherUsersComment(t *testing.T) {
 }
 
 func TestCommentStore_FindByID_shouldReturnComment(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)

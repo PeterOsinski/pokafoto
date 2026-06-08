@@ -8,6 +8,7 @@ import (
 )
 
 func TestUserStore_Create_shouldReturnUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -31,6 +32,7 @@ func TestUserStore_Create_shouldReturnUser(t *testing.T) {
 }
 
 func TestUserStore_Create_shouldHashPassword(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -41,6 +43,7 @@ func TestUserStore_Create_shouldHashPassword(t *testing.T) {
 }
 
 func TestUserStore_Create_shouldReturnErrorOnDuplicate(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -52,6 +55,7 @@ func TestUserStore_Create_shouldReturnErrorOnDuplicate(t *testing.T) {
 }
 
 func TestUserStore_Create_shouldSetDisplayName(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -66,6 +70,7 @@ func TestUserStore_Create_shouldSetDisplayName(t *testing.T) {
 }
 
 func TestUserStore_FindByUsername_shouldReturnUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -86,6 +91,7 @@ func TestUserStore_FindByUsername_shouldReturnUser(t *testing.T) {
 }
 
 func TestUserStore_FindByUsername_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -99,6 +105,7 @@ func TestUserStore_FindByUsername_shouldReturnNil(t *testing.T) {
 }
 
 func TestUserStore_FindByID_shouldReturnUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -116,6 +123,7 @@ func TestUserStore_FindByID_shouldReturnUser(t *testing.T) {
 }
 
 func TestUserStore_FindByID_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -129,6 +137,7 @@ func TestUserStore_FindByID_shouldReturnNil(t *testing.T) {
 }
 
 func TestUserStore_List_shouldReturnAllUsers(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -145,6 +154,7 @@ func TestUserStore_List_shouldReturnAllUsers(t *testing.T) {
 }
 
 func TestUserStore_List_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -158,6 +168,7 @@ func TestUserStore_List_shouldReturnEmpty(t *testing.T) {
 }
 
 func TestUserStore_UpdateRole_shouldChangeRole(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -172,6 +183,7 @@ func TestUserStore_UpdateRole_shouldChangeRole(t *testing.T) {
 }
 
 func TestUserStore_Delete_shouldRemoveUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -186,6 +198,7 @@ func TestUserStore_Delete_shouldRemoveUser(t *testing.T) {
 }
 
 func TestUserStore_Count_shouldReturnCorrectCount(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -204,6 +217,7 @@ func TestUserStore_Count_shouldReturnCorrectCount(t *testing.T) {
 }
 
 func TestUserStore_UpdateSpaceQuota_shouldSetQuota(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -220,6 +234,7 @@ func TestUserStore_UpdateSpaceQuota_shouldSetQuota(t *testing.T) {
 }
 
 func TestUserStore_UpdateSpaceQuota_shouldSetNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewUserStore(db)
 
@@ -235,6 +250,7 @@ func TestUserStore_UpdateSpaceQuota_shouldSetNil(t *testing.T) {
 }
 
 func TestUserStore_GetUsedSpace_shouldReturnTotal(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -253,6 +269,7 @@ func TestUserStore_GetUsedSpace_shouldReturnTotal(t *testing.T) {
 }
 
 func TestUserStore_GetUsedSpace_shouldExcludeDeletedFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -268,6 +285,7 @@ func TestUserStore_GetUsedSpace_shouldExcludeDeletedFiles(t *testing.T) {
 }
 
 func TestUserStore_GetThumbnailSize_shouldReturnThumbnailTotal(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -289,6 +307,7 @@ func TestUserStore_GetThumbnailSize_shouldReturnThumbnailTotal(t *testing.T) {
 }
 
 func TestUserStore_GetThumbnailSize_shouldExcludeDeletedFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)

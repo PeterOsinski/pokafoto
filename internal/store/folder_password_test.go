@@ -8,6 +8,7 @@ import (
 )
 
 func TestFolderPasswordStore_Create_shouldSetPassword(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -31,6 +32,7 @@ func TestFolderPasswordStore_Create_shouldSetPassword(t *testing.T) {
 }
 
 func TestFolderPasswordStore_FindByFolderID_shouldReturnPassword(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -52,6 +54,7 @@ func TestFolderPasswordStore_FindByFolderID_shouldReturnPassword(t *testing.T) {
 }
 
 func TestFolderPasswordStore_FindByFolderID_shouldErrorWhenNotFound(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	fps := NewFolderPasswordStore(db)
 
@@ -62,6 +65,7 @@ func TestFolderPasswordStore_FindByFolderID_shouldErrorWhenNotFound(t *testing.T
 }
 
 func TestFolderPasswordStore_Delete_shouldRemovePassword(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -83,6 +87,7 @@ func TestFolderPasswordStore_Delete_shouldRemovePassword(t *testing.T) {
 }
 
 func TestFolderPasswordStore_DeleteExpired_shouldRemoveExpired(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -111,6 +116,7 @@ func TestFolderPasswordStore_DeleteExpired_shouldRemoveExpired(t *testing.T) {
 }
 
 func TestFolderPasswordStore_Create_shouldStoreHint(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -131,6 +137,7 @@ func TestFolderPasswordStore_Create_shouldStoreHint(t *testing.T) {
 }
 
 func TestFolderPasswordStore_FindByFolderID_shouldReturnHint(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)

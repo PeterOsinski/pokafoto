@@ -7,6 +7,7 @@ import (
 )
 
 func TestAlbumStore_Create_shouldCreateAlbum(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -38,6 +39,7 @@ func TestAlbumStore_Create_shouldCreateAlbum(t *testing.T) {
 }
 
 func TestAlbumStore_ListByUser_shouldListOwnAlbums(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -57,6 +59,7 @@ func TestAlbumStore_ListByUser_shouldListOwnAlbums(t *testing.T) {
 }
 
 func TestAlbumStore_CheckAccess_shouldDetectOwner(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -84,6 +87,7 @@ func TestAlbumStore_CheckAccess_shouldDetectOwner(t *testing.T) {
 }
 
 func TestAlbumStore_CheckAccess_shouldDetectShare(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -105,6 +109,7 @@ func TestAlbumStore_CheckAccess_shouldDetectShare(t *testing.T) {
 }
 
 func TestAlbumStore_Delete_shouldRemoveAlbum(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -124,6 +129,7 @@ func TestAlbumStore_Delete_shouldRemoveAlbum(t *testing.T) {
 }
 
 func TestAlbumStore_FindByIDWithOwner_shouldReturnAlbumWithDetails(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -145,6 +151,7 @@ func TestAlbumStore_FindByIDWithOwner_shouldReturnAlbumWithDetails(t *testing.T)
 }
 
 func TestAlbumStore_ListSharedWithUser_shouldListSharedAlbums(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -175,6 +182,7 @@ func TestAlbumStore_ListSharedWithUser_shouldListSharedAlbums(t *testing.T) {
 }
 
 func TestAlbumStore_Update_shouldUpdateAlbum(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -199,6 +207,7 @@ func TestAlbumStore_Update_shouldUpdateAlbum(t *testing.T) {
 }
 
 func TestAlbumStore_ListShares_shouldListShares(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -222,6 +231,7 @@ func TestAlbumStore_ListShares_shouldListShares(t *testing.T) {
 }
 
 func TestAlbumStore_ItemCount_shouldReturnCount(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -242,6 +252,7 @@ func TestAlbumStore_ItemCount_shouldReturnCount(t *testing.T) {
 }
 
 func TestAlbumStore_HasShares_shouldDetectShares(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -262,6 +273,7 @@ func TestAlbumStore_HasShares_shouldDetectShares(t *testing.T) {
 }
 
 func TestAlbumItemStore_Add_shouldAddItem(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -286,6 +298,7 @@ func TestAlbumItemStore_Add_shouldAddItem(t *testing.T) {
 }
 
 func TestAlbumItemStore_FindByAlbumAndFile_shouldFindItem(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -314,6 +327,7 @@ func TestAlbumItemStore_FindByAlbumAndFile_shouldFindItem(t *testing.T) {
 }
 
 func TestAlbumItemStore_Remove_shouldRemoveItem(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -338,6 +352,7 @@ func TestAlbumItemStore_Remove_shouldRemoveItem(t *testing.T) {
 }
 
 func TestAlbumItemStore_RemoveByID_shouldRemoveItem(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -362,6 +377,7 @@ func TestAlbumItemStore_RemoveByID_shouldRemoveItem(t *testing.T) {
 }
 
 func TestAlbumItemStore_ListFileIDs_shouldListFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -391,6 +407,7 @@ func TestAlbumItemStore_ListFileIDs_shouldListFiles(t *testing.T) {
 }
 
 func TestAlbumItemStore_HasSharedAccess_shouldDetectAccess(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -425,6 +442,7 @@ func TestAlbumItemStore_HasSharedAccess_shouldDetectAccess(t *testing.T) {
 }
 
 func TestAlbumItemStore_GetSharedPermission_shouldGetPermission(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -461,6 +479,7 @@ func TestAlbumItemStore_GetSharedPermission_shouldGetPermission(t *testing.T) {
 }
 
 func TestAlbumItemStore_ListAlbumsByFile_shouldListAlbums(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -500,6 +519,7 @@ func TestAlbumItemStore_ListAlbumsByFile_shouldListAlbums(t *testing.T) {
 }
 
 func TestAlbumShareStore_Remove_shouldRemoveShare(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -522,6 +542,7 @@ func TestAlbumShareStore_Remove_shouldRemoveShare(t *testing.T) {
 }
 
 func TestAlbumShareStore_FindByAlbumAndUser_shouldFindShare(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -551,6 +572,7 @@ func TestAlbumShareStore_FindByAlbumAndUser_shouldFindShare(t *testing.T) {
 }
 
 func TestAlbumShareStore_Add_shouldBeIdempotent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)

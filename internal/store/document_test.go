@@ -27,6 +27,7 @@ func createTestDocFile(t *testing.T, fs *FileStore, userID string) *model.File {
 }
 
 func TestDocumentStore_Create_shouldPersistDocument(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	u := createTestUser(t, us)
@@ -48,6 +49,7 @@ func TestDocumentStore_Create_shouldPersistDocument(t *testing.T) {
 }
 
 func TestDocumentStore_FindByFileID_shouldReturnErrorWhenNotFound(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	store := NewDocumentStore(db)
 
@@ -61,6 +63,7 @@ func TestDocumentStore_FindByFileID_shouldReturnErrorWhenNotFound(t *testing.T) 
 }
 
 func TestDocumentStore_UpdateContent_shouldChangeContent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	u := createTestUser(t, us)
@@ -80,6 +83,7 @@ func TestDocumentStore_UpdateContent_shouldChangeContent(t *testing.T) {
 }
 
 func TestDocumentStore_Delete_shouldRemoveDocument(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	u := createTestUser(t, us)
@@ -102,6 +106,7 @@ func TestDocumentStore_Delete_shouldRemoveDocument(t *testing.T) {
 }
 
 func TestDocumentStore_Create_shouldAllowEmptyContent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	u := createTestUser(t, us)

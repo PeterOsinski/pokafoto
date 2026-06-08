@@ -9,6 +9,7 @@ import (
 )
 
 func TestMiddleware_Auth_shouldRejectMissingToken(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -19,6 +20,7 @@ func TestMiddleware_Auth_shouldRejectMissingToken(t *testing.T) {
 }
 
 func TestMiddleware_Auth_shouldRejectMalformedHeader(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -29,6 +31,7 @@ func TestMiddleware_Auth_shouldRejectMalformedHeader(t *testing.T) {
 }
 
 func TestMiddleware_Auth_shouldRejectInvalidToken(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -39,6 +42,7 @@ func TestMiddleware_Auth_shouldRejectInvalidToken(t *testing.T) {
 }
 
 func TestMiddleware_Auth_shouldAcceptValidToken(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -51,6 +55,7 @@ func TestMiddleware_Auth_shouldAcceptValidToken(t *testing.T) {
 }
 
 func TestMiddleware_Admin_shouldRejectNonAdmin(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -63,6 +68,7 @@ func TestMiddleware_Admin_shouldRejectNonAdmin(t *testing.T) {
 }
 
 func TestMiddleware_Admin_shouldAllowAdmin(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 

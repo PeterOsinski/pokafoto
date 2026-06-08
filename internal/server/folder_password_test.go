@@ -14,6 +14,7 @@ import (
 )
 
 func TestFolderPassword_Set_shouldCreatePassword(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -41,6 +42,7 @@ func TestFolderPassword_Set_shouldCreatePassword(t *testing.T) {
 }
 
 func TestFolderPassword_Unlock_shouldReturnToken(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -72,6 +74,7 @@ func TestFolderPassword_Unlock_shouldReturnToken(t *testing.T) {
 }
 
 func TestFolderPassword_Unlock_wrongPassword_should401(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -97,6 +100,7 @@ func TestFolderPassword_Unlock_wrongPassword_should401(t *testing.T) {
 }
 
 func TestFolderPassword_AccessWithoutUnlock_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -135,6 +139,7 @@ func TestFolderPassword_AccessWithoutUnlock_should403(t *testing.T) {
 }
 
 func TestFolderPassword_Remove_shouldRemovePassword(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -159,6 +164,7 @@ func TestFolderPassword_Remove_shouldRemovePassword(t *testing.T) {
 }
 
 func TestFolderPassword_UnlockThenAccess_shouldWork(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -206,6 +212,7 @@ func TestFolderPassword_UnlockThenAccess_shouldWork(t *testing.T) {
 }
 
 func TestFolderPassword_GetStatus_shouldReturnStatus(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -236,6 +243,7 @@ func TestFolderPassword_GetStatus_shouldReturnStatus(t *testing.T) {
 }
 
 func TestFolderShare_Create_shouldCreateShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -263,6 +271,7 @@ func TestFolderShare_Create_shouldCreateShare(t *testing.T) {
 }
 
 func TestFolderShare_ListShares_shouldReturnShares(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -298,6 +307,7 @@ func TestFolderShare_ListShares_shouldReturnShares(t *testing.T) {
 }
 
 func TestFolderShare_DeleteShare_shouldRemoveShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -325,6 +335,7 @@ func TestFolderShare_DeleteShare_shouldRemoveShare(t *testing.T) {
 }
 
 func TestFolderShare_PublicAccess_shouldListFilesAfterUnlock(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -384,6 +395,7 @@ func TestFolderShare_PublicAccess_shouldListFilesAfterUnlock(t *testing.T) {
 }
 
 func TestFolderShare_PasswordProtected_shouldRequireUnlock(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -421,6 +433,7 @@ func TestFolderShare_PasswordProtected_shouldRequireUnlock(t *testing.T) {
 }
 
 func TestFolderShare_Expired_shouldReject(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -446,6 +459,7 @@ func TestFolderShare_Expired_shouldReject(t *testing.T) {
 }
 
 func TestFolderShare_NotYourFolder_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -467,6 +481,7 @@ func TestFolderShare_NotYourFolder_should403(t *testing.T) {
 }
 
 func TestFolderShare_UpdateShare_shouldChangePermissions(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -495,6 +510,7 @@ func TestFolderShare_UpdateShare_shouldChangePermissions(t *testing.T) {
 }
 
 func TestFolderShare_ShareUploadWithoutPermission_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -536,6 +552,7 @@ func testMultipartRequest(t *testing.T, srv *Server, req *http.Request) *httptes
 }
 
 func TestFolderShare_NonExistentToken_should404(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -546,6 +563,7 @@ func TestFolderShare_NonExistentToken_should404(t *testing.T) {
 }
 
 func TestFolderShare_UnauthorizedDelete_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -578,6 +596,7 @@ func TestFolderShare_UnauthorizedDelete_should403(t *testing.T) {
 }
 
 func TestFolderPassword_ListFilesWithoutUnlock_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -616,6 +635,7 @@ func TestFolderPassword_ListFilesWithoutUnlock_should403(t *testing.T) {
 }
 
 func TestFolderShare_Download_shouldServeFileFromDisk(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -667,6 +687,7 @@ func TestFolderShare_Download_shouldServeFileFromDisk(t *testing.T) {
 }
 
 func TestFolderShare_Download_noSessionToken_should403(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -691,6 +712,7 @@ func TestFolderShare_Download_noSessionToken_should403(t *testing.T) {
 }
 
 func TestFolderShare_Download_wrongFolder_should404(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -735,6 +757,7 @@ func TestFolderShare_Download_wrongFolder_should404(t *testing.T) {
 }
 
 func TestShareSubdir_CreateShare_shouldIncludeSubdirsFlag(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -770,6 +793,7 @@ func TestShareSubdir_CreateShare_shouldIncludeSubdirsFlag(t *testing.T) {
 }
 
 func TestShareSubdir_ListFolders_shouldReturnSubfolders(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -813,6 +837,7 @@ func TestShareSubdir_ListFolders_shouldReturnSubfolders(t *testing.T) {
 }
 
 func TestShareSubdir_CreateFolder_shouldRequireWritePermission(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -846,6 +871,7 @@ func TestShareSubdir_CreateFolder_shouldRequireWritePermission(t *testing.T) {
 }
 
 func TestShareSubdir_DeleteFolder_shouldRequireWritePermission(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -878,6 +904,7 @@ func TestShareSubdir_DeleteFolder_shouldRequireWritePermission(t *testing.T) {
 }
 
 func TestShareSubdir_ListFilesInSubdirectory_shouldWork(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -934,6 +961,7 @@ func TestShareSubdir_ListFilesInSubdirectory_shouldWork(t *testing.T) {
 }
 
 func TestShareSubdir_RejectFolderOutsideTree(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -988,6 +1016,7 @@ func TestShareSubdir_RejectFolderOutsideTree(t *testing.T) {
 }
 
 func TestFolderPassword_shouldSetAndReturnHint(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1022,6 +1051,7 @@ func TestFolderPassword_shouldSetAndReturnHint(t *testing.T) {
 }
 
 func TestFolderShare_Update_shouldChangePermissions(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1055,6 +1085,7 @@ func TestFolderShare_Update_shouldChangePermissions(t *testing.T) {
 }
 
 func TestFolderShare_Update_shouldRejectNonOwner(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1082,6 +1113,7 @@ func TestFolderShare_Update_shouldRejectNonOwner(t *testing.T) {
 }
 
 func TestFolderShare_Delete_shouldDeleteShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1105,6 +1137,7 @@ func TestFolderShare_Delete_shouldDeleteShare(t *testing.T) {
 }
 
 func TestFolderShare_Create_withIncludeSubdirs(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1135,6 +1168,7 @@ func TestFolderShare_Create_withIncludeSubdirs(t *testing.T) {
 }
 
 func TestFolderShare_Info_shouldReturnFolderDetails(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

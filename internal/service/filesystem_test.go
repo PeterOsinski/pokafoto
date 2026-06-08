@@ -7,6 +7,7 @@ import (
 )
 
 func TestRealFS_ReadDir_readsDirectory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("bb"), 0644)
@@ -22,6 +23,7 @@ func TestRealFS_ReadDir_readsDirectory(t *testing.T) {
 }
 
 func TestRealFS_ReadDir_nonexistent(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	_, err := fs.ReadDir("/nonexistent/path/xyz")
 	if err == nil {
@@ -30,6 +32,7 @@ func TestRealFS_ReadDir_nonexistent(t *testing.T) {
 }
 
 func TestRealFS_Remove_deletesFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "to_remove.txt")
 	os.WriteFile(path, []byte("data"), 0644)
@@ -45,6 +48,7 @@ func TestRealFS_Remove_deletesFile(t *testing.T) {
 }
 
 func TestRealFS_RemoveAll_deletesDirectoryTree(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	subdir := filepath.Join(dir, "subdir")
 	os.MkdirAll(subdir, 0755)
@@ -61,6 +65,7 @@ func TestRealFS_RemoveAll_deletesDirectoryTree(t *testing.T) {
 }
 
 func TestRealFS_Stat_returnsFileInfo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "stat_test.txt")
 	os.WriteFile(path, []byte("hello world"), 0644)
@@ -79,6 +84,7 @@ func TestRealFS_Stat_returnsFileInfo(t *testing.T) {
 }
 
 func TestRealFS_Stat_nonexistent(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	_, err := fs.Stat("/nonexistent/file.txt")
 	if err == nil {
@@ -87,6 +93,7 @@ func TestRealFS_Stat_nonexistent(t *testing.T) {
 }
 
 func TestRealFS_Statfs_returnsStorageInfo(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	total, bsize, free := fs.Statfs("/")
 	if total == 0 {
@@ -101,6 +108,7 @@ func TestRealFS_Statfs_returnsStorageInfo(t *testing.T) {
 }
 
 func TestRealFS_Statfs_nonexistentPath(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	total, _, _ := fs.Statfs("/nonexistent/path/abc123")
 	if total != 0 {
@@ -109,6 +117,7 @@ func TestRealFS_Statfs_nonexistentPath(t *testing.T) {
 }
 
 func TestRealFS_CreateTemp_createsFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	fs := NewRealFS()
 	f, err := fs.CreateTemp(dir, "test-*.tmp")
@@ -124,6 +133,7 @@ func TestRealFS_CreateTemp_createsFile(t *testing.T) {
 }
 
 func TestRealFS_MkdirAll_createsDirectories(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "a", "b", "c")
 	fs := NewRealFS()
@@ -136,6 +146,7 @@ func TestRealFS_MkdirAll_createsDirectories(t *testing.T) {
 }
 
 func TestRealFS_Walk_walksDirectory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "sub"), 0755)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0644)
@@ -159,6 +170,7 @@ func TestRealFS_Walk_walksDirectory(t *testing.T) {
 }
 
 func TestRealFS_Open_opensFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "open_test.txt")
 	os.WriteFile(path, []byte("content"), 0644)
@@ -172,6 +184,7 @@ func TestRealFS_Open_opensFile(t *testing.T) {
 }
 
 func TestRealFS_Open_nonexistent(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	_, err := fs.Open("/nonexistent/file.txt")
 	if err == nil {
@@ -180,6 +193,7 @@ func TestRealFS_Open_nonexistent(t *testing.T) {
 }
 
 func TestRealFS_Create_createsNewFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "new_file.txt")
 
@@ -198,6 +212,7 @@ func TestRealFS_Create_createsNewFile(t *testing.T) {
 }
 
 func TestRealFS_ReadFile_readsContent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "read_test.txt")
 	os.WriteFile(path, []byte("sample data"), 0644)
@@ -213,6 +228,7 @@ func TestRealFS_ReadFile_readsContent(t *testing.T) {
 }
 
 func TestRealFS_ReadFile_nonexistent(t *testing.T) {
+	t.Parallel()
 	fs := NewRealFS()
 	_, err := fs.ReadFile("/nonexistent/file.txt")
 	if err == nil {

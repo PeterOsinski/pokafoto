@@ -8,6 +8,7 @@ import (
 )
 
 func TestCacheEvictor_New_shouldInitializeFields(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 
@@ -32,6 +33,7 @@ func TestCacheEvictor_New_shouldInitializeFields(t *testing.T) {
 }
 
 func TestCacheEvictor_ComputeMaxBytes_setsFloorAt1GB(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 	cfg.Storage.MaxDiskUsagePct = 1
@@ -47,6 +49,7 @@ func TestCacheEvictor_ComputeMaxBytes_setsFloorAt1GB(t *testing.T) {
 }
 
 func TestCacheEvictor_ComputeMaxBytes_subtractsOriginals(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 	cfg.Storage.MaxDiskUsagePct = 1
@@ -66,6 +69,7 @@ func TestCacheEvictor_ComputeMaxBytes_subtractsOriginals(t *testing.T) {
 }
 
 func TestCacheEvictor_calculateMaxBytes_usesComputedValue(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 	cfg.Storage.MaxDiskUsagePct = 1
@@ -81,6 +85,7 @@ func TestCacheEvictor_calculateMaxBytes_usesComputedValue(t *testing.T) {
 }
 
 func TestCacheEvictor_evictIfNeeded_noThumbnails_shouldSucceed(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 
@@ -95,6 +100,7 @@ func TestCacheEvictor_evictIfNeeded_noThumbnails_shouldSucceed(t *testing.T) {
 }
 
 func TestCacheEvictor_evictIfNeeded_belowMax_noEviction(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 
@@ -121,6 +127,7 @@ func TestCacheEvictor_evictIfNeeded_belowMax_noEviction(t *testing.T) {
 }
 
 func TestCacheEvictor_evictIfNeeded_aboveMax_evictsFiles(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 
@@ -154,6 +161,7 @@ func TestCacheEvictor_evictIfNeeded_aboveMax_evictsFiles(t *testing.T) {
 }
 
 func TestCacheEvictor_evictIfNeeded_aggressiveMode_targetsSeventyPercent(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 
@@ -188,6 +196,7 @@ func TestCacheEvictor_evictIfNeeded_aggressiveMode_targetsSeventyPercent(t *test
 }
 
 func TestCacheEvictor_evictIfNeeded_cleansEmptyDirectories(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultConfig()
 	cfg.Storage.Local.Path = "/data"
 

@@ -35,6 +35,7 @@ func createTestFileWithGPS(t *testing.T, db *DB, userID string, lat, lon float64
 }
 
 func TestGeoStore_GetPoints_shouldReturnPointsInBBox(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	gs := NewGeoStore(db)
@@ -60,6 +61,7 @@ func TestGeoStore_GetPoints_shouldReturnPointsInBBox(t *testing.T) {
 }
 
 func TestGeoStore_GetPoints_shouldReturnEmptyOutsideBBox(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	gs := NewGeoStore(db)
@@ -82,6 +84,7 @@ func TestGeoStore_GetPoints_shouldReturnEmptyOutsideBBox(t *testing.T) {
 }
 
 func TestGeoStore_GetPoints_shouldFilterByUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	gs := NewGeoStore(db)
@@ -104,6 +107,7 @@ func TestGeoStore_GetPoints_shouldFilterByUser(t *testing.T) {
 }
 
 func TestGeoStore_GetPoints_shouldExcludeDeletedFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	gs := NewGeoStore(db)
@@ -127,6 +131,7 @@ func TestGeoStore_GetPoints_shouldExcludeDeletedFiles(t *testing.T) {
 }
 
 func TestGeoStore_GetPoints_shouldReturnEmptyForUnknownUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	gs := NewGeoStore(db)
 

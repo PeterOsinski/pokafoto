@@ -38,6 +38,7 @@ func makeHandlerSHA256(s string) string {
 }
 
 func TestHandlers_ListFiles_shouldReturnUserFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -63,6 +64,7 @@ func TestHandlers_ListFiles_shouldReturnUserFiles(t *testing.T) {
 }
 
 func TestHandlers_ListFiles_shouldFilterByPath(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -97,6 +99,7 @@ func TestHandlers_ListFiles_shouldFilterByPath(t *testing.T) {
 }
 
 func TestHandlers_ListFiles_shouldEnforceUserIsolation(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -123,6 +126,7 @@ func TestHandlers_ListFiles_shouldEnforceUserIsolation(t *testing.T) {
 }
 
 func TestHandlers_GetFile_shouldReturnFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -146,6 +150,7 @@ func TestHandlers_GetFile_shouldReturnFile(t *testing.T) {
 }
 
 func TestHandlers_GetFile_shouldReturn404ForOtherUser(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -164,6 +169,7 @@ func TestHandlers_GetFile_shouldReturn404ForOtherUser(t *testing.T) {
 }
 
 func TestHandlers_Search_shouldReturnMatches(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -188,6 +194,7 @@ func TestHandlers_Search_shouldReturnMatches(t *testing.T) {
 }
 
 func TestHandlers_Search_shouldReturnEmptyForNoMatch(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -212,6 +219,7 @@ func TestHandlers_Search_shouldReturnEmptyForNoMatch(t *testing.T) {
 }
 
 func TestHandlers_ListDirs_shouldReturnDirectories(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -239,6 +247,7 @@ func TestHandlers_ListDirs_shouldReturnDirectories(t *testing.T) {
 }
 
 func TestHandlers_Stats_shouldReturnUserStats(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -263,6 +272,7 @@ func TestHandlers_Stats_shouldReturnUserStats(t *testing.T) {
 }
 
 func TestHandlers_Timeline_shouldReturnGroups(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -289,6 +299,7 @@ func TestHandlers_Timeline_shouldReturnGroups(t *testing.T) {
 }
 
 func TestHandlers_GeoPoints_shouldReturnPointsInBbox(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -319,6 +330,7 @@ func TestHandlers_GeoPoints_shouldReturnPointsInBbox(t *testing.T) {
 }
 
 func TestHandlers_SoftDelete_shouldReturn204(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -336,6 +348,7 @@ func TestHandlers_SoftDelete_shouldReturn204(t *testing.T) {
 }
 
 func TestHandlers_PermanentDelete_shouldReturn204(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -358,6 +371,7 @@ func TestHandlers_PermanentDelete_shouldReturn204(t *testing.T) {
 }
 
 func TestHandlers_Health_shouldReturnOK(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -368,6 +382,7 @@ func TestHandlers_Health_shouldReturnOK(t *testing.T) {
 }
 
 func TestHandlers_Trash_softDeleteAndList(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -397,6 +412,7 @@ func TestHandlers_Trash_softDeleteAndList(t *testing.T) {
 }
 
 func TestHandlers_Trash_restoreReturnsToGallery(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -428,6 +444,7 @@ func TestHandlers_Trash_restoreReturnsToGallery(t *testing.T) {
 }
 
 func TestHandlers_Trash_statsShouldReturnCountAndSize(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -458,6 +475,7 @@ func TestHandlers_Trash_statsShouldReturnCountAndSize(t *testing.T) {
 }
 
 func TestHandlers_Trash_permanentDeletesFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -483,6 +501,7 @@ func TestHandlers_Trash_permanentDeletesFile(t *testing.T) {
 }
 
 func TestHandlers_Trash_batchRestore(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -515,6 +534,7 @@ func TestHandlers_Trash_batchRestore(t *testing.T) {
 }
 
 func TestHandlers_Trash_emptyRemovesAll(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -543,6 +563,7 @@ func TestHandlers_Trash_emptyRemovesAll(t *testing.T) {
 }
 
 func TestHandlers_Search_shouldFilterByTags(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -574,6 +595,7 @@ func TestHandlers_Search_shouldFilterByTags(t *testing.T) {
 }
 
 func TestHandlers_Search_shouldReturnEmptyForNonMatchingTag(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -602,6 +624,7 @@ func TestHandlers_Search_shouldReturnEmptyForNonMatchingTag(t *testing.T) {
 }
 
 func TestHandlers_TagStats_shouldReturnCounts(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -638,6 +661,7 @@ func TestHandlers_TagStats_shouldReturnCounts(t *testing.T) {
 }
 
 func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -699,6 +723,7 @@ func TestHandleVideoStream_Proxy_shouldFallbackToS3WhenLocalMissing(t *testing.T
 }
 
 func TestParseRange_shouldParseValidRanges(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		header     string
@@ -720,6 +745,7 @@ func TestParseRange_shouldParseValidRanges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			start, end, err := parseRange(tt.header, tt.fileSize)
 			if tt.wantErr && err == nil {
 				t.Errorf("expected error, got start=%d end=%d", start, end)
@@ -738,6 +764,7 @@ func TestParseRange_shouldParseValidRanges(t *testing.T) {
 }
 
 func TestHandlers_RenameFile_shouldSucceed(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -762,6 +789,7 @@ func TestHandlers_RenameFile_shouldSucceed(t *testing.T) {
 }
 
 func TestHandlers_RenameFile_shouldRequireAuth(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -774,6 +802,7 @@ func TestHandlers_RenameFile_shouldRequireAuth(t *testing.T) {
 }
 
 func TestHandlers_RenameFile_shouldRejectEmptyName(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -793,6 +822,7 @@ func TestHandlers_RenameFile_shouldRejectEmptyName(t *testing.T) {
 }
 
 func TestHandlers_RenameFile_shouldScopeToUser(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -813,6 +843,7 @@ func TestHandlers_RenameFile_shouldScopeToUser(t *testing.T) {
 }
 
 func TestHandlers_UpdateFolder_shouldRename(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -837,6 +868,7 @@ func TestHandlers_UpdateFolder_shouldRename(t *testing.T) {
 }
 
 func TestHandlers_UpdateFolder_shouldMove(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -863,6 +895,7 @@ func TestHandlers_UpdateFolder_shouldMove(t *testing.T) {
 }
 
 func TestHandlers_UpdateFolder_shouldRejectCircularMove(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -883,6 +916,7 @@ func TestHandlers_UpdateFolder_shouldRejectCircularMove(t *testing.T) {
 }
 
 func TestHandlers_UpdateFolder_shouldRequireNameOrParentID(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -902,6 +936,7 @@ func TestHandlers_UpdateFolder_shouldRequireNameOrParentID(t *testing.T) {
 }
 
 func TestHandlers_DeleteFolder_shouldDeleteRecursively(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -944,6 +979,7 @@ func TestHandlers_DeleteFolder_shouldDeleteRecursively(t *testing.T) {
 }
 
 func TestHandlers_DeleteFolder_shouldScopeToUser(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

@@ -33,6 +33,7 @@ func (m *mockChunkRepo) CleanupOldUploads(maxAgeHours int) ([]string, error) {
 }
 
 func TestChunkCleanup_Start_shouldStartWithoutPanic(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockChunkRepo{}
 	c := NewChunkCleanup(mockStore, 24, 48)
 
@@ -44,6 +45,7 @@ func TestChunkCleanup_Start_shouldStartWithoutPanic(t *testing.T) {
 }
 
 func TestChunkCleanup_New_defaultsWhenZero(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockChunkRepo{}
 	c := NewChunkCleanup(mockStore, 0, 0)
 	if c.cleanupHours != 24 {

@@ -52,6 +52,7 @@ func authHeader(srv *Server, userID string) string {
 }
 
 func TestServer_ChunkUpload_firstChunk_shouldStartSession(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -98,6 +99,7 @@ func TestServer_ChunkUpload_firstChunk_shouldStartSession(t *testing.T) {
 }
 
 func TestServer_ChunkUpload_multipleChunks_shouldTrackAll(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -159,6 +161,7 @@ func TestServer_ChunkUpload_multipleChunks_shouldTrackAll(t *testing.T) {
 }
 
 func TestServer_ChunkComplete_allChunks_shouldReturnNoMissing(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -223,6 +226,7 @@ func TestServer_ChunkComplete_allChunks_shouldReturnNoMissing(t *testing.T) {
 }
 
 func TestServer_ChunkComplete_partialChunks_shouldReturnMissing(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -283,6 +287,7 @@ func TestServer_ChunkComplete_partialChunks_shouldReturnMissing(t *testing.T) {
 }
 
 func TestServer_ChunkResume_shouldReturnStoredChunks(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -346,6 +351,7 @@ func TestServer_ChunkResume_shouldReturnStoredChunks(t *testing.T) {
 }
 
 func TestServer_ChunkUpload_missingHeaders_shouldBadRequest(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

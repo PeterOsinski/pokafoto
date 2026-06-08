@@ -9,6 +9,7 @@ import (
 )
 
 func TestFolderShareStore_Create_shouldPersistShare(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -33,6 +34,7 @@ func TestFolderShareStore_Create_shouldPersistShare(t *testing.T) {
 }
 
 func TestFolderShareStore_Create_withPassword_shouldStoreHash(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -66,6 +68,7 @@ func TestFolderShareStore_Create_withPassword_shouldStoreHash(t *testing.T) {
 }
 
 func TestFolderShareStore_Create_withExpiry_shouldStoreExpiry(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -94,6 +97,7 @@ func TestFolderShareStore_Create_withExpiry_shouldStoreExpiry(t *testing.T) {
 }
 
 func TestFolderShareStore_Create_withUploadLimit_shouldPersistLimit(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -122,6 +126,7 @@ func TestFolderShareStore_Create_withUploadLimit_shouldPersistLimit(t *testing.T
 }
 
 func TestFolderShareStore_FindByToken_shouldErrorOnNonExistent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	shs := NewFolderShareStore(db)
 
@@ -132,6 +137,7 @@ func TestFolderShareStore_FindByToken_shouldErrorOnNonExistent(t *testing.T) {
 }
 
 func TestFolderShareStore_ListByFolder_shouldReturnFolderShares(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -155,6 +161,7 @@ func TestFolderShareStore_ListByFolder_shouldReturnFolderShares(t *testing.T) {
 }
 
 func TestFolderShareStore_Delete_shouldRemoveShare(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -177,6 +184,7 @@ func TestFolderShareStore_Delete_shouldRemoveShare(t *testing.T) {
 }
 
 func TestFolderShareStore_Update_shouldChangePermissions(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)

@@ -11,6 +11,7 @@ import (
 )
 
 func TestExifService_ExtractVideoDate_shouldExtractMvhdCreationTime(t *testing.T) {
+	t.Parallel()
 	src := createTestMP4(t, t.TempDir(), "test.mp4")
 	svc := NewExifService(NewRealFS())
 
@@ -32,6 +33,7 @@ func TestExifService_ExtractVideoDate_shouldExtractMvhdCreationTime(t *testing.T
 }
 
 func TestExifService_ExtractVideoDate_shouldReturnNilForNonMP4File(t *testing.T) {
+	t.Parallel()
 	src := createTestJPEG(t, t.TempDir(), "test.jpg")
 	svc := NewExifService(NewRealFS())
 
@@ -110,6 +112,7 @@ func createTestMP4(t *testing.T, dir string, name string) string {
 }
 
 func TestExifService_ExtractViaExifTool_shouldParseOutput(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("exiftool"); err != nil {
 		t.Skip("exiftool not available")
 	}
@@ -132,6 +135,7 @@ func TestExifService_ExtractViaExifTool_shouldParseOutput(t *testing.T) {
 }
 
 func TestExifService_Extract_goexif_shouldExtractJPEG(t *testing.T) {
+	t.Parallel()
 	src := createTestJPEG(t, t.TempDir(), "test.jpg")
 	svc := NewExifService(NewRealFS())
 

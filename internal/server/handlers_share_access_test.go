@@ -13,6 +13,7 @@ import (
 )
 
 func TestShare_GetFile_shouldReturnFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -75,6 +76,7 @@ func TestShare_GetFile_shouldReturnFile(t *testing.T) {
 }
 
 func TestShare_GetFile_shouldReturn404ForUnknownShare(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -85,6 +87,7 @@ func TestShare_GetFile_shouldReturn404ForUnknownShare(t *testing.T) {
 }
 
 func TestShare_GetFile_shouldReturn403WithoutSessionToken(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -109,6 +112,7 @@ func TestShare_GetFile_shouldReturn403WithoutSessionToken(t *testing.T) {
 }
 
 func TestShare_GetFile_shouldReturn404ForFileNotInShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -161,6 +165,7 @@ func TestShare_GetFile_shouldReturn404ForFileNotInShare(t *testing.T) {
 }
 
 func TestShare_Thumbnail_shouldReturnThumbnail(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -230,6 +235,7 @@ func TestShare_Thumbnail_shouldReturnThumbnail(t *testing.T) {
 }
 
 func TestShare_Thumbnail_shouldFallback(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -295,6 +301,7 @@ func TestShare_Thumbnail_shouldFallback(t *testing.T) {
 }
 
 func TestShare_Thumbnail_shouldReturn404WhenNoThumbnail(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -343,6 +350,7 @@ func TestShare_Thumbnail_shouldReturn404WhenNoThumbnail(t *testing.T) {
 }
 
 func TestShare_Thumbnail_shouldReturn404ForUnknownShare(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -353,6 +361,7 @@ func TestShare_Thumbnail_shouldReturn404ForUnknownShare(t *testing.T) {
 }
 
 func TestShare_GetFile_shouldReturn404ForNonexistentFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -386,6 +395,7 @@ func TestShare_GetFile_shouldReturn404ForNonexistentFile(t *testing.T) {
 }
 
 func TestShare_ListFiles_shouldReturnFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -442,6 +452,7 @@ func TestShare_ListFiles_shouldReturnFiles(t *testing.T) {
 }
 
 func TestShare_ListFiles_shouldReturn403WithoutSessionToken(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -466,6 +477,7 @@ func TestShare_ListFiles_shouldReturn403WithoutSessionToken(t *testing.T) {
 }
 
 func TestShare_ListFolders_shouldReturnFolders(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -507,6 +519,7 @@ func TestShare_ListFolders_shouldReturnFolders(t *testing.T) {
 }
 
 func TestShare_DeleteFile_shouldDeleteFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -555,6 +568,7 @@ func TestShare_DeleteFile_shouldDeleteFile(t *testing.T) {
 }
 
 func TestShare_DeleteFile_shouldRejectReadOnly(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -603,6 +617,7 @@ func TestShare_DeleteFile_shouldRejectReadOnly(t *testing.T) {
 }
 
 func TestShare_CreateFolder_shouldCreateFolder(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -637,6 +652,7 @@ func TestShare_CreateFolder_shouldCreateFolder(t *testing.T) {
 }
 
 func TestShare_DeleteFolder_shouldDeleteFolder(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

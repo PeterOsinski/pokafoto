@@ -8,6 +8,7 @@ import (
 )
 
 func TestSystemEventsStore_Create_shouldInsert(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -44,6 +45,7 @@ func TestSystemEventsStore_Create_shouldInsert(t *testing.T) {
 }
 
 func TestSystemEventsStore_List_shouldFilterByType(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -70,6 +72,7 @@ func TestSystemEventsStore_List_shouldFilterByType(t *testing.T) {
 }
 
 func TestSystemEventsStore_List_shouldFilterBySeverity(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -94,6 +97,7 @@ func TestSystemEventsStore_List_shouldFilterBySeverity(t *testing.T) {
 }
 
 func TestSystemEventsStore_List_shouldFilterByDateRange(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -124,6 +128,7 @@ func TestSystemEventsStore_List_shouldFilterByDateRange(t *testing.T) {
 }
 
 func TestSystemEventsStore_List_shouldPaginateDescending(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -153,6 +158,7 @@ func TestSystemEventsStore_List_shouldPaginateDescending(t *testing.T) {
 }
 
 func TestSystemEventsStore_EventCounts_shouldReturnGrouped(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -174,6 +180,7 @@ func TestSystemEventsStore_EventCounts_shouldReturnGrouped(t *testing.T) {
 }
 
 func TestSystemEventsStore_PurgeOlderThan_shouldDelete(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -205,6 +212,7 @@ func TestSystemEventsStore_PurgeOlderThan_shouldDelete(t *testing.T) {
 }
 
 func TestSystemEventsStore_EventCounts_shouldReturnEmptyForNoEvents(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -219,6 +227,7 @@ func TestSystemEventsStore_EventCounts_shouldReturnEmptyForNoEvents(t *testing.T
 }
 
 func TestSystemEventsStore_List_shouldHandleCombinedFilters(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -240,6 +249,7 @@ func TestSystemEventsStore_List_shouldHandleCombinedFilters(t *testing.T) {
 }
 
 func TestSystemEventsStore_List_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 

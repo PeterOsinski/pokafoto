@@ -48,6 +48,7 @@ func (m *mockThumbnailRefRepo) Breakdown() ([]store.ThumbnailBreakdown, error)  
 func (m *mockThumbnailRefRepo) BreakdownByUser(userID string) ([]store.ThumbnailBreakdown, error) { return nil, nil }
 
 func TestS3DeletionPool_Enqueue_shouldProcessTask(t *testing.T) {
+	t.Parallel()
 	mockStorage := &mockStorageProvider{}
 	mockThumb := &mockThumbnailRefRepo{}
 	p := NewS3DeletionPool(mockStorage, mockThumb)
@@ -76,6 +77,7 @@ func TestS3DeletionPool_Enqueue_shouldProcessTask(t *testing.T) {
 }
 
 func TestS3DeletionPool_Shutdown_shouldStopWorkers(t *testing.T) {
+	t.Parallel()
 	mockStorage := &mockStorageProvider{}
 	mockThumb := &mockThumbnailRefRepo{}
 	p := NewS3DeletionPool(mockStorage, mockThumb)

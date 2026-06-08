@@ -7,6 +7,7 @@ import (
 )
 
 func TestWorkerJobToMsg_shouldIncludeFolderIDWhenSet(t *testing.T) {
+	t.Parallel()
 	folderID := "folder-uuid-123"
 	job := &model.UploadJob{
 		ID:       "job-1",
@@ -27,6 +28,7 @@ func TestWorkerJobToMsg_shouldIncludeFolderIDWhenSet(t *testing.T) {
 }
 
 func TestWorkerJobToMsg_shouldOmitFolderIDWhenNil(t *testing.T) {
+	t.Parallel()
 	job := &model.UploadJob{
 		ID:       "job-2",
 		Filename: "test.jpg",
@@ -44,6 +46,7 @@ func TestWorkerJobToMsg_shouldOmitFolderIDWhenNil(t *testing.T) {
 }
 
 func TestWorkerJobToMsg_shouldIncludeFileIDWhenPresent(t *testing.T) {
+	t.Parallel()
 	job := &model.UploadJob{
 		ID:       "job-3",
 		Filename: "test.jpg",

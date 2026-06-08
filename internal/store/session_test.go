@@ -17,6 +17,7 @@ func createTestUser(t *testing.T, s *UserStore) *model.User {
 }
 
 func TestSessionStore_Create_shouldReturnSession(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)
@@ -40,6 +41,7 @@ func TestSessionStore_Create_shouldReturnSession(t *testing.T) {
 }
 
 func TestSessionStore_FindByRefreshToken_shouldReturnSession(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)
@@ -60,6 +62,7 @@ func TestSessionStore_FindByRefreshToken_shouldReturnSession(t *testing.T) {
 }
 
 func TestSessionStore_FindByRefreshToken_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	ss := NewSessionStore(db)
 
@@ -73,6 +76,7 @@ func TestSessionStore_FindByRefreshToken_shouldReturnNil(t *testing.T) {
 }
 
 func TestSessionStore_Delete_shouldRemoveSession(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)
@@ -90,6 +94,7 @@ func TestSessionStore_Delete_shouldRemoveSession(t *testing.T) {
 }
 
 func TestSessionStore_DeleteByRefreshToken_shouldRemoveSession(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)
@@ -107,6 +112,7 @@ func TestSessionStore_DeleteByRefreshToken_shouldRemoveSession(t *testing.T) {
 }
 
 func TestSessionStore_DeleteByUserID_shouldRemoveAllSessions(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)

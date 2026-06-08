@@ -20,6 +20,8 @@ import (
 	"github.com/drive/drive/internal/store"
 )
 
+var testPollInterval = 10 * time.Millisecond
+
 func createTempUploadFile(t *testing.T) (string, func()) {
 	t.Helper()
 	dir := t.TempDir()
@@ -36,6 +38,8 @@ func setupTestPool(t *testing.T) (*Pool, *store.FileStore, *store.UploadJobStore
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 2
+
+	pollInterval = testPollInterval
 
 	db := store.OpenTestDB(t)
 	us := store.NewUserStore(db)
@@ -75,6 +79,8 @@ func enqueueJob(t *testing.T, ujs *store.UploadJobStore, batchID, userID, filena
 }
 
 func TestPool_DBProcessed_shouldCompleteJob(t *testing.T) {
+	t.Parallel()
+
 	_, fs, ujs, userID, cleanup := setupTestPool(t)
 	defer cleanup()
 
@@ -98,7 +104,7 @@ func TestPool_DBProcessed_shouldCompleteJob(t *testing.T) {
 			t.Fatal("timed out waiting for job to complete")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -111,6 +117,8 @@ func TestPool_DBProcessed_shouldCompleteJob(t *testing.T) {
 }
 
 func TestPool_DBProcessed_shouldSkipDuplicateContent(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -176,11 +184,13 @@ func TestPool_DBProcessed_shouldSkipDuplicateContent(t *testing.T) {
 			t.Fatalf("timed out waiting for duplicate detection, status=%s", fetched.Status)
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 }
 
 func TestPool_Recovery_shouldResetStuckProcessingJobs(t *testing.T) {
+	t.Parallel()
+
 	db := store.OpenTestDB(t)
 	us := store.NewUserStore(db)
 	ujs := store.NewUploadJobStore(db)
@@ -220,6 +230,8 @@ func TestPool_Recovery_shouldResetStuckProcessingJobs(t *testing.T) {
 }
 
 func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -261,7 +273,7 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 			t.Fatal("timed out waiting for job to complete")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: u.ID, Limit: 10})
 		if err != nil {
@@ -282,6 +294,8 @@ func TestPool_NonMediaFile_shouldUseFilesPrefix(t *testing.T) {
 }
 
 func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -323,7 +337,7 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 			t.Fatal("timed out waiting for job to complete")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: u.ID, Limit: 10})
 		if err != nil {
@@ -346,6 +360,8 @@ func TestPool_NonMediaFile_shouldSkipExifAndThumbnails(t *testing.T) {
 }
 
 func TestPool_Subscribe_shouldReceiveUpdates(t *testing.T) {
+	t.Parallel()
+
 	pool, _, ujs, userID, cleanup := setupTestPool(t)
 	defer cleanup()
 
@@ -375,6 +391,8 @@ func TestPool_Subscribe_shouldReceiveUpdates(t *testing.T) {
 }
 
 func TestPool_SubscribeUser_shouldReceiveUpdates(t *testing.T) {
+	t.Parallel()
+
 	pool, _, ujs, userID, cleanup := setupTestPool(t)
 	defer cleanup()
 
@@ -402,6 +420,8 @@ func TestPool_SubscribeUser_shouldReceiveUpdates(t *testing.T) {
 }
 
 func TestPool_SkipNameSizeDedup_shouldSkipChecksWhenFlagSet(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -466,7 +486,7 @@ func TestPool_SkipNameSizeDedup_shouldSkipChecksWhenFlagSet(t *testing.T) {
 			t.Fatalf("timed out waiting, got %d files", len(files))
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 
 	count := 0
@@ -481,6 +501,8 @@ func TestPool_SkipNameSizeDedup_shouldSkipChecksWhenFlagSet(t *testing.T) {
 }
 
 func TestPool_Stats_shouldReportCompleted(t *testing.T) {
+	t.Parallel()
+
 	pool, _, ujs, userID, cleanup := setupTestPool(t)
 	defer cleanup()
 
@@ -509,11 +531,13 @@ func TestPool_Stats_shouldReportCompleted(t *testing.T) {
 			return
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 }
 
 func TestPool_Stats_shouldReportActiveWorkers(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _, cleanup := setupTestPool(t)
 	defer cleanup()
 
@@ -546,6 +570,8 @@ func TestPool_Stats_shouldReportActiveWorkers(t *testing.T) {
 }
 
 func TestPool_Shutdown_shouldStopWorkers(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _, cleanup := setupTestPool(t)
 	cleanup()
 
@@ -556,6 +582,8 @@ func TestPool_Shutdown_shouldStopWorkers(t *testing.T) {
 }
 
 func TestPool_NotifyJobsAvailable_shouldWakeClaimerImmediately(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -606,6 +634,8 @@ func TestPool_NotifyJobsAvailable_shouldWakeClaimerImmediately(t *testing.T) {
 }
 
 func TestDetectMimeTypeByExtension_known(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		filename string
 		expected string
@@ -624,6 +654,7 @@ func TestDetectMimeTypeByExtension_known(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
+			t.Parallel()
 			got := detectMimeTypeByExtension(tt.filename)
 			if got != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, got)
@@ -633,6 +664,8 @@ func TestDetectMimeTypeByExtension_known(t *testing.T) {
 }
 
 func TestDetectMediaType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		mimeType string
 		expected model.MediaType
@@ -648,6 +681,7 @@ func TestDetectMediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.mimeType, func(t *testing.T) {
+			t.Parallel()
 			got := detectMediaType(tt.mimeType)
 			if got != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, got)
@@ -657,6 +691,8 @@ func TestDetectMediaType(t *testing.T) {
 }
 
 func TestPool_Claimer_shouldNotClaimWhenChannelFull(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -729,7 +765,7 @@ func TestPool_Claimer_shouldNotClaimWhenChannelFull(t *testing.T) {
 	p.NotifyJobsAvailable()
 	go p.claimer()
 
-	time.Sleep(pollInterval + 500*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	for _, id := range jobIDs {
 		job, _ := ujs.FindByID(id)
@@ -759,9 +795,12 @@ func TestPool_Claimer_shouldNotClaimWhenChannelFull(t *testing.T) {
 }
 
 func TestDetectMimeTypeFromFile_tinyFilesShouldNotPanic(t *testing.T) {
+	t.Parallel()
+
 	sizes := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 20, 50}
 	for _, size := range sizes {
 		t.Run(fmt.Sprintf("%d_bytes", size), func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			path := filepath.Join(dir, "tiny.bin")
 			content := make([]byte, size)
@@ -784,7 +823,7 @@ func TestDetectMimeTypeFromFile_tinyFilesShouldNotPanic(t *testing.T) {
 				t.Error("expected non-empty result")
 			}
 		})
-}
+	}
 }
 
 func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore, *store.UploadJobStore, *store.ChunkStore, *store.DB, string, func()) {
@@ -793,6 +832,9 @@ func setupChunkedTestPool(t *testing.T) (*Pool, *config.Config, *store.FileStore
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 2
+	cfg.Storage.Local.Path = t.TempDir()
+
+	pollInterval = testPollInterval
 
 	db := store.OpenTestDB(t)
 	us := store.NewUserStore(db)
@@ -855,6 +897,8 @@ func createChunkedJob(t *testing.T, cfg *config.Config, ujs *store.UploadJobStor
 }
 
 func TestPool_ChunkedJob_shouldAssembleAndComplete(t *testing.T) {
+	t.Parallel()
+
 	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -873,7 +917,7 @@ func TestPool_ChunkedJob_shouldAssembleAndComplete(t *testing.T) {
 			t.Fatal("timed out waiting for chunked job to complete, job not found")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -898,6 +942,8 @@ func TestPool_ChunkedJob_shouldAssembleAndComplete(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_singleChunk_shouldComplete(t *testing.T) {
+	t.Parallel()
+
 	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -916,7 +962,7 @@ func TestPool_ChunkedJob_singleChunk_shouldComplete(t *testing.T) {
 			t.Fatal("timed out, job not found")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -930,6 +976,8 @@ func TestPool_ChunkedJob_singleChunk_shouldComplete(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
+	t.Parallel()
+
 	_, _, _, ujs, _, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -948,7 +996,7 @@ func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
 		t.Fatalf("create job: %v", err)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	var finalStatus model.JobStatus
 	for i := 0; i < 10; i++ {
@@ -963,12 +1011,14 @@ func TestPool_ChunkedJob_incompleteChunks_shouldStayQueued(t *testing.T) {
 		if finalStatus == model.JobStatusQueued {
 			return
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 	t.Errorf("expected status queued after retries, got %s", finalStatus)
 }
 
 func TestPool_ChunkedJob_oldIncomplete_shouldExpire(t *testing.T) {
+	t.Parallel()
+
 	_, _, _, ujs, cs, db, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -1025,11 +1075,13 @@ func TestPool_ChunkedJob_oldIncomplete_shouldExpire(t *testing.T) {
 			}
 			return
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 }
 
 func TestPool_ChunkedJob_shouldPreserveContentIntegrity(t *testing.T) {
+	t.Parallel()
+
 	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -1092,7 +1144,7 @@ func TestPool_ChunkedJob_shouldPreserveContentIntegrity(t *testing.T) {
 			t.Fatal("timed out, job not found")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -1129,6 +1181,8 @@ func TestPool_ChunkedJob_shouldPreserveContentIntegrity(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
+	t.Parallel()
+
 	pool, cfg, fs, ujs, cs, db, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -1190,7 +1244,7 @@ func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
 			t.Fatal("timed out, job not found")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -1214,7 +1268,7 @@ func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
 			thumb, err = ts.FindByFileIDAndSize(fileID, size)
 			if err != nil {
 				if err.Error() == "sql: no rows in result set" {
-					time.Sleep(200 * time.Millisecond)
+					time.Sleep(testPollInterval)
 					continue
 				}
 				t.Errorf("FindByFileIDAndSize(%q, %s): %v", fileID, size, err)
@@ -1239,6 +1293,8 @@ func TestPool_ChunkedJob_shouldGenerateThumbnailsForPhoto(t *testing.T) {
 }
 
 func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
+	t.Parallel()
+
 	_, cfg, fs, ujs, cs, _, userID, cleanup := setupChunkedTestPool(t)
 	defer cleanup()
 
@@ -1288,7 +1344,7 @@ func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
 			t.Fatal("timed out, job not found")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		var err error
 		files, _, _, err = fs.List(store.FileListOptions{UserID: userID, Limit: 10})
 		if err != nil {
@@ -1316,6 +1372,8 @@ func TestPool_ChunkedJob_smallFile_shouldNotBeTruncated(t *testing.T) {
 }
 
 func TestPool_s3Worker_shouldSkipWithNilStorageService(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 
@@ -1406,6 +1464,8 @@ func TestPool_s3Worker_shouldSkipWithNilStorageService(t *testing.T) {
 }
 
 func TestPool_Reconciliation_shouldRunAndReport(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -1451,6 +1511,8 @@ func TestPool_Reconciliation_shouldRunAndReport(t *testing.T) {
 }
 
 func TestPool_StandardJob_tempFileRemovedBeforeProcessing(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -1501,6 +1563,8 @@ func TestPool_StandardJob_tempFileRemovedBeforeProcessing(t *testing.T) {
 }
 
 func TestPool_ProcessReconcileJob_noFileID_fails(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 
@@ -1545,6 +1609,8 @@ func TestPool_ProcessReconcileJob_noFileID_fails(t *testing.T) {
 }
 
 func TestPool_ProcessReconcileJob_fileNotFound_fails(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 
@@ -1591,6 +1657,8 @@ func TestPool_ProcessReconcileJob_fileNotFound_fails(t *testing.T) {
 }
 
 func TestPool_StartReconciler_stopsOnShutdown(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 
@@ -1607,6 +1675,8 @@ func TestPool_StartReconciler_stopsOnShutdown(t *testing.T) {
 func intPtr(n int) *int { return &n }
 
 func TestPool_StandardJob_nameSizeDedup_sameUser(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -1670,11 +1740,13 @@ func TestPool_StandardJob_nameSizeDedup_sameUser(t *testing.T) {
 			t.Fatalf("timed out, status=%s", fetched.Status)
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 	}
 }
 
 func TestPool_StandardJob_nameSizeDedup_differentUser(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -1732,7 +1804,7 @@ func TestPool_StandardJob_nameSizeDedup_differentUser(t *testing.T) {
 			t.Fatal("timed out — job should complete for different user")
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		files, _, _, _ = fs.List(store.FileListOptions{UserID: u2.ID, Limit: 10})
 	}
 
@@ -1742,6 +1814,8 @@ func TestPool_StandardJob_nameSizeDedup_differentUser(t *testing.T) {
 }
 
 func TestPool_Reconciliation_successPath_mediaFile(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	tmpDir := t.TempDir()
@@ -1831,6 +1905,8 @@ func TestPool_Reconciliation_successPath_mediaFile(t *testing.T) {
 }
 
 func TestPool_Reconciliation_successPath_nonMediaFile(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 
@@ -1887,6 +1963,8 @@ func TestPool_Reconciliation_successPath_nonMediaFile(t *testing.T) {
 }
 
 func TestPool_StandardJob_duplicateContent_differentUser_shouldUpload(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	cfg.Auth.JWTSecret = "test-secret"
 	cfg.Upload.ConcurrentWorkers = 1
@@ -1947,7 +2025,7 @@ func TestPool_StandardJob_duplicateContent_differentUser_shouldUpload(t *testing
 			t.Fatalf("timed out, status=%s", fetched.Status)
 		default:
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(testPollInterval)
 		files, _, _, _ = fs.List(store.FileListOptions{UserID: u2.ID, Limit: 10})
 	}
 

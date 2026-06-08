@@ -7,6 +7,7 @@ import (
 )
 
 func TestExifStore_Create_shouldPersistExif(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -32,6 +33,7 @@ func TestExifStore_Create_shouldPersistExif(t *testing.T) {
 }
 
 func TestExifStore_FindByFileID_shouldReturnExif(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -57,6 +59,7 @@ func TestExifStore_FindByFileID_shouldReturnExif(t *testing.T) {
 }
 
 func TestExifStore_FindByFileID_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	es := NewExifStore(db)
 
@@ -70,6 +73,7 @@ func TestExifStore_FindByFileID_shouldReturnNil(t *testing.T) {
 }
 
 func TestExifStore_Create_multipleFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)

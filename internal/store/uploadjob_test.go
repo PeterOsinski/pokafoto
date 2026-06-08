@@ -31,6 +31,7 @@ func createTempPath(t *testing.T) string {
 }
 
 func TestUploadJobStore_Create_shouldInsertJob(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -63,6 +64,7 @@ func TestUploadJobStore_Create_shouldInsertJob(t *testing.T) {
 }
 
 func TestUploadJobStore_Claim_shouldReturnAndLockJob(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -102,6 +104,7 @@ func TestUploadJobStore_Claim_shouldReturnAndLockJob(t *testing.T) {
 }
 
 func TestUploadJobStore_Claim_shouldReturnNilWhenQueueEmpty(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	claimed, err := s.Claim()
@@ -114,6 +117,7 @@ func TestUploadJobStore_Claim_shouldReturnNilWhenQueueEmpty(t *testing.T) {
 }
 
 func TestUploadJobStore_Claim_shouldExhaustQueue(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -162,6 +166,7 @@ func TestUploadJobStore_Claim_shouldExhaustQueue(t *testing.T) {
 }
 
 func TestUploadJobStore_UpdateProgress_shouldUpdateStageAndPercent(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -194,6 +199,7 @@ func TestUploadJobStore_UpdateProgress_shouldUpdateStageAndPercent(t *testing.T)
 }
 
 func TestUploadJobStore_Complete_shouldSetStatusAndFileID(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -227,6 +233,7 @@ func TestUploadJobStore_Complete_shouldSetStatusAndFileID(t *testing.T) {
 }
 
 func TestUploadJobStore_Fail_shouldSetStatusAndError(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -257,6 +264,7 @@ func TestUploadJobStore_Fail_shouldSetStatusAndError(t *testing.T) {
 }
 
 func TestUploadJobStore_Skip_shouldSetStatusAndReason(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -293,6 +301,7 @@ func TestUploadJobStore_Skip_shouldSetStatusAndReason(t *testing.T) {
 }
 
 func TestUploadJobStore_ListByBatch_shouldReturnAllJobsForBatch(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -320,6 +329,7 @@ func TestUploadJobStore_ListByBatch_shouldReturnAllJobsForBatch(t *testing.T) {
 }
 
 func TestUploadJobStore_ListByBatch_shouldReturnEmptyForUnknownBatch(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	jobs, err := s.ListByBatch("unknown-batch")
@@ -332,6 +342,7 @@ func TestUploadJobStore_ListByBatch_shouldReturnEmptyForUnknownBatch(t *testing.
 }
 
 func TestUploadJobStore_RecoverStuckJobs_shouldResetProcessingJobs(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -379,6 +390,7 @@ func TestUploadJobStore_RecoverStuckJobs_shouldResetProcessingJobs(t *testing.T)
 }
 
 func TestUploadJobStore_FindByID_shouldReturnNilForUnknownID(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	job, err := s.FindByID("nonexistent")
@@ -391,6 +403,7 @@ func TestUploadJobStore_FindByID_shouldReturnNilForUnknownID(t *testing.T) {
 }
 
 func TestUploadJobStore_Create_shouldStoreSkipNameSizeDedup(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -414,6 +427,7 @@ func TestUploadJobStore_Create_shouldStoreSkipNameSizeDedup(t *testing.T) {
 }
 
 func TestUploadJobStore_ListActiveByUser_shouldReturnActiveAndRecentJobs(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -478,6 +492,7 @@ func TestUploadJobStore_ListActiveByUser_shouldReturnActiveAndRecentJobs(t *test
 }
 
 func TestUploadJobStore_ListActiveByUser_shouldExcludeOtherUserJobs(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	s := NewUploadJobStore(db)
@@ -524,6 +539,7 @@ func TestUploadJobStore_ListActiveByUser_shouldExcludeOtherUserJobs(t *testing.T
 }
 
 func TestUploadJobStore_ListActiveByUser_shouldExcludeOldCompletedJobs(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -559,6 +575,7 @@ func TestUploadJobStore_ListActiveByUser_shouldExcludeOldCompletedJobs(t *testin
 }
 
 func TestUploadJobStore_ListActiveByUser_shouldReturnEmptyForUnknownUser(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	jobs, err := s.ListActiveByUser("nonexistent-user")
@@ -571,6 +588,7 @@ func TestUploadJobStore_ListActiveByUser_shouldReturnEmptyForUnknownUser(t *test
 }
 
 func TestUploadJobStore_ListAll_shouldPaginate(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -601,6 +619,7 @@ func TestUploadJobStore_ListAll_shouldPaginate(t *testing.T) {
 }
 
 func TestUploadJobStore_ListAll_shouldFilterByStatus(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -646,6 +665,7 @@ func TestUploadJobStore_ListAll_shouldFilterByStatus(t *testing.T) {
 }
 
 func TestUploadJobStore_CountByStatus_shouldReturnAllStatuses(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -679,6 +699,7 @@ func TestUploadJobStore_CountByStatus_shouldReturnAllStatuses(t *testing.T) {
 }
 
 func TestUploadJobStore_Requeue_shouldResetToQueued(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -712,6 +733,7 @@ func TestUploadJobStore_Requeue_shouldResetToQueued(t *testing.T) {
 }
 
 func TestUploadJobStore_Requeue_shouldFailForNonFailedJob(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -733,6 +755,7 @@ func TestUploadJobStore_Requeue_shouldFailForNonFailedJob(t *testing.T) {
 }
 
 func TestUploadJobStore_DeleteByID_shouldRemoveJob(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -759,6 +782,7 @@ func TestUploadJobStore_DeleteByID_shouldRemoveJob(t *testing.T) {
 }
 
 func TestUploadJobStore_SetStatus_shouldUpdateStatus(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -785,6 +809,7 @@ func TestUploadJobStore_SetStatus_shouldUpdateStatus(t *testing.T) {
 }
 
 func TestUploadJobStore_CompleteChunked_shouldSetTotalChunks(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -812,6 +837,7 @@ func TestUploadJobStore_CompleteChunked_shouldSetTotalChunks(t *testing.T) {
 }
 
 func TestUploadJobStore_FindByResumeToken_shouldFindJob(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -843,6 +869,7 @@ func TestUploadJobStore_FindByResumeToken_shouldFindJob(t *testing.T) {
 }
 
 func TestUploadJobStore_FindByResumeToken_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	fetched, err := s.FindByResumeToken("nonexistent-token")
@@ -855,6 +882,7 @@ func TestUploadJobStore_FindByResumeToken_shouldReturnNil(t *testing.T) {
 }
 
 func TestUploadJobStore_CountProcessing_shouldReturnCount(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 

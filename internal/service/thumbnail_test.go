@@ -33,6 +33,7 @@ func createTestJPEG(t *testing.T, dir string, name string) string {
 }
 
 func TestThumbnailService_GeneratePreview_shouldBeWebP(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
@@ -75,6 +76,7 @@ func TestThumbnailService_GeneratePreview_shouldBeWebP(t *testing.T) {
 }
 
 func TestThumbnailService_GenerateSmall_shouldBeJPEG(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
@@ -100,6 +102,7 @@ func TestThumbnailService_GenerateSmall_shouldBeJPEG(t *testing.T) {
 }
 
 func TestThumbnailService_GenerateLarge_shouldBe300pxJPEG(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
@@ -131,6 +134,7 @@ func TestThumbnailService_GenerateLarge_shouldBe300pxJPEG(t *testing.T) {
 }
 
 func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := createTestJPEG(t, dir, "test.jpg")
 
@@ -157,6 +161,10 @@ func TestThumbnailService_GenerateAll_shouldFlushAllFilesToDisk(t *testing.T) {
 }
 
 func TestThumbnailService_GenerateVideoProxy_shouldGenerate720pFor1080p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping video encoding test in short mode")
+	}
+	t.Parallel()
 	dir := t.TempDir()
 	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-vid-proxy", "/tmp/test_video_1080p.mp4", "video/mp4")
@@ -194,6 +202,10 @@ func TestThumbnailService_GenerateVideoProxy_shouldGenerate720pFor1080p(t *testi
 }
 
 func TestThumbnailService_GenerateVideoProxy_shouldSkipFor720pVideo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping video encoding test in short mode")
+	}
+	t.Parallel()
 	dir := t.TempDir()
 	ts := NewThumbnailService(dir, NewRealFS())
 	thumbs, err := ts.GenerateAll("test-vid-noproxy", "/tmp/test_video_720p.mp4", "video/mp4")
@@ -220,6 +232,10 @@ func TestThumbnailService_GenerateVideoProxy_shouldSkipFor720pVideo(t *testing.T
 }
 
 func TestThumbnailService_GenerateAll_shortVideoFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping video encoding test in short mode")
+	}
+	t.Parallel()
 	dir := t.TempDir()
 	shortVideo := filepath.Join(dir, "short.mp4")
 

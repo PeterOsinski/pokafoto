@@ -12,7 +12,7 @@ func TestSqlite_Open_shouldConnect(t *testing.T) {
 }
 
 func TestSqlite_RunMigrations_shouldApplyAll(t *testing.T) {
-	db := OpenTestDB(t)
+	db := OpenTestDBWithMigrations(t)
 
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
@@ -24,7 +24,7 @@ func TestSqlite_RunMigrations_shouldApplyAll(t *testing.T) {
 }
 
 func TestSqlite_RunMigrations_shouldBeIdempotent(t *testing.T) {
-	db := OpenTestDB(t)
+	db := OpenTestDBWithMigrations(t)
 
 	if err := db.RunMigrations(); err != nil {
 		t.Fatalf("second migration run: %v", err)

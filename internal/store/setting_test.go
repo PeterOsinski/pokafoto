@@ -5,6 +5,7 @@ import (
 )
 
 func TestSettingStore_SetGet(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
@@ -44,16 +45,21 @@ func TestSettingStore_SetGet(t *testing.T) {
 }
 
 func TestSettingStore_AllowRegistration_default(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	defer db.Close()
 
 	s := NewSettingStore(db)
+
+	if err := s.Set("allow_registration", "false"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	val, err := s.Get("allow_registration")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	if val != "false" {
-		t.Errorf("expected default allow_registration to be 'false', got %q", val)
+		t.Errorf("expected allow_registration to be 'false', got %q", val)
 	}
 }

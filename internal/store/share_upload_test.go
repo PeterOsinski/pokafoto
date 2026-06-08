@@ -7,6 +7,7 @@ import (
 )
 
 func TestShareUploadStore_Create_shouldRecordUpload(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -42,6 +43,7 @@ func TestShareUploadStore_Create_shouldRecordUpload(t *testing.T) {
 }
 
 func TestShareUploadStore_SumByShareID_shouldReturnTotal(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -92,6 +94,7 @@ func TestShareUploadStore_SumByShareID_shouldReturnTotal(t *testing.T) {
 }
 
 func TestShareUploadStore_SumByShareID_shouldReturnZeroWhenNone(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	sus := NewShareUploadStore(db)
 
@@ -105,6 +108,7 @@ func TestShareUploadStore_SumByShareID_shouldReturnZeroWhenNone(t *testing.T) {
 }
 
 func TestShareUploadStore_ListByShareID_shouldReturnUploads(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -144,6 +148,7 @@ func TestShareUploadStore_ListByShareID_shouldReturnUploads(t *testing.T) {
 }
 
 func TestShareUploadStore_ListByShareID_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	sus := NewShareUploadStore(db)
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAlbum_ListAlbums_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -32,6 +33,7 @@ func TestAlbum_ListAlbums_shouldReturnEmpty(t *testing.T) {
 }
 
 func TestAlbum_CreateAlbum_shouldCreateAlbum(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -58,6 +60,7 @@ func TestAlbum_CreateAlbum_shouldCreateAlbum(t *testing.T) {
 }
 
 func TestAlbum_CreateAlbum_shouldRejectEmptyName(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -75,6 +78,7 @@ func TestAlbum_CreateAlbum_shouldRejectEmptyName(t *testing.T) {
 }
 
 func TestAlbum_GetAlbum_shouldReturnAlbum(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -98,6 +102,7 @@ func TestAlbum_GetAlbum_shouldReturnAlbum(t *testing.T) {
 }
 
 func TestAlbum_GetAlbum_shouldReturn404ForNonexistent(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -112,6 +117,7 @@ func TestAlbum_GetAlbum_shouldReturn404ForNonexistent(t *testing.T) {
 }
 
 func TestAlbum_UpdateAlbum_shouldUpdateName(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -132,6 +138,7 @@ func TestAlbum_UpdateAlbum_shouldUpdateName(t *testing.T) {
 }
 
 func TestAlbum_UpdateAlbum_shouldRejectNonOwner(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -153,6 +160,7 @@ func TestAlbum_UpdateAlbum_shouldRejectNonOwner(t *testing.T) {
 }
 
 func TestAlbum_DeleteAlbum_shouldDelete(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -170,6 +178,7 @@ func TestAlbum_DeleteAlbum_shouldDelete(t *testing.T) {
 }
 
 func TestAlbum_DeleteAlbum_shouldRejectNonOwner(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -188,6 +197,7 @@ func TestAlbum_DeleteAlbum_shouldRejectNonOwner(t *testing.T) {
 }
 
 func TestAlbum_ListAlbumItems_shouldReturnFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -216,6 +226,7 @@ func TestAlbum_ListAlbumItems_shouldReturnFiles(t *testing.T) {
 }
 
 func TestAlbum_AddAlbumItems_shouldAddFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -238,6 +249,7 @@ func TestAlbum_AddAlbumItems_shouldAddFiles(t *testing.T) {
 }
 
 func TestAlbum_RemoveAlbumItem_shouldRemoveFile(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -259,6 +271,7 @@ func TestAlbum_RemoveAlbumItem_shouldRemoveFile(t *testing.T) {
 }
 
 func TestAlbum_ShareAlbum_shouldCreateShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -280,6 +293,7 @@ func TestAlbum_ShareAlbum_shouldCreateShare(t *testing.T) {
 }
 
 func TestAlbum_RemoveShare_shouldRemoveShare(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -300,6 +314,7 @@ func TestAlbum_RemoveShare_shouldRemoveShare(t *testing.T) {
 }
 
 func TestAlbum_ShareAlbum_shouldRejectSelf(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -320,6 +335,7 @@ func TestAlbum_ShareAlbum_shouldRejectSelf(t *testing.T) {
 }
 
 func TestAlbum_ShareAlbum_shouldRejectInvalidUser(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -340,6 +356,7 @@ func TestAlbum_ShareAlbum_shouldRejectInvalidUser(t *testing.T) {
 }
 
 func TestAlbum_RemoveShare_shouldRejectNonOwner(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

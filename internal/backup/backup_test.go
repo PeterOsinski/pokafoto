@@ -24,6 +24,8 @@ func setupTestScheduler(t *testing.T) (*Scheduler, *store.DB, *service.StorageSe
 }
 
 func TestScheduler_New_shouldInitializeFields(t *testing.T) {
+	t.Parallel()
+
 	cfg := config.DefaultConfig()
 	db := store.OpenTestDB(t)
 	fs := service.NewRealFS()
@@ -53,6 +55,8 @@ func TestScheduler_New_shouldInitializeFields(t *testing.T) {
 }
 
 func TestScheduler_Start_backupDisabled_shouldReturnEarly(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 	s.cfg.Backup.Enabled = false
 
@@ -66,6 +70,8 @@ func TestScheduler_Start_backupDisabled_shouldReturnEarly(t *testing.T) {
 }
 
 func TestScheduler_Start_s3NotConnected_shouldReturnEarly(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 	s.cfg.Backup.Enabled = true
 
@@ -79,6 +85,8 @@ func TestScheduler_Start_s3NotConnected_shouldReturnEarly(t *testing.T) {
 }
 
 func TestScheduler_LastResult_returnsNilWhenNoResult(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 
 	result := s.LastResult()
@@ -88,6 +96,8 @@ func TestScheduler_LastResult_returnsNilWhenNoResult(t *testing.T) {
 }
 
 func TestScheduler_LastResult_returnsCopy(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 
 	s.mu.Lock()
@@ -107,6 +117,8 @@ func TestScheduler_LastResult_returnsCopy(t *testing.T) {
 }
 
 func TestScheduler_Shutdown_shouldCloseStopCh(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 
 	s.Shutdown()
@@ -122,6 +134,8 @@ func TestScheduler_Shutdown_shouldCloseStopCh(t *testing.T) {
 }
 
 func TestScheduler_pruneOldBackups_retentionDaysZero_shouldNoop(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 	s.cfg.Backup.RetentionDays = 0
 
@@ -129,6 +143,8 @@ func TestScheduler_pruneOldBackups_retentionDaysZero_shouldNoop(t *testing.T) {
 }
 
 func TestScheduler_pruneOldBackups_noS3Client_shouldNotPanic(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := setupTestScheduler(t)
 	s.cfg.Backup.RetentionDays = 7
 
@@ -136,6 +152,8 @@ func TestScheduler_pruneOldBackups_noS3Client_shouldNotPanic(t *testing.T) {
 }
 
 func TestScheduler_RunBackup_noS3Client_shouldComplete(t *testing.T) {
+	t.Parallel()
+
 	s, db, _ := setupTestScheduler(t)
 	s.cfg.Backup.Enabled = true
 

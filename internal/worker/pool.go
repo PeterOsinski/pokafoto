@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const pollInterval = 1 * time.Second
+var pollInterval = 1 * time.Second
 
 type s3Task struct {
 	UserID     string

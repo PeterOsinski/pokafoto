@@ -11,6 +11,7 @@ import (
 )
 
 func TestDocuments_Create_shouldCreateAndReturnDocument(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -37,6 +38,7 @@ func TestDocuments_Create_shouldCreateAndReturnDocument(t *testing.T) {
 }
 
 func TestDocuments_Create_shouldCreateWithFolder(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -57,6 +59,7 @@ func TestDocuments_Create_shouldCreateWithFolder(t *testing.T) {
 }
 
 func TestDocuments_Create_shouldRejectEmptyName(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -74,6 +77,7 @@ func TestDocuments_Create_shouldRejectEmptyName(t *testing.T) {
 }
 
 func TestDocuments_Create_shouldRequireAuth(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -86,6 +90,7 @@ func TestDocuments_Create_shouldRequireAuth(t *testing.T) {
 }
 
 func TestDocuments_Get_shouldReturnContent(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -116,6 +121,7 @@ func TestDocuments_Get_shouldReturnContent(t *testing.T) {
 }
 
 func TestDocuments_Update_shouldSaveContent(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -150,6 +156,7 @@ func TestDocuments_Update_shouldSaveContent(t *testing.T) {
 }
 
 func TestDocuments_Update_shouldRejectNonDocument(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -173,6 +180,7 @@ func TestDocuments_Update_shouldRejectNonDocument(t *testing.T) {
 }
 
 func TestDocuments_Update_shouldRequireOwnership(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -200,6 +208,7 @@ func TestDocuments_Update_shouldRequireOwnership(t *testing.T) {
 }
 
 func TestDocuments_Delete_shouldSoftDeleteDocument(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -230,6 +239,7 @@ func TestDocuments_Delete_shouldSoftDeleteDocument(t *testing.T) {
 }
 
 func TestDocuments_Download_shouldServeDocumentContent(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -269,6 +279,7 @@ func TestDocuments_Download_shouldServeDocumentContent(t *testing.T) {
 }
 
 func TestDocuments_ListFiles_shouldIncludeIsAppManaged(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -304,6 +315,7 @@ func TestDocuments_ListFiles_shouldIncludeIsAppManaged(t *testing.T) {
 }
 
 func TestDocuments_GetFile_shouldIncludeIsAppManaged(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

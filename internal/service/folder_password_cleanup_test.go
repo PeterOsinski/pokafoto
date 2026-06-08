@@ -23,6 +23,7 @@ func (m *mockFolderPasswordRepo) DeleteExpired() (int64, error) {
 }
 
 func TestFolderPasswordCleanup_Start_shouldStartWithoutPanic(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockFolderPasswordRepo{}
 	c := NewFolderPasswordCleanup(mockStore)
 
@@ -34,6 +35,7 @@ func TestFolderPasswordCleanup_Start_shouldStartWithoutPanic(t *testing.T) {
 }
 
 func TestFolderPasswordCleanup_New_shouldCreateWithStore(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockFolderPasswordRepo{}
 	c := NewFolderPasswordCleanup(mockStore)
 	if c == nil {

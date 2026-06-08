@@ -11,6 +11,7 @@ import (
 )
 
 func TestComments_ListComments_shouldReturnComments(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -38,6 +39,7 @@ func TestComments_ListComments_shouldReturnComments(t *testing.T) {
 }
 
 func TestComments_AddComment_shouldCreateComment(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -64,6 +66,7 @@ func TestComments_AddComment_shouldCreateComment(t *testing.T) {
 }
 
 func TestComments_AddComment_shouldRejectEmptyContent(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -84,6 +87,7 @@ func TestComments_AddComment_shouldRejectEmptyContent(t *testing.T) {
 }
 
 func TestComments_UpdateComment_shouldUpdateContent(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -106,6 +110,7 @@ func TestComments_UpdateComment_shouldUpdateContent(t *testing.T) {
 }
 
 func TestComments_DeleteComment_shouldDelete(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -125,6 +130,7 @@ func TestComments_DeleteComment_shouldDelete(t *testing.T) {
 }
 
 func TestReactions_ToggleReaction_shouldAdd(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -147,6 +153,7 @@ func TestReactions_ToggleReaction_shouldAdd(t *testing.T) {
 }
 
 func TestReactions_GetReactions_shouldReturnReactions(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -175,6 +182,7 @@ func TestReactions_GetReactions_shouldReturnReactions(t *testing.T) {
 }
 
 func TestReactions_RemoveReaction_shouldRemove(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -196,6 +204,7 @@ func TestReactions_RemoveReaction_shouldRemove(t *testing.T) {
 }
 
 func TestReactions_RemoveReaction_shouldReturn404OnNoAccess(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

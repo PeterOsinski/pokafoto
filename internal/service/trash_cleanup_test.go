@@ -90,6 +90,7 @@ func (m *mockFileRepo) AdminFileBreakdownByUser(userID string) (*store.AdminFile
 }
 
 func TestTrashCleanup_New_shouldInitializeFields(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	tc := NewTrashCleanup(nil, fs, "/data/originals", "/data/thumbnails", 30, nil)
 
@@ -105,6 +106,7 @@ func TestTrashCleanup_New_shouldInitializeFields(t *testing.T) {
 }
 
 func TestTrashCleanup_cleanupExpiredTrash_noExpiredFiles(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	mockRepo := &mockFileRepo{
 		getExpiredFiles: func(cutoff string, limit int) ([]store.ExpiredFile, error) {
@@ -117,6 +119,7 @@ func TestTrashCleanup_cleanupExpiredTrash_noExpiredFiles(t *testing.T) {
 }
 
 func TestTrashCleanup_cleanupExpiredTrash_singleFile(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/data/originals/user1/photo.jpg", make([]byte, 100))
 
@@ -155,6 +158,7 @@ func TestTrashCleanup_cleanupExpiredTrash_singleFile(t *testing.T) {
 }
 
 func TestTrashCleanup_cleanupExpiredTrash_getFilesError(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	mockRepo := &mockFileRepo{
 		getExpiredFiles: func(cutoff string, limit int) ([]store.ExpiredFile, error) {
@@ -167,6 +171,7 @@ func TestTrashCleanup_cleanupExpiredTrash_getFilesError(t *testing.T) {
 }
 
 func TestTrashCleanup_cleanupExpiredTrash_deleteRowsError(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	mockRepo := &mockFileRepo{
 		getExpiredFiles: func(cutoff string, limit int) ([]store.ExpiredFile, error) {
@@ -184,6 +189,7 @@ func TestTrashCleanup_cleanupExpiredTrash_deleteRowsError(t *testing.T) {
 }
 
 func TestTrashCleanup_cleanupExpiredTrash_batchesFiles(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	callCount := 0
 

@@ -6,6 +6,7 @@ import (
 )
 
 func TestMockFS_Stat_existingFile(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/test.txt", []byte("hello"))
 
@@ -22,6 +23,7 @@ func TestMockFS_Stat_existingFile(t *testing.T) {
 }
 
 func TestMockFS_Stat_missingFile(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 
 	_, err := fs.Stat("/nonexistent/file")
@@ -31,6 +33,7 @@ func TestMockFS_Stat_missingFile(t *testing.T) {
 }
 
 func TestMockFS_Stat_removedFile(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/removed.txt", []byte("data"))
 	fs.Remove("/tmp/removed.txt")
@@ -42,6 +45,7 @@ func TestMockFS_Stat_removedFile(t *testing.T) {
 }
 
 func TestMockFS_ReadDir_empty(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	entries, err := fs.ReadDir("/tmp")
 	if err != nil {
@@ -53,6 +57,7 @@ func TestMockFS_ReadDir_empty(t *testing.T) {
 }
 
 func TestMockFS_ReadDir_withFiles(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/a.txt", []byte("a"))
 	fs.AddFile("/tmp/b.txt", []byte("bb"))
@@ -67,6 +72,7 @@ func TestMockFS_ReadDir_withFiles(t *testing.T) {
 }
 
 func TestMockFS_ReadDir_sorted(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/c.txt", []byte("c"))
 	fs.AddFile("/tmp/a.txt", []byte("a"))
@@ -78,6 +84,7 @@ func TestMockFS_ReadDir_sorted(t *testing.T) {
 }
 
 func TestMockFS_RemoveAll(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/subdir/a.txt", []byte("a"))
 	fs.AddFile("/tmp/subdir/b.txt", []byte("b"))
@@ -101,6 +108,7 @@ func TestMockFS_RemoveAll(t *testing.T) {
 }
 
 func TestMockFS_Walk(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/a.txt", []byte("a"))
 	fs.AddFile("/tmp/b.txt", []byte("bb"))
@@ -119,6 +127,7 @@ func TestMockFS_Walk(t *testing.T) {
 }
 
 func TestMockFS_ReadFile(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.AddFile("/tmp/test.txt", []byte("hello world"))
 
@@ -132,6 +141,7 @@ func TestMockFS_ReadFile(t *testing.T) {
 }
 
 func TestMockFS_ReadFile_missing(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 
 	_, err := fs.ReadFile("/missing.txt")
@@ -141,6 +151,7 @@ func TestMockFS_ReadFile_missing(t *testing.T) {
 }
 
 func TestMockFS_MkdirAll(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	fs.MkdirAll("/tmp/newdir", 0o755)
 
@@ -154,6 +165,7 @@ func TestMockFS_MkdirAll(t *testing.T) {
 }
 
 func TestMockFS_Statfs(t *testing.T) {
+	t.Parallel()
 	fs := NewMockFS()
 	total, bsize, free := fs.Statfs("/")
 	if total == 0 {

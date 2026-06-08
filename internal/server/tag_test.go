@@ -11,6 +11,7 @@ import (
 )
 
 func TestTags_ListTags_shouldReturnTags(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -31,6 +32,7 @@ func TestTags_ListTags_shouldReturnTags(t *testing.T) {
 }
 
 func TestTags_GetFileTags_shouldReturnFileTags(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -58,6 +60,7 @@ func TestTags_GetFileTags_shouldReturnFileTags(t *testing.T) {
 }
 
 func TestTags_AddFileTags_shouldAddTags(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -78,6 +81,7 @@ func TestTags_AddFileTags_shouldAddTags(t *testing.T) {
 }
 
 func TestTags_RemoveFileTag_shouldRemoveTag(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -98,6 +102,7 @@ func TestTags_RemoveFileTag_shouldRemoveTag(t *testing.T) {
 }
 
 func TestTags_GetFileAlbums_shouldReturnFileAlbums(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

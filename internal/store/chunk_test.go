@@ -49,6 +49,7 @@ func setupChunkStore(t *testing.T) (*ChunkStore, *DB, string, string, func()) {
 }
 
 func TestChunkStore_CreateChunkRecord_shouldPersist(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	if err := cs.CreateChunkRecord(uploadID, 0, 1024, 0, "abc123", "/tmp/chunk_0"); err != nil {
@@ -65,6 +66,7 @@ func TestChunkStore_CreateChunkRecord_shouldPersist(t *testing.T) {
 }
 
 func TestChunkStore_GetStoredChunks_shouldReturnSortedIndices(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 2, 512, 1024, "sha2", "/tmp/c2")
@@ -84,6 +86,7 @@ func TestChunkStore_GetStoredChunks_shouldReturnSortedIndices(t *testing.T) {
 }
 
 func TestChunkStore_FindMissingChunks_shouldReturnMissingIndices(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 0, 512, 0, "", "/tmp/c0")
@@ -102,6 +105,7 @@ func TestChunkStore_FindMissingChunks_shouldReturnMissingIndices(t *testing.T) {
 }
 
 func TestChunkStore_GetChunkPath_shouldReturnPath(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	cs.CreateChunkRecord(uploadID, 0, 512, 0, "", "/tmp/my_chunk")
@@ -116,6 +120,7 @@ func TestChunkStore_GetChunkPath_shouldReturnPath(t *testing.T) {
 }
 
 func TestChunkStore_GetChunkPath_shouldReturnEmptyForMissing(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	path, err := cs.GetChunkPath(uploadID, 99)
@@ -128,6 +133,7 @@ func TestChunkStore_GetChunkPath_shouldReturnEmptyForMissing(t *testing.T) {
 }
 
 func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
+	t.Parallel()
 	cs, db, _, userID, _ := setupChunkStore(t)
 	ujs := NewUploadJobStore(db)
 
@@ -141,6 +147,7 @@ func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
 		{"binary_1001b", makeBinaryData(1001), 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			totalChunks := 2
 			chunkSize := int64(len(tc.content)) / int64(totalChunks)
 			job := &model.UploadJob{
@@ -197,6 +204,7 @@ func TestChunkStore_AssembleFile_shouldComputeSHA256(t *testing.T) {
 }
 
 func TestChunkStore_AssembleFile_boundaryBytes(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	content := make([]byte, 1500)
@@ -253,6 +261,7 @@ func makeBinaryData(size int) []byte {
 }
 
 func TestChunkStore_AssembleFile_shouldFailMissingChunk(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
@@ -268,6 +277,7 @@ func TestChunkStore_AssembleFile_shouldFailMissingChunk(t *testing.T) {
 }
 
 func TestChunkStore_DeleteChunks_shouldRemoveRecordsAndFiles(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
@@ -293,6 +303,7 @@ func TestChunkStore_DeleteChunks_shouldRemoveRecordsAndFiles(t *testing.T) {
 }
 
 func TestChunkStore_DeleteAbandonedChunks_shouldCleanOld(t *testing.T) {
+	t.Parallel()
 	cs, db, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
@@ -314,6 +325,7 @@ func TestChunkStore_DeleteAbandonedChunks_shouldCleanOld(t *testing.T) {
 }
 
 func TestChunkStore_CleanupOrphanedTempFiles_shouldRemoveFiles(t *testing.T) {
+	t.Parallel()
 	cs, _, uploadID, _, _ := setupChunkStore(t)
 
 	dir := t.TempDir()
@@ -336,6 +348,7 @@ func TestChunkStore_CleanupOrphanedTempFiles_shouldRemoveFiles(t *testing.T) {
 }
 
 func TestChunkStore_CleanupOldUploads_shouldExpireQueuedJobs(t *testing.T) {
+	t.Parallel()
 	_, db, uploadID, _, _ := setupChunkStore(t)
 	cs := NewChunkStore(db, &testFS{})
 
@@ -362,6 +375,7 @@ func TestChunkStore_CleanupOldUploads_shouldExpireQueuedJobs(t *testing.T) {
 }
 
 func TestChunkStore_CleanupOldUploads_shouldSkipRecentJobs(t *testing.T) {
+	t.Parallel()
 	_, db, uploadID, _, _ := setupChunkStore(t)
 	cs := NewChunkStore(db, &testFS{})
 
@@ -378,6 +392,7 @@ func TestChunkStore_CleanupOldUploads_shouldSkipRecentJobs(t *testing.T) {
 }
 
 func TestChunkTempDir_shouldReturnChunksPath(t *testing.T) {
+	t.Parallel()
 	result := ChunkTempDir("/data/originals")
 	expected := filepath.Join("/data/originals", "..", "tmp", "chunks")
 	if result != expected {

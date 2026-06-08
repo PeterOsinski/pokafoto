@@ -23,6 +23,7 @@ func (m *mockSystemEventsRepo) PurgeOlderThan(age time.Duration) (int64, error) 
 }
 
 func TestEventRetention_Start_shouldStartWithoutPanic(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockSystemEventsRepo{}
 	r := NewEventRetention(mockStore)
 
@@ -34,6 +35,7 @@ func TestEventRetention_Start_shouldStartWithoutPanic(t *testing.T) {
 }
 
 func TestEventRetention_New_shouldCreateWithStore(t *testing.T) {
+	t.Parallel()
 	mockStore := &mockSystemEventsRepo{}
 	r := NewEventRetention(mockStore)
 	if r == nil {

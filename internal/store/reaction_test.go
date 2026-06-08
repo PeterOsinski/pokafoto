@@ -5,6 +5,7 @@ import (
 )
 
 func TestReactionStore_Toggle_shouldAddReaction(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -25,6 +26,7 @@ func TestReactionStore_Toggle_shouldAddReaction(t *testing.T) {
 }
 
 func TestReactionStore_Toggle_shouldRemoveReaction(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -46,6 +48,7 @@ func TestReactionStore_Toggle_shouldRemoveReaction(t *testing.T) {
 }
 
 func TestReactionStore_FindByCommentID_shouldReturnReactions(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -69,6 +72,7 @@ func TestReactionStore_FindByCommentID_shouldReturnReactions(t *testing.T) {
 }
 
 func TestReactionStore_Remove_shouldDeleteReaction(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)

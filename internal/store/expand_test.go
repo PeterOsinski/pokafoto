@@ -8,6 +8,7 @@ import (
 )
 
 func TestSettingStore_Set_shouldUpsert(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewSettingStore(db)
 
@@ -37,6 +38,7 @@ func TestSettingStore_Set_shouldUpsert(t *testing.T) {
 }
 
 func TestSettingStore_Get_shouldReturnEmptyForMissing(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	s := NewSettingStore(db)
 
@@ -50,6 +52,7 @@ func TestSettingStore_Get_shouldReturnEmptyForMissing(t *testing.T) {
 }
 
 func TestUploadJobStore_Claim_shouldReturnNilWhenEmpty(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	job, err := s.Claim()
@@ -62,6 +65,7 @@ func TestUploadJobStore_Claim_shouldReturnNilWhenEmpty(t *testing.T) {
 }
 
 func TestUploadJobStore_Claim_shouldLockAndAdvanceStatus(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -95,6 +99,7 @@ func TestUploadJobStore_Claim_shouldLockAndAdvanceStatus(t *testing.T) {
 }
 
 func TestUploadJobStore_RecoverStuckJobs_shouldResetProcessing(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -133,6 +138,7 @@ func TestUploadJobStore_RecoverStuckJobs_shouldResetProcessing(t *testing.T) {
 }
 
 func TestUploadJobStore_Complete_shouldSetFileID(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -160,6 +166,7 @@ func TestUploadJobStore_Complete_shouldSetFileID(t *testing.T) {
 }
 
 func TestUploadJobStore_CountByStatus_shouldIncludeAllStatuses(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -194,6 +201,7 @@ func TestUploadJobStore_CountByStatus_shouldIncludeAllStatuses(t *testing.T) {
 }
 
 func TestUploadJobStore_Requeue_shouldRejectNonFailedOrSkipped(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -214,6 +222,7 @@ func TestUploadJobStore_Requeue_shouldRejectNonFailedOrSkipped(t *testing.T) {
 }
 
 func TestUploadJobStore_FindByResumeToken_shouldReturnNilWhenNotFound(t *testing.T) {
+	t.Parallel()
 	s, _, _ := setupUploadJobStore(t)
 
 	job, err := s.FindByResumeToken("nonexistent-token")
@@ -226,6 +235,7 @@ func TestUploadJobStore_FindByResumeToken_shouldReturnNilWhenNotFound(t *testing
 }
 
 func TestUploadJobStore_FindByResumeToken_shouldFindExisting(t *testing.T) {
+	t.Parallel()
 	s, userID, _ := setupUploadJobStore(t)
 	tmpPath := createTempPath(t)
 
@@ -254,6 +264,7 @@ func TestUploadJobStore_FindByResumeToken_shouldFindExisting(t *testing.T) {
 }
 
 func TestThumbnailStore_Breakdown_shouldReturnSizes(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -292,6 +303,7 @@ func TestThumbnailStore_Breakdown_shouldReturnSizes(t *testing.T) {
 }
 
 func TestEventStore_List_shouldFilterBySeverity(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	es := NewSystemEventsStore(db)
 
@@ -325,6 +337,7 @@ func TestEventStore_List_shouldFilterBySeverity(t *testing.T) {
 }
 
 func TestEventStore_PurgeOlderThan_shouldRemoveOldEvents(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	es := NewSystemEventsStore(db)
 
@@ -347,6 +360,7 @@ func TestEventStore_PurgeOlderThan_shouldRemoveOldEvents(t *testing.T) {
 }
 
 func TestEventStore_PurgeOlderThan_shouldNotRemoveRecentEvents(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	es := NewSystemEventsStore(db)
 
@@ -369,6 +383,7 @@ func TestEventStore_PurgeOlderThan_shouldNotRemoveRecentEvents(t *testing.T) {
 }
 
 func TestChunkStore_FindMissingChunks_shouldReturnGaps(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	cs := NewChunkStore(db, &testFS{})
 
@@ -388,6 +403,7 @@ func TestChunkStore_FindMissingChunks_shouldReturnGaps(t *testing.T) {
 }
 
 func TestChunkStore_GetStoredChunks_shouldReturnSorted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	cs := NewChunkStore(db, &testFS{})
 
@@ -408,6 +424,7 @@ func TestChunkStore_GetStoredChunks_shouldReturnSorted(t *testing.T) {
 }
 
 func TestChunkStore_DeleteChunks_shouldRemoveRecords(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	cs := NewChunkStore(db, &testFS{})
 
@@ -425,6 +442,7 @@ func TestChunkStore_DeleteChunks_shouldRemoveRecords(t *testing.T) {
 }
 
 func TestSessionStore_DeleteByRefreshToken_shouldRemoveToken(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	ss := NewSessionStore(db)

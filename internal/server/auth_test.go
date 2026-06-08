@@ -11,6 +11,7 @@ import (
 )
 
 func TestAuth_Register_shouldCreateUser(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -31,6 +32,7 @@ func TestAuth_Register_shouldCreateUser(t *testing.T) {
 }
 
 func TestAuth_Register_shouldRejectDuplicateUsername(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -42,6 +44,7 @@ func TestAuth_Register_shouldRejectDuplicateUsername(t *testing.T) {
 }
 
 func TestAuth_Register_shouldRejectShortPassword(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -52,6 +55,7 @@ func TestAuth_Register_shouldRejectShortPassword(t *testing.T) {
 }
 
 func TestAuth_Register_shouldRejectShortUsername(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -62,6 +66,7 @@ func TestAuth_Register_shouldRejectShortUsername(t *testing.T) {
 }
 
 func TestAuth_Login_shouldReturnTokens(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -85,6 +90,7 @@ func TestAuth_Login_shouldReturnTokens(t *testing.T) {
 }
 
 func TestAuth_Login_shouldRejectWrongPassword(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -99,6 +105,7 @@ func TestAuth_Login_shouldRejectWrongPassword(t *testing.T) {
 }
 
 func TestAuth_Login_shouldRejectNonexistentUser(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -109,6 +116,7 @@ func TestAuth_Login_shouldRejectNonexistentUser(t *testing.T) {
 }
 
 func TestAuth_Me_shouldReturnUser(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -125,6 +133,7 @@ func TestAuth_Me_shouldReturnUser(t *testing.T) {
 }
 
 func TestAuth_Me_shouldRejectUnauthenticated(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -135,6 +144,7 @@ func TestAuth_Me_shouldRejectUnauthenticated(t *testing.T) {
 }
 
 func TestAuth_Refresh_shouldReturnNewTokens(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -161,6 +171,7 @@ func TestAuth_Refresh_shouldReturnNewTokens(t *testing.T) {
 }
 
 func TestAuth_Refresh_shouldRejectInvalidToken(t *testing.T) {
+	t.Parallel()
 	srv, _, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -172,6 +183,7 @@ func TestAuth_Refresh_shouldRejectInvalidToken(t *testing.T) {
 }
 
 func TestAuth_Logout_shouldReturn204(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

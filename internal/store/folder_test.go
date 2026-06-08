@@ -8,6 +8,7 @@ import (
 )
 
 func TestFolderStore_Create_shouldPersistFolder(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -26,6 +27,7 @@ func TestFolderStore_Create_shouldPersistFolder(t *testing.T) {
 }
 
 func TestFolderStore_Create_shouldCreateNested(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -42,6 +44,7 @@ func TestFolderStore_Create_shouldCreateNested(t *testing.T) {
 }
 
 func TestFolderStore_ListByUser_shouldReturnUserFolders(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -67,6 +70,7 @@ func TestFolderStore_ListByUser_shouldReturnUserFolders(t *testing.T) {
 }
 
 func TestFolderStore_ListTree_shouldBuildNestedTree(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -92,6 +96,7 @@ func TestFolderStore_ListTree_shouldBuildNestedTree(t *testing.T) {
 }
 
 func TestFolderStore_UpdateName_shouldRename(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -111,6 +116,7 @@ func TestFolderStore_UpdateName_shouldRename(t *testing.T) {
 }
 
 func TestFolderStore_Delete_shouldRemoveFolder(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -129,6 +135,7 @@ func TestFolderStore_Delete_shouldRemoveFolder(t *testing.T) {
 }
 
 func TestFolderStore_UpdateParent_shouldMoveToNewParent(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -150,6 +157,7 @@ func TestFolderStore_UpdateParent_shouldMoveToNewParent(t *testing.T) {
 }
 
 func TestFolderStore_UpdateParent_shouldMoveToRoot(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -170,6 +178,7 @@ func TestFolderStore_UpdateParent_shouldMoveToRoot(t *testing.T) {
 }
 
 func TestFolderStore_IsDescendant_shouldDetectDirectChild(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -188,6 +197,7 @@ func TestFolderStore_IsDescendant_shouldDetectDirectChild(t *testing.T) {
 }
 
 func TestFolderStore_IsDescendant_shouldDetectDeepNesting(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -204,6 +214,7 @@ func TestFolderStore_IsDescendant_shouldDetectDeepNesting(t *testing.T) {
 }
 
 func TestFolderStore_IsDescendant_shouldRejectUnrelated(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -219,6 +230,7 @@ func TestFolderStore_IsDescendant_shouldRejectUnrelated(t *testing.T) {
 }
 
 func TestFolderStore_IsDescendant_shouldRejectSelfLoop(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -233,6 +245,7 @@ func TestFolderStore_IsDescendant_shouldRejectSelfLoop(t *testing.T) {
 }
 
 func TestFolderStore_FindDescendantIDs_shouldReturnAllLevels(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -270,6 +283,7 @@ func TestFolderStore_FindDescendantIDs_shouldReturnAllLevels(t *testing.T) {
 }
 
 func TestFolderStore_DeleteRecursive_shouldSoftDeleteAllFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -321,6 +335,7 @@ func TestFolderStore_DeleteRecursive_shouldSoftDeleteAllFiles(t *testing.T) {
 }
 
 func TestFolderStore_DeleteRecursive_shouldReturnCounts(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -341,6 +356,7 @@ func TestFolderStore_DeleteRecursive_shouldReturnCounts(t *testing.T) {
 }
 
 func TestFolderStore_ListTree_shouldIncludeHasShares(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)
@@ -387,6 +403,7 @@ func findNodeByID(nodes []*model.FolderTreeNode, id string) *model.FolderTreeNod
 }
 
 func TestFolderStore_ListTree_shouldIncludeHasPassword(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFolderStore(db)

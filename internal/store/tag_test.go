@@ -8,6 +8,7 @@ import (
 )
 
 func TestTagStore_FindOrCreate_shouldCreateTag(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	store := NewTagStore(db)
@@ -29,6 +30,7 @@ func TestTagStore_FindOrCreate_shouldCreateTag(t *testing.T) {
 }
 
 func TestTagStore_Search_shouldReturnMatchingTags(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	store := NewTagStore(db)
@@ -46,6 +48,7 @@ func TestTagStore_Search_shouldReturnMatchingTags(t *testing.T) {
 }
 
 func TestTagStore_AddToFile_shouldAddTag(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 
 	us := NewUserStore(db)
@@ -69,6 +72,7 @@ func TestTagStore_AddToFile_shouldAddTag(t *testing.T) {
 }
 
 func TestTagStore_ListWithCount_shouldReturnCounts(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -100,6 +104,7 @@ func TestTagStore_ListWithCount_shouldReturnCounts(t *testing.T) {
 }
 
 func TestTagStore_RemoveFromFile_shouldRemoveTag(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -121,6 +126,7 @@ func TestTagStore_RemoveFromFile_shouldRemoveTag(t *testing.T) {
 }
 
 func TestTagStore_ListWithCount_shouldExcludeDeletedAndOtherUsers(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)

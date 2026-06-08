@@ -10,6 +10,7 @@ import (
 )
 
 func TestFolders_CreateFolder_shouldCreate(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -27,6 +28,7 @@ func TestFolders_CreateFolder_shouldCreate(t *testing.T) {
 }
 
 func TestFolders_ListFolders_shouldReturnFolders(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -45,6 +47,7 @@ func TestFolders_ListFolders_shouldReturnFolders(t *testing.T) {
 }
 
 func TestBatchOps_SoftDelete_shouldDeleteMultiple(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -66,6 +69,7 @@ func TestBatchOps_SoftDelete_shouldDeleteMultiple(t *testing.T) {
 }
 
 func TestBatchOps_Move_shouldMoveToFolder(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -88,6 +92,7 @@ func TestBatchOps_Move_shouldMoveToFolder(t *testing.T) {
 }
 
 func TestBatchOps_Copy_shouldCopyFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -108,6 +113,7 @@ func TestBatchOps_Copy_shouldCopyFiles(t *testing.T) {
 }
 
 func TestTrash_BatchPermanentDelete_shouldDeleteFiles(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -131,6 +137,7 @@ func TestTrash_BatchPermanentDelete_shouldDeleteFiles(t *testing.T) {
 }
 
 func TestAdmin_RetryJob_shouldRequeueFailedJob(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -160,6 +167,7 @@ func TestAdmin_RetryJob_shouldRequeueFailedJob(t *testing.T) {
 }
 
 func TestAdmin_TriggerBackup_shouldReturnUnavailable(t *testing.T) {
+	t.Parallel()
 	srv, db, cleanup := newTestServer(t)
 	defer cleanup()
 

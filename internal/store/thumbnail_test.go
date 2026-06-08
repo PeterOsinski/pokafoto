@@ -7,6 +7,7 @@ import (
 )
 
 func TestThumbnailStore_TotalSize_shouldSumAllSizes(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -30,6 +31,7 @@ func TestThumbnailStore_TotalSize_shouldSumAllSizes(t *testing.T) {
 }
 
 func TestThumbnailStore_TotalSize_shouldReturnZeroWhenEmpty(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	ts := NewThumbnailStore(db)
 
@@ -43,6 +45,7 @@ func TestThumbnailStore_TotalSize_shouldReturnZeroWhenEmpty(t *testing.T) {
 }
 
 func TestThumbnailStore_Create_shouldAcceptXL(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -92,6 +95,7 @@ func TestThumbnailStore_Create_shouldAcceptXL(t *testing.T) {
 }
 
 func TestThumbnailStore_SetS3Key_shouldPersistKey(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -147,6 +151,7 @@ func TestThumbnailStore_SetS3Key_shouldPersistKey(t *testing.T) {
 }
 
 func TestThumbnailStore_SetS3Key_shouldWorkForVideoStill(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -186,6 +191,7 @@ func TestThumbnailStore_SetS3Key_shouldWorkForVideoStill(t *testing.T) {
 }
 
 func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnRefs(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -207,6 +213,7 @@ func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnRefs(t *testing.T)
 }
 
 func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnEmpty(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	ts := NewThumbnailStore(db)
 
@@ -220,6 +227,7 @@ func TestThumbnailStore_FindThumbnailRefsByFileID_shouldReturnEmpty(t *testing.T
 }
 
 func TestThumbnailStore_BreakdownByUser_shouldReturnPerSizeCounts(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -241,6 +249,7 @@ func TestThumbnailStore_BreakdownByUser_shouldReturnPerSizeCounts(t *testing.T) 
 }
 
 func TestThumbnailStore_BreakdownByUser_shouldExcludeDeletedFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)

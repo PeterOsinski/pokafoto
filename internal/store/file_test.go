@@ -32,6 +32,7 @@ func makeSHA256(s string) string {
 }
 
 func TestFileStore_Create_shouldPersistFile(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -57,6 +58,7 @@ func TestFileStore_Create_shouldPersistFile(t *testing.T) {
 }
 
 func TestFileStore_Create_shouldAllowDuplicateSHA256(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -76,6 +78,7 @@ func TestFileStore_Create_shouldAllowDuplicateSHA256(t *testing.T) {
 }
 
 func TestFileStore_FindByID_shouldReturnFile(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -96,6 +99,7 @@ func TestFileStore_FindByID_shouldReturnFile(t *testing.T) {
 }
 
 func TestFileStore_FindByID_shouldReturnNil(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	fs := NewFileStore(db)
 
@@ -109,6 +113,7 @@ func TestFileStore_FindByID_shouldReturnNil(t *testing.T) {
 }
 
 func TestFileStore_FindBySHA256_shouldReturnFile(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -126,6 +131,7 @@ func TestFileStore_FindBySHA256_shouldReturnFile(t *testing.T) {
 }
 
 func TestFileStore_FindByNameAndSize_shouldMatch(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -143,6 +149,7 @@ func TestFileStore_FindByNameAndSize_shouldMatch(t *testing.T) {
 }
 
 func TestFileStore_List_shouldReturnFilesForUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -170,6 +177,7 @@ func TestFileStore_List_shouldReturnFilesForUser(t *testing.T) {
 }
 
 func TestFileStore_List_shouldFilterByPath(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -203,6 +211,7 @@ func TestFileStore_List_shouldFilterByPath(t *testing.T) {
 }
 
 func TestFileStore_List_shouldFilterByMediaType(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -234,6 +243,7 @@ func TestFileStore_List_shouldFilterByMediaType(t *testing.T) {
 }
 
 func TestFileStore_List_shouldSortByCreatedAt(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -260,6 +270,7 @@ func TestFileStore_List_shouldSortByCreatedAt(t *testing.T) {
 }
 
 func TestFileStore_SoftDelete_shouldSetDeleted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -280,6 +291,7 @@ func TestFileStore_SoftDelete_shouldSetDeleted(t *testing.T) {
 }
 
 func TestFileStore_PermanentDelete_shouldRemoveFile(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -298,6 +310,7 @@ func TestFileStore_PermanentDelete_shouldRemoveFile(t *testing.T) {
 }
 
 func TestFileStore_Stats_shouldReturnAggregates(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -318,6 +331,7 @@ func TestFileStore_Stats_shouldReturnAggregates(t *testing.T) {
 }
 
 func TestFileStore_ListDirs_shouldBuildTree(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -341,6 +355,7 @@ func TestFileStore_ListDirs_shouldBuildTree(t *testing.T) {
 }
 
 func TestFileStore_Search_shouldFindMatching(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -358,6 +373,7 @@ func TestFileStore_Search_shouldFindMatching(t *testing.T) {
 }
 
 func TestFileStore_Search_shouldReturnEmptyOnNoMatch(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -374,6 +390,7 @@ func TestFileStore_Search_shouldReturnEmptyOnNoMatch(t *testing.T) {
 }
 
 func TestFileStore_Timeline_shouldGroupByMonth(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -403,6 +420,7 @@ func TestFileStore_Timeline_shouldGroupByMonth(t *testing.T) {
 }
 
 func TestFileStore_FindByNameAndSizeBatch_shouldFindDuplicates(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -425,6 +443,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldFindDuplicates(t *testing.T) {
 }
 
 func TestFileStore_FindByNameAndSizeBatch_shouldReturnEmptyWhenNoDuplicates(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -445,6 +464,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldReturnEmptyWhenNoDuplicates(t *t
 }
 
 func TestFileStore_FindByNameAndSizeBatch_shouldReturnNilOnEmptyInput(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	fs := NewFileStore(db)
 
@@ -458,6 +478,7 @@ func TestFileStore_FindByNameAndSizeBatch_shouldReturnNilOnEmptyInput(t *testing
 }
 
 func TestFileStore_AdminFileBreakdown_shouldReturnAggregates(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -554,6 +575,7 @@ func TestFileStore_AdminFileBreakdown_shouldReturnAggregates(t *testing.T) {
 }
 
 func TestFileStore_FindPhotosMissingThumbnails_shouldFindPhotos(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -609,6 +631,7 @@ func containsID(files []*model.File, id string) bool {
 }
 
 func TestFileStore_SoftDelete_shouldSetDeletedAt(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -633,6 +656,7 @@ func TestFileStore_SoftDelete_shouldSetDeletedAt(t *testing.T) {
 }
 
 func TestFileStore_Restore_shouldClearDeletedAt(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -658,6 +682,7 @@ func TestFileStore_Restore_shouldClearDeletedAt(t *testing.T) {
 }
 
 func TestFileStore_ListTrash_shouldShowOnlyDeleted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -687,6 +712,7 @@ func TestFileStore_ListTrash_shouldShowOnlyDeleted(t *testing.T) {
 }
 
 func TestFileStore_TrashStats_shouldSumCorrectly(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -711,6 +737,7 @@ func TestFileStore_TrashStats_shouldSumCorrectly(t *testing.T) {
 }
 
 func TestFileStore_BatchRestore_shouldRestoreMultiple(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -736,6 +763,7 @@ func TestFileStore_BatchRestore_shouldRestoreMultiple(t *testing.T) {
 }
 
 func TestFileStore_BatchPermanentDelete_shouldRemoveFromDB(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -761,6 +789,7 @@ func TestFileStore_BatchPermanentDelete_shouldRemoveFromDB(t *testing.T) {
 }
 
 func TestFileStore_GetExpiredFiles_shouldReturnExpired(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -789,6 +818,7 @@ func TestFileStore_GetExpiredFiles_shouldReturnExpired(t *testing.T) {
 }
 
 func TestFileStore_List_shouldNotShowDeleted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -807,6 +837,7 @@ func TestFileStore_List_shouldNotShowDeleted(t *testing.T) {
 }
 
 func TestFileStore_FindBySHA256_shouldNotMatchDeleted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -822,6 +853,7 @@ func TestFileStore_FindBySHA256_shouldNotMatchDeleted(t *testing.T) {
 }
 
 func TestFileStore_FindByNameAndSize_shouldNotMatchDeleted(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -837,6 +869,7 @@ func TestFileStore_FindByNameAndSize_shouldNotMatchDeleted(t *testing.T) {
 }
 
 func TestFileStore_SearchEnhanced_shouldFilterByTags(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -864,6 +897,7 @@ func TestFileStore_SearchEnhanced_shouldFilterByTags(t *testing.T) {
 }
 
 func TestFileStore_SearchEnhanced_shouldReturnEmptyForNonMatchingTag(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -884,6 +918,7 @@ func TestFileStore_SearchEnhanced_shouldReturnEmptyForNonMatchingTag(t *testing.
 }
 
 func TestFileStore_SearchEnhanced_shouldMatchCaseInsensitiveTags(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -904,6 +939,7 @@ func TestFileStore_SearchEnhanced_shouldMatchCaseInsensitiveTags(t *testing.T) {
 }
 
 func TestFileStore_Rename_shouldUpdateOriginalName(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -926,6 +962,7 @@ func TestFileStore_Rename_shouldUpdateOriginalName(t *testing.T) {
 }
 
 func TestFileStore_Rename_shouldScopeToUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -941,6 +978,7 @@ func TestFileStore_Rename_shouldScopeToUser(t *testing.T) {
 }
 
 func TestFileStore_Rename_shouldUpdateFilenameForDocuments(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -963,6 +1001,7 @@ func TestFileStore_Rename_shouldUpdateFilenameForDocuments(t *testing.T) {
 }
 
 func TestFileStore_SoftDeleteByFolderIDs_shouldSoftDeleteFilesInFolders(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1004,6 +1043,7 @@ func TestFileStore_SoftDeleteByFolderIDs_shouldSoftDeleteFilesInFolders(t *testi
 }
 
 func TestFileStore_BatchSoftDelete_shouldSoftDeleteMultipleFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1027,6 +1067,7 @@ func TestFileStore_BatchSoftDelete_shouldSoftDeleteMultipleFiles(t *testing.T) {
 }
 
 func TestFileStore_BatchSoftDelete_shouldScopeToUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1046,6 +1087,7 @@ func TestFileStore_BatchSoftDelete_shouldScopeToUser(t *testing.T) {
 }
 
 func TestFileStore_PermanentDeleteByIDs_shouldDeleteFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1068,6 +1110,7 @@ func TestFileStore_PermanentDeleteByIDs_shouldDeleteFiles(t *testing.T) {
 }
 
 func TestFileStore_UpdateSizeAndHash_shouldUpdateFields(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1089,6 +1132,7 @@ func TestFileStore_UpdateSizeAndHash_shouldUpdateFields(t *testing.T) {
 }
 
 func TestFileStore_BatchCopy_shouldDuplicateFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1114,6 +1158,7 @@ func TestFileStore_BatchCopy_shouldDuplicateFiles(t *testing.T) {
 }
 
 func TestFileStore_BatchCopy_shouldScopeToUser(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1132,6 +1177,7 @@ func TestFileStore_BatchCopy_shouldScopeToUser(t *testing.T) {
 }
 
 func TestFileStore_ListFilesByFolderID_shouldReturnFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1164,6 +1210,7 @@ func TestFileStore_ListFilesByFolderID_shouldReturnFiles(t *testing.T) {
 }
 
 func TestFileStore_CountPhotosMissingThumbnailPreview_shouldCountMissing(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1182,6 +1229,7 @@ func TestFileStore_CountPhotosMissingThumbnailPreview_shouldCountMissing(t *test
 }
 
 func TestFileStore_AdminFileBreakdownByUser_shouldReturnBreakdown(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1202,6 +1250,7 @@ func TestFileStore_AdminFileBreakdownByUser_shouldReturnBreakdown(t *testing.T) 
 }
 
 func TestFileStore_ListTrashFiles_shouldReturnTrashedFiles(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
@@ -1224,6 +1273,7 @@ func TestFileStore_ListTrashFiles_shouldReturnTrashedFiles(t *testing.T) {
 }
 
 func TestFileStore_ListAllTrashFiles_shouldReturnAllTrashed(t *testing.T) {
+	t.Parallel()
 	db := OpenTestDB(t)
 	us := NewUserStore(db)
 	fs := NewFileStore(db)
