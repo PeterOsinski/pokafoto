@@ -284,3 +284,7 @@ func (c *UploadCtl) HandleChunkUploadComplete(w http.ResponseWriter, r *http.Req
 		slog.Info("chunked upload ready for assembly", "upload_id", job.ID, "filename", job.Filename, "total_chunks", *job.TotalChunks)
 	}
 }
+
+func (c *UploadCtl) HandleProgressFlush(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
+}

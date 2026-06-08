@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth'
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 120000,
 })
 
 api.interceptors.request.use((config) => {
@@ -43,6 +44,13 @@ function extractFolderId(config: any): string | null {
   return null
 }
 
+function isRetryable(error: any): boolean {
+  if (error.response) {
+    return error.response.status >= 500
+  }
+  return !!error.request && !error.response
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -68,6 +76,14 @@ api.interceptors.response.use(
         window.location.href = '/login'
       }
     }
+
+    const retryCount: number = error.config?.retryCount ?? 0
+    if (retryCount < 2 && isRetryable(error)) {
+      (error.config as any).retryCount = retryCount + 1
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, retryCount)))
+      return api(error.config)
+    }
+
     return Promise.reject(error)
   },
 )

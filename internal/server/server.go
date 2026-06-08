@@ -243,6 +243,7 @@ func (s *Server) setupRouter() {
 		r.Post("/auth/logout", s.auth.HandleLogout)
 
 		r.Get("/upload/ws", s.upload.HandleUploadWSWithToken)
+		r.Post("/upload/progress-flush", s.upload.HandleProgressFlush)
 
 		r.Get("/thumb/{fileID}/{size}", s.file.HandleServeThumbnail)
 

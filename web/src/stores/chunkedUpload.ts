@@ -5,6 +5,7 @@ import api from '../api/client'
 
 const CHUNK_SIZE = 5 * 1024 * 1024
 const MAX_CONCURRENT_CHUNKS = 3
+const MAX_CHUNK_RETRIES = 3
 
 export interface ChunkedUploadJob {
   uploadId: string
@@ -238,6 +239,21 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
 
   startReconcile()
 
+  window.addEventListener('online', () => {
+    autoResumeConnectivityJobs()
+  })
+
+  window.addEventListener('beforeunload', () => {
+    persistActiveTokens()
+    const activeTokens = jobs.value
+      .filter(j => (j.status === 'uploading' || j.status === 'paused' || j.status === 'assembling') && j.resumeToken)
+      .map(j => ({ token: j.resumeToken, uploadId: j.uploadId }))
+    if (activeTokens.length > 0 && navigator.sendBeacon) {
+      const payload = new Blob([JSON.stringify({ tokens: activeTokens })], { type: 'application/json' })
+      navigator.sendBeacon('/api/v1/upload/progress-flush', payload)
+    }
+  })
+
   setInterval(() => {
     if (pendingUpdates.size > 100) {
       const keys = [...pendingUpdates.keys()]
@@ -392,22 +408,34 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         while (concurrencyIndex < queued.length) {
           const idx = concurrencyIndex++
           const current = jobs.value.find(j => j.uploadId === job.uploadId)
-          if (current?.status === 'failed') return
-          try {
-            const ok = await queued[idx]()
-            if (!ok) {
-              concurrencyIndex = idx
+          if (current?.status === 'failed' || current?.status === 'paused') return
+          let retries = 0
+          for (;;) {
+            try {
+              const ok = await queued[idx]()
+              if (!ok) {
+                concurrencyIndex = idx
+                const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
+                if (pi >= 0) jobs.value[pi].error = 'Chunk hash mismatch, retrying...'
+                await new Promise(r => setTimeout(r, 1000))
+              }
+              break
+            } catch {
+              retries++
+              if (retries > MAX_CHUNK_RETRIES) {
+                const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
+                if (pi >= 0) {
+                  jobs.value[pi].status = 'paused'
+                  jobs.value[pi].error = `Network error after ${MAX_CHUNK_RETRIES} retries`
+                }
+                persistActiveTokens()
+                return
+              }
+              const delay = 1000 * Math.pow(2, retries - 1)
               const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
-              if (pi >= 0) jobs.value[pi].error = 'Chunk hash mismatch, retrying...'
-              await new Promise(r => setTimeout(r, 1000))
+              if (pi >= 0) jobs.value[pi].error = `Network error, retrying (${retries}/${MAX_CHUNK_RETRIES})...`
+              await new Promise(r => setTimeout(r, delay))
             }
-          } catch {
-            const pi = jobs.value.findIndex(j => j.uploadId === job.uploadId)
-            if (pi >= 0) {
-              jobs.value[pi].status = 'failed'
-              jobs.value[pi].error = 'Network error during chunk upload'
-            }
-            return
           }
         }
       }
@@ -528,6 +556,43 @@ export const useChunkedUploadStore = defineStore('chunkedUpload', () => {
         }
       } else {
         clearTokens()
+      }
+    }
+  }
+
+  async function autoResumeConnectivityJobs() {
+    const toResume = jobs.value.filter(j =>
+      (j.status === 'paused' || (j.status === 'failed' && j.resumeToken)) && j.resumeToken,
+    )
+    for (const job of toResume) {
+      try {
+        const status = await checkResume(job.resumeToken)
+        if (!status) continue
+        const idx = jobs.value.findIndex(j => j.uploadId === job.uploadId)
+        if (idx < 0) continue
+        const existing = jobs.value[idx]
+        if (status.storedChunks.length >= existing.totalChunks) {
+          updateJob(job.uploadId, { status: 'assembling', error: undefined })
+          const completeRes = await api.post(`/upload/chunk/${job.resumeToken}/complete`, {
+            upload_id: job.uploadId,
+          })
+          if (completeRes.data.missing_chunks.length === 0) {
+            updateJob(job.uploadId, { status: 'processing' })
+            pollForCompletion(job.uploadId, completeRes.data.job_id)
+          }
+        } else {
+          const file = retryFiles.get(job.uploadId)
+          if (!file) {
+            updateJob(job.uploadId, {
+              status: 'paused',
+              error: 'Connectivity restored but file re-selection needed to resume',
+            })
+            continue
+          }
+          resumeUpload(job, file)
+        }
+      } catch {
+        // best-effort
       }
     }
   }
