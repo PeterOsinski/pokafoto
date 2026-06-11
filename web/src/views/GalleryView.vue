@@ -1,5 +1,24 @@
 <template>
-  <DropZone>
+  <div class="flex h-full">
+    <!-- Toggle strip -->
+    <div class="shrink-0 w-10 flex flex-col items-center pt-3 border-r" style="border-color: var(--border-color); background: var(--bg-surface)">
+      <button @click="treeExpanded = !treeExpanded" class="p-1 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]" :title="treeExpanded ? 'Collapse sidebar' : 'Expand sidebar'">
+        <span class="text-xs" v-if="treeExpanded">&#x276E;</span>
+        <span class="text-xs" v-else>&#x276F;</span>
+      </button>
+    </div>
+
+    <!-- Date group sidebar -->
+    <div v-show="treeExpanded" class="shrink-0 border-r overflow-hidden" :style="{ width: treeWidth + 'px', borderColor: 'var(--border-color)', background: 'var(--bg-surface)' }">
+      <DateGroupSidebar />
+    </div>
+
+    <!-- Drag handle -->
+    <div v-show="treeExpanded" class="w-1 shrink-0 cursor-col-resize hover:bg-[var(--accent)] transition-colors" :class="isResizing ? 'bg-[var(--accent)]' : ''" @mousedown="startResize" />
+
+    <!-- Main content area -->
+    <div class="flex-1 min-w-0 overflow-y-auto p-4">
+      <DropZone>
     <div v-if="previewMode === 'sidebar' && lightboxFile" :class="{ 'flex': true }">
       <div class="flex-1 min-w-0">
         <ActionBar
@@ -233,6 +252,8 @@
       </div>
     </div>
   </DropZone>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -252,6 +273,7 @@ import ActionBar from '../components/ActionBar.vue'
 import FolderPickerDialog from '../components/FolderPickerDialog.vue'
 import InlineUpload from '../components/InlineUpload.vue'
 import DropZone from '../components/DropZone.vue'
+import DateGroupSidebar from '../components/DateGroupSidebar.vue'
 import { useChunkedUploadStore } from '../stores/chunkedUpload'
 
 interface FileItem {
@@ -315,6 +337,35 @@ const creatingDoc = ref(false)
 
 const upload = useChunkedUploadStore()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+const treeExpanded = ref(true)
+const treeWidth = ref(settings.sidebarWidth.value)
+const isResizing = ref(false)
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = treeWidth.value
+
+  function onMove(e: MouseEvent) {
+    const newWidth = Math.max(160, Math.min(600, startWidth + e.clientX - startX))
+    treeWidth.value = newWidth
+  }
+
+  function onUp() {
+    isResizing.value = false
+    settings.sidebarWidth.value = treeWidth.value
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+}
 
 const moveDialog = ref({ open: false })
 const copyDialog = ref({ open: false })

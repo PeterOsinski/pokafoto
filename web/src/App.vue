@@ -39,7 +39,7 @@
 
     <div class="flex-1 flex overflow-hidden">
       <!-- Sidebar (desktop) - hidden on Folders view which has its own tree sidebar -->
-      <aside v-if="route.path !== '/folders'" class="hidden lg:block w-56 shrink-0 border-r overflow-y-auto" style="border-color: var(--border-color); background: var(--bg-surface)">
+      <aside v-if="route.path !== '/folders' && route.path !== '/'" class="hidden lg:block w-56 shrink-0 border-r overflow-y-auto" style="border-color: var(--border-color); background: var(--bg-surface)">
         <DirectoryTree />
       </aside>
 

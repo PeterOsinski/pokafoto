@@ -10,6 +10,8 @@
     <span class="mr-1.5">&#128193;</span>
     <span class="flex-1 truncate">{{ node.folder.name }}</span>
     <span class="text-xs text-[var(--text-secondary)] ml-1">{{ node.fileCount }}</span>
+    <span v-if="node.hasPassword" class="text-xs ml-1" title="Password protected">&#x1F512;</span>
+    <span v-if="node.hasShares" class="text-xs ml-1" title="Shared">&#x1F517;</span>
   </button>
   <div v-if="expanded && node.children?.length" :style="{ paddingLeft: (depth * 12 + 12) + 'px' }">
     <FolderNode
