@@ -25,6 +25,12 @@ func main() {
 		case "admin":
 			adminCmd(os.Args[2:])
 			return
+		case "import":
+			if err := runImport(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "import error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		case "help", "--help", "-h":
 			printUsage()
 			return
@@ -193,6 +199,7 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  drive              Start the server")
 	fmt.Println("  drive admin create Create the first admin user")
+	fmt.Println("  drive import       Bulk import files from a local directory")
 	fmt.Println("  drive help         Show this help")
 }
 

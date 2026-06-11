@@ -202,6 +202,17 @@ Phase 3: Differentiators   (Weeks 13-20)  ❌ 0% — AI tagging, mobile apps, al
 | Healthcheck | Docker HEALTHCHECK instruction | `Dockerfile` | ✅ |
 | One-liner deploy | `docker compose up -d` | Install script | ✅ |
 
+### Week 11b: CLI Bulk Import — ✅ Complete
+
+| Task | Details | Deliverable | Status |
+|---|---|---|---|
+| CLI import command | `drive import` walks local directory, creates folder hierarchy, uploads with existence check | `cmd/drive/import.go` | ✅ |
+| Mock-based tests | Auth, folder resolution, existence check, dry-run, folder structure preservation, pagination | `cmd/drive/import_test.go` (12 tests) | ✅ |
+| Concurrency control | `--concurrency N` flag for parallel file uploads via semaphore channel | import.go worker goroutines | ✅ |
+| Dry-run mode | `--dry-run` walks tree + checks existence without uploading | import.go dryRun flag | ✅ |
+| Progress reporting | Per-file status with index, path, size, and outcome (uploaded/skipped/failed) | import.go stdout output | ✅ |
+| Retry logic | Exponential backoff (1s, 2s, 4s) up to 3 retries on 5xx and connection errors | import.go doRequest | ✅ |
+
 ### Week 12: Documentation & Landing Page — ⚠️ Partial
 
 | Task | Details | Deliverable | Status |

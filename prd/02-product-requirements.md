@@ -13,7 +13,8 @@
 **U-04 Implementation note:** Upload progress has two phases: (1) HTTP transfer progress (tracked via axios `onUploadProgress` — bytes sent / total), shown as `uploading` status with percentage; (2) server-side processing progress (WebSocket-driven — `hashing` → `dedup` → `exif` → `storing` → `thumbnails`), shown as `processing` status with stage name. Files appear in the queue immediately upon selection with `uploading` status. After the HTTP POST completes, they transition to `queued` and then `processing` as the worker pool handles them.
 | U-05 | As a user, duplicate uploads are detected by content hash (SHA-256) and skipped — applies only to root uploads (no folder context). Folder-scoped uploads skip both name+size and content hash dedup. | P1 |
 | U-05a | As a user, both name+size dedup and content hash (SHA-256) dedup are applied only when uploading to the root (no folder context — gallery view or Upload tab without a target folder). Uploads targeting a specific folder skip both dedup checks entirely, allowing the same file to exist in multiple folders. | P0 |
-| U-06 | As a user, I can upload from mobile devices with the same responsive UI | P1 |
+
+**U-07 Implementation note:** The `drive import` CLI subcommand authenticates against the running server via username/password, walks the local directory tree, creates matching folders on the server, checks if each file already exists at the target location via `GET /api/v1/files?folder_id=...` (matching `originalName` + `sizeBytes`), and uploads new files using the chunked upload API. Supports `--target` (drive folder path), `--concurrency` (parallel uploads), `--dry-run` (preview without uploading), and retries on transient failures.
 
 ### Gallery & Browsing
 | ID | User Story | Priority |
